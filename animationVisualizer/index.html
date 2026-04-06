@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Robot Mouth Pixels</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Audiowide&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <section class="hero">
+        <p class="eyebrow">Robot Voice Lab</p>
+        <h1>Robot Mouth Pixels</h1>
+        <p class="lede">
+          Upload audio, choose how many pixels the mouth uses on X and Y, and the
+          grid will light up in white, yellow, or black while it talks.
+        </p>
+      </section>
+
+      <main class="layout">
+        <section class="panel controls-panel">
+          <div class="panel-header">
+            <h2>Controls</h2>
+            <p>Feed it audio and tune the mouth grid.</p>
+          </div>
+
+          <label class="field upload-field">
+            <span>Audio file</span>
+            <input id="audioFile" type="file" accept="audio/*" />
+          </label>
+
+          <div class="grid-two">
+            <label class="field">
+              <span>Pixels X</span>
+              <input id="resolutionX" type="number" min="4" max="128" step="1" value="24" />
+            </label>
+
+            <label class="field">
+              <span>Pixels Y</span>
+              <input id="resolutionY" type="number" min="2" max="64" step="1" value="12" />
+            </label>
+          </div>
+
+          <label class="field range-field">
+            <div class="field-line">
+              <span>Pitch</span>
+              <output id="pitchValue">1.00x</output>
+            </div>
+            <input id="pitchControl" type="range" min="0.4" max="2.4" step="0.05" value="1" />
+          </label>
+
+          <audio id="player" controls preload="metadata"></audio>
+
+          <div class="status-card">
+            <p id="status">Upload a voice clip to wake the robot.</p>
+            <p class="microcopy">
+              Tip: louder speech opens more rows, and pitch shifts the white or yellow highlights.
+            </p>
+          </div>
+        </section>
+
+        <section class="panel stage-panel">
+          <div class="panel-header">
+            <h2>Preview</h2>
+            <p>Live mouth-only pixel matrix.</p>
+          </div>
+
+          <div class="canvas-wrap">
+            <canvas id="stage" width="960" height="480"></canvas>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./script.js"></script>
+  </body>
+</html>

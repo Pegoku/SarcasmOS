@@ -1,6 +1,6 @@
 # sarcasmos
 
-Personal assistant characterized by Bender from Futurama (In english and spanish)
+Personal assistant characterized by Bender from Futurama (In spanish)
 
 SascarmOS is a personality-driven operating system that blends artificial intelligence with expressive hardware to create a truly interactive assistant.
 

@@ -1,0 +1,1 @@
+O le pone un 1 y 2 ceros delante a esa cantidad, o pasamos.

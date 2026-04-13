@@ -8,7 +8,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     git-lfs \
     libsndfile1 \
-    ninja-build \
     sox \
     && rm -rf /var/lib/apt/lists/*
 
@@ -16,15 +15,7 @@ RUN python -m pip install --upgrade pip setuptools wheel && \
     python -m pip install \
     "huggingface_hub[cli]" \
     modelscope \
-    ninja \
-    packaging \
-    psutil \
     qwen-tts
-
-RUN git clone --depth 1 https://github.com/Dao-AILab/flash-attention /tmp/flash-attention && \
-    cd /tmp/flash-attention && \
-    FLASH_ATTENTION_TRITON_AMD_ENABLE="TRUE" python -m pip install --no-build-isolation . && \
-    rm -rf /tmp/flash-attention
 
 WORKDIR /workspace
 

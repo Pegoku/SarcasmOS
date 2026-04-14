@@ -1,5 +1,4 @@
 import argparse
-import importlib.util
 from pathlib import Path
 
 import soundfile as sf
@@ -14,26 +13,23 @@ DEFAULT_TEXT = (
 )
 
 
-def get_gpu_dtype():
+def get_gpu_dtype(requested_dtype: str):
     if not torch.cuda.is_available():
         raise RuntimeError("GPU not available. Start the ROCm container with /dev/kfd and /dev/dri exposed.")
+
+    if requested_dtype == "float16":
+        return torch.float16
+
+    if requested_dtype == "bfloat16":
+        return torch.bfloat16
+
+    if requested_dtype == "float32":
+        return torch.float32
 
     if hasattr(torch.cuda, "is_bf16_supported") and torch.cuda.is_bf16_supported():
         return torch.bfloat16
 
     return torch.float16
-
-
-def get_model_load_kwargs():
-    kwargs = {
-        "device_map": "cuda:0",
-        "dtype": get_gpu_dtype(),
-    }
-
-    if importlib.util.find_spec("flash_attn") is not None:
-        kwargs["attn_implementation"] = "flash_attention_2"
-
-    return kwargs
 
 
 def main():
@@ -64,6 +60,12 @@ def main():
         default="./Qwen3-TTS-12Hz-1.7B-Base",
         help="Local model path",
     )
+    parser.add_argument(
+        "--dtype",
+        default="float16",
+        choices=["auto", "float16", "bfloat16", "float32"],
+        help="Model dtype. float16 is the safest default on AMD.",
+    )
     args = parser.parse_args()
 
     ref_audio = Path(args.ref_audio)
@@ -79,14 +81,14 @@ def main():
     if not ref_text:
         raise ValueError(f"Reference transcript is empty: {ref_text_path}")
 
-    load_kwargs = get_model_load_kwargs()
-    print(
-        "Loading model on cuda:0 with "
-        f"dtype {load_kwargs['dtype']} and "
-        f"attention {load_kwargs.get('attn_implementation', 'manual_pytorch')}"
-    )
+    dtype = get_gpu_dtype(args.dtype)
+    print(f"Loading model on cuda:0 with dtype {dtype}")
 
-    tts = Qwen3TTSModel.from_pretrained(args.model, **load_kwargs)
+    tts = Qwen3TTSModel.from_pretrained(
+        args.model,
+        device_map="cuda:0",
+        dtype=dtype,
+    )
 
     wavs, sr = tts.generate_voice_clone(
         text=args.text,

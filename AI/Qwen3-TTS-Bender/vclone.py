@@ -27,6 +27,20 @@ def resolve_runtime(requested_device: str):
     return requested_device, torch.float32
 
 
+def resolve_dtype(device: str, requested_dtype: str):
+    if requested_dtype == "auto":
+        _, dtype = resolve_runtime(device)
+        return dtype
+
+    if requested_dtype == "float16":
+        return torch.float16
+
+    if requested_dtype == "bfloat16":
+        return torch.bfloat16
+
+    return torch.float32
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Clone speech using a reference audio file and matching transcript"
@@ -60,6 +74,12 @@ def main():
         default="auto",
         help="Model device: auto, cpu, or cuda:0",
     )
+    parser.add_argument(
+        "--dtype",
+        default="auto",
+        choices=["auto", "float16", "bfloat16", "float32"],
+        help="Model dtype",
+    )
     args = parser.parse_args()
 
     ref_audio = Path(args.ref_audio)
@@ -75,7 +95,10 @@ def main():
     if not ref_text:
         raise ValueError(f"Reference transcript is empty: {ref_text_path}")
 
-    device, dtype = resolve_runtime(args.device)
+    device, auto_dtype = resolve_runtime(args.device)
+    dtype = resolve_dtype(device, args.dtype)
+    if args.dtype == "auto":
+        dtype = auto_dtype
     print(f"Loading model on {device} with dtype {dtype}")
 
     tts = Qwen3TTSModel.from_pretrained(

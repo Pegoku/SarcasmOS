@@ -4,6 +4,7 @@ import argparse
 import csv
 import datetime as dt
 import os
+import random
 import re
 import select
 import shutil
@@ -16,7 +17,16 @@ from pathlib import Path
 
 
 AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".m4a", ".ogg"}
-CSV_HEADERS = ["group", "audio_file", "audio_path", "rating", "comment", "graded_at"]
+CSV_HEADERS = [
+    "group",
+    "audio_file",
+    "audio_path",
+    "rating",
+    "expected_rating",
+    "rating_diff",
+    "comment",
+    "graded_at",
+]
 
 
 def natural_key(value: str):
@@ -45,16 +55,32 @@ def find_groups(root: Path):
     return groups
 
 
+def normalize_row(row):
+    normalized = {header: row.get(header, "") for header in CSV_HEADERS}
+    if normalized["expected_rating"] and not normalized["rating_diff"]:
+        normalized["rating_diff"] = format_rating_diff(
+            normalized["rating"], normalized["expected_rating"]
+        )
+    return normalized
+
+
 def load_existing_results(csv_path: Path):
+    rows = []
     graded = {}
+    rewrite_needed = False
     if not csv_path.exists():
-        return graded
+        return rows, graded, rewrite_needed
 
     with csv_path.open("r", newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
-        for row in reader:
+        fieldnames = reader.fieldnames or []
+        if fieldnames != CSV_HEADERS:
+            rewrite_needed = True
+        for raw_row in reader:
+            row = normalize_row(raw_row)
+            rows.append(row)
             graded[row["audio_path"]] = row
-    return graded
+    return rows, graded, rewrite_needed
 
 
 def ensure_csv(csv_path: Path):
@@ -69,6 +95,13 @@ def append_result(csv_path: Path, row):
     with csv_path.open("a", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=CSV_HEADERS)
         writer.writerow(row)
+
+
+def rewrite_results(csv_path: Path, rows):
+    with csv_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=CSV_HEADERS)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def detect_player():
@@ -179,6 +212,56 @@ def ask_rating(audio_name: str):
         print("Rating must be between 0 and 10.")
 
 
+def parse_rating_value(value):
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def format_rating_value(value):
+    numeric = parse_rating_value(value)
+    if numeric is None:
+        return ""
+    if numeric.is_integer():
+        return str(int(numeric))
+    return str(numeric)
+
+
+def format_rating_diff(actual, expected):
+    actual_value = parse_rating_value(actual)
+    expected_value = parse_rating_value(expected)
+    if actual_value is None or expected_value is None:
+        return ""
+
+    diff = actual_value - expected_value
+    if diff == 0:
+        return "+0"
+    if diff.is_integer():
+        return f"{int(diff):+d}"
+    return f"{diff:+g}"
+
+
+def build_result_row(group_name: str, audio_path: Path, rating, comment, expected_rating=""):
+    rating_text = format_rating_value(rating)
+    expected_text = format_rating_value(expected_rating)
+    return {
+        "group": group_name,
+        "audio_file": audio_path.name,
+        "audio_path": str(audio_path),
+        "rating": rating_text,
+        "expected_rating": expected_text,
+        "rating_diff": format_rating_diff(rating_text, expected_text),
+        "comment": comment,
+        "graded_at": dt.datetime.now().isoformat(timespec="seconds"),
+    }
+
+
 def grade_group(group_path: Path, audio_files, csv_path: Path, graded, player_cmd):
     print(f"\n=== {group_path.name} ({len(audio_files)} files) ===")
     current_rows = []
@@ -210,14 +293,7 @@ def grade_group(group_path: Path, audio_files, csv_path: Path, graded, player_cm
             continue
 
         comment = input("Optional comment: ").strip()
-        row = {
-            "group": group_path.name,
-            "audio_file": audio_path.name,
-            "audio_path": audio_key,
-            "rating": rating,
-            "comment": comment,
-            "graded_at": dt.datetime.now().isoformat(timespec="seconds"),
-        }
+        row = build_result_row(group_path.name, audio_path, rating, comment)
         append_result(csv_path, row)
         graded[audio_key] = row
         current_rows.append(row)
@@ -254,7 +330,69 @@ def parse_args():
         action="store_true",
         help="Show already graded files and keep them in the session summary.",
     )
+    parser.add_argument(
+        "--check",
+        type=int,
+        metavar="N",
+        help="Replay N random already graded audios, show the expected grade, and save the difference.",
+    )
     return parser.parse_args()
+
+
+def run_check_mode(check_count: int, rows, graded, csv_path: Path, player_cmd):
+    if check_count <= 0:
+        raise SystemExit("--check must be greater than 0.")
+
+    candidates = []
+    for row_index, row in enumerate(rows):
+        audio_path = Path(row["audio_path"])
+        expected = row["expected_rating"] or row["rating"]
+        if parse_rating_value(expected) is None or not audio_path.exists():
+            continue
+        candidates.append((row_index, audio_path, row, expected))
+
+    if not candidates:
+        raise SystemExit("No already graded audios available for --check.")
+
+    selection = random.sample(candidates, k=min(check_count, len(candidates)))
+    print(f"Running check mode with {len(selection)} random audios.")
+
+    for index, (row_index, audio_path, existing_row, expected_rating) in enumerate(
+        selection, start=1
+    ):
+        print(f"\n[{index}/{len(selection)}] {audio_path.parent.name}/{audio_path.name}")
+        print(f"Expected grade: {format_rating_value(expected_rating)}")
+        play_audio(player_cmd, audio_path)
+
+        while True:
+            rating = ask_rating(audio_path.name)
+            if rating == "replay":
+                play_audio(player_cmd, audio_path)
+                continue
+            break
+
+        if rating == "next_group":
+            print("Skipping this audio.")
+            continue
+        if rating is None:
+            print("Skipped.")
+            continue
+
+        comment = input("Optional comment: ").strip() or existing_row.get("comment", "")
+        updated_row = build_result_row(
+            audio_path.parent.name,
+            audio_path,
+            rating,
+            comment,
+            expected_rating=expected_rating,
+        )
+
+        rows[row_index] = updated_row
+        graded[str(audio_path)] = updated_row
+        rewrite_results(csv_path, rows)
+        print(
+            f"Saved rating {updated_row['rating']} against expected {updated_row['expected_rating']} ({updated_row['rating_diff']})."
+        )
 
 
 def main():
@@ -270,7 +408,9 @@ def main():
         raise SystemExit(f"No audio groups found in: {root}")
 
     ensure_csv(csv_path)
-    graded = load_existing_results(csv_path)
+    rows, graded, rewrite_needed = load_existing_results(csv_path)
+    if rewrite_needed:
+        rewrite_results(csv_path, rows)
     player_cmd = detect_player()
 
     print(f"Found {len(groups)} groups in {root}")
@@ -283,6 +423,11 @@ def main():
         )
 
     try:
+        if args.check is not None:
+            run_check_mode(args.check, rows, graded, csv_path, player_cmd)
+            print("\nFinished check mode.")
+            return
+
         for group_path, audio_files in groups:
             if not args.include_graded:
                 remaining_files = [

@@ -2,6 +2,8 @@ import argparse
 import base64
 import mimetypes
 import os
+import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -91,10 +93,37 @@ def wait_for_prediction(api_token: str, prediction_id: str) -> dict:
         time.sleep(DEFAULT_POLL_INTERVAL)
 
 
-def download_output(output_url: str, output_path: Path) -> None:
-    response = requests.get(output_url, timeout=120)
+def resolve_stream_player() -> list[str]:
+    if shutil.which("ffplay"):
+        return ["ffplay", "-autoexit", "-nodisp", "-i", "pipe:0"]
+
+    if shutil.which("vlc"):
+        return ["vlc", "--play-and-exit", "-"]
+
+    raise RuntimeError("--stream requires ffplay or vlc to be installed.")
+
+
+def download_output(output_url: str, output_path: Path, stream_audio: bool) -> None:
+    response = requests.get(output_url, stream=True, timeout=120)
     response.raise_for_status()
-    output_path.write_bytes(response.content)
+
+    player = None
+    if stream_audio:
+        player = subprocess.Popen(resolve_stream_player(), stdin=subprocess.PIPE)
+
+    with output_path.open("wb") as file:
+        for chunk in response.iter_content(chunk_size=65536):
+            if not chunk:
+                continue
+
+            file.write(chunk)
+            if player and player.stdin:
+                player.stdin.write(chunk)
+                player.stdin.flush()
+
+    if player and player.stdin:
+        player.stdin.close()
+        player.wait()
 
 
 def main():
@@ -148,6 +177,11 @@ def main():
         default=None,
         help="Optional speaking style or emotion instruction",
     )
+    parser.add_argument(
+        "--stream",
+        action="store_true",
+        help="Play audio while downloading the final output file after generation completes",
+    )
     args = parser.parse_args()
 
     load_dotenv(Path(__file__).with_name(".env"))
@@ -186,7 +220,7 @@ def main():
         raise RuntimeError("Prediction succeeded but no output URL was returned.")
 
     print(output_url)
-    download_output(output_url, output_path)
+    download_output(output_url, output_path, args.stream)
 
     print(f"Saved to {output_path}")
 

@@ -3,6 +3,7 @@
 import argparse
 import csv
 import datetime as dt
+import statistics
 import os
 import random
 import re
@@ -262,6 +263,20 @@ def build_result_row(group_name: str, audio_path: Path, rating, comment, expecte
     }
 
 
+def calculate_group_medians(rows):
+    ratings_by_group = {}
+    for row in rows:
+        rating = parse_rating_value(row.get("rating"))
+        if rating is None:
+            continue
+        ratings_by_group.setdefault(row["group"], []).append(rating)
+
+    medians = {}
+    for group_name, ratings in ratings_by_group.items():
+        medians[group_name] = statistics.median(ratings)
+    return medians
+
+
 def grade_group(group_path: Path, audio_files, csv_path: Path, graded, player_cmd):
     print(f"\n=== {group_path.name} ({len(audio_files)} files) ===")
     current_rows = []
@@ -336,6 +351,12 @@ def parse_args():
         metavar="N",
         help="Replay N random already graded audios, show the expected grade, and save the difference.",
     )
+    parser.add_argument(
+        "--check-new",
+        type=int,
+        metavar="N",
+        help="Play N random ungraded audios, estimate the grade from the group median, and save the result.",
+    )
     return parser.parse_args()
 
 
@@ -343,11 +364,12 @@ def run_check_mode(check_count: int, rows, graded, csv_path: Path, player_cmd):
     if check_count <= 0:
         raise SystemExit("--check must be greater than 0.")
 
+    group_medians = calculate_group_medians(rows)
     candidates = []
     for row_index, row in enumerate(rows):
         audio_path = Path(row["audio_path"])
-        expected = row["expected_rating"] or row["rating"]
-        if parse_rating_value(expected) is None or not audio_path.exists():
+        expected = group_medians.get(row["group"])
+        if expected is None or not audio_path.exists():
             continue
         candidates.append((row_index, audio_path, row, expected))
 
@@ -395,6 +417,64 @@ def run_check_mode(check_count: int, rows, graded, csv_path: Path, player_cmd):
         )
 
 
+def run_check_new_mode(check_count: int, groups, rows, graded, csv_path: Path, player_cmd):
+    if check_count <= 0:
+        raise SystemExit("--check-new must be greater than 0.")
+
+    group_medians = calculate_group_medians(rows)
+    candidates = []
+    for group_path, audio_files in groups:
+        expected = group_medians.get(group_path.name)
+        if expected is None:
+            continue
+        for audio_path in audio_files:
+            if str(audio_path) in graded:
+                continue
+            candidates.append((group_path, audio_path, expected))
+
+    if not candidates:
+        raise SystemExit(
+            "No ungraded audios available for --check-new with a known group median."
+        )
+
+    selection = random.sample(candidates, k=min(check_count, len(candidates)))
+    print(f"Running check-new mode with {len(selection)} random audios.")
+
+    for index, (group_path, audio_path, expected_rating) in enumerate(selection, start=1):
+        print(f"\n[{index}/{len(selection)}] {group_path.name}/{audio_path.name}")
+        print(f"Expected grade: {format_rating_value(expected_rating)}")
+        play_audio(player_cmd, audio_path)
+
+        while True:
+            rating = ask_rating(audio_path.name)
+            if rating == "replay":
+                play_audio(player_cmd, audio_path)
+                continue
+            break
+
+        if rating == "next_group":
+            print("Skipping this audio.")
+            continue
+        if rating is None:
+            print("Skipped.")
+            continue
+
+        comment = input("Optional comment: ").strip()
+        row = build_result_row(
+            group_path.name,
+            audio_path,
+            rating,
+            comment,
+            expected_rating=expected_rating,
+        )
+        rows.append(row)
+        graded[str(audio_path)] = row
+        append_result(csv_path, row)
+        print(
+            f"Saved rating {row['rating']} against expected {row['expected_rating']} ({row['rating_diff']})."
+        )
+
+
 def main():
     args = parse_args()
     root = Path(args.root).expanduser().resolve()
@@ -426,6 +506,11 @@ def main():
         if args.check is not None:
             run_check_mode(args.check, rows, graded, csv_path, player_cmd)
             print("\nFinished check mode.")
+            return
+
+        if args.check_new is not None:
+            run_check_new_mode(args.check_new, groups, rows, graded, csv_path, player_cmd)
+            print("\nFinished check-new mode.")
             return
 
         for group_path, audio_files in groups:

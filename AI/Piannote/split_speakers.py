@@ -21,12 +21,14 @@ def load_pipeline(model_name: str, hf_token: str | None):
         from pyannote.audio import Pipeline
     except ImportError as exc:
         raise RuntimeError(
-            "pyannote.audio is not installed. Install it with `pip install pyannote.audio`."
+            "This script requires a modern `pyannote.audio` release that exposes "
+            "`pyannote.audio.Pipeline` (for example 3.x). Your current install is missing "
+            "that API. Reinstall with something like `pip install -U 'pyannote.audio>=3.1,<4'`."
         ) from exc
 
     pipeline_kwargs = {}
     if hf_token:
-        pipeline_kwargs["use_auth_token"] = hf_token
+        pipeline_kwargs["token"] = hf_token
 
     try:
         return Pipeline.from_pretrained(model_name, **pipeline_kwargs)

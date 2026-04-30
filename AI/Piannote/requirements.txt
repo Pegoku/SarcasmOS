@@ -1,0 +1,7 @@
+# Use Python 3.10 or 3.11 for this environment.
+# pyannote.audio currently depends on lightning, which is not available here on Python 3.14.
+pyannote.audio>=3.1,<4
+huggingface_hub<1
+librosa>=0.10,<1
+soundfile>=0.12,<1
+numpy>=1.26,<3

@@ -58,14 +58,14 @@ def file_to_data_uri(file_path: Path) -> str:
     return f"data:{mime_type};base64,{encoded}"
 
 
-def create_prediction(api_token: str, model_input: dict) -> dict:
+def create_prediction(api_token: str, model_input: dict, stream: bool) -> dict:
     response = requests.post(
         f"{DEFAULT_REPLICATE_BASE_URL}/models/{DEFAULT_MODEL}/predictions",
         headers={
             "Authorization": f"Bearer {api_token}",
             "Content-Type": "application/json",
         },
-        json={"input": model_input},
+        json={"input": model_input, "stream": stream},
         timeout=120,
     )
     response.raise_for_status()
@@ -212,7 +212,7 @@ def main():
         model_input["style_instruction"] = args.style_instruction
 
     model_input["reference_audio"] = file_to_data_uri(ref_audio)
-    prediction = create_prediction(api_token, model_input)
+    prediction = create_prediction(api_token, model_input, args.stream)
     prediction = wait_for_prediction(api_token, prediction["id"])
 
     output_url = prediction.get("output")

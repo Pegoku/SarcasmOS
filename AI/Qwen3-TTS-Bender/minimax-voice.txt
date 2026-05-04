@@ -1,0 +1,4 @@
+voice_id: R8_QHWA3S0J
+model: speech-02-turbo
+preview: https://replicate.delivery/xezq/eY6BJT2ecKnS4ECzPhPMK03FHz5pu1SQn0ffEux3Kyvi5mGaB/tmpsds0husl.mp3
+Saved preview to minimax-preview.wav

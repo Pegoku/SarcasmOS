@@ -1,14 +1,15 @@
 import argparse
 import os
-from collections.abc import Iterable
+import time
 from pathlib import Path
-from urllib.request import urlopen
 
-import replicate
+import requests
 
 
+DEFAULT_REPLICATE_BASE_URL = "https://ai.hackclub.com/proxy/v1/replicate"
 DEFAULT_MODEL = "minimax/speech-2.8-turbo"
 DEFAULT_OUTPUT = "minimax-output.mp3"
+DEFAULT_POLL_INTERVAL = 1.0
 
 SUPPORTED_MODELS = [
     "minimax/speech-2.8-hd",
@@ -102,46 +103,62 @@ def read_text_arg(text: str | None, text_file: str | None) -> str:
     raise ValueError("Text is required. Pass --text or --text-file.")
 
 
-def first_output(output: object) -> object:
-    if isinstance(output, (str, bytes)) or hasattr(output, "read"):
+def create_prediction(api_token: str, base_url: str, model: str, model_input: dict) -> dict:
+    response = requests.post(
+        f"{base_url}/models/{model}/predictions",
+        headers={
+            "Authorization": f"Bearer {api_token}",
+            "Content-Type": "application/json",
+            "Prefer": "wait",
+        },
+        json={"input": model_input},
+        timeout=300,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def wait_for_prediction(api_token: str, base_url: str, prediction_id: str, poll_interval: float) -> dict:
+    while True:
+        response = requests.get(
+            f"{base_url}/predictions/{prediction_id}",
+            headers={"Authorization": f"Bearer {api_token}"},
+            timeout=120,
+        )
+        response.raise_for_status()
+        prediction = response.json()
+        status = prediction.get("status")
+
+        if status == "succeeded":
+            return prediction
+
+        if status in {"failed", "canceled"}:
+            error = prediction.get("error") or f"Prediction ended with status: {status}"
+            raise RuntimeError(error)
+
+        time.sleep(poll_interval)
+
+
+def get_output_url(output: object) -> str:
+    if isinstance(output, str) and output:
         return output
 
-    if isinstance(output, Iterable):
-        for item in output:
-            return item
+    if isinstance(output, list) and output:
+        return get_output_url(output[0])
 
-    return output
+    if isinstance(output, dict):
+        for key in ("audio", "url", "output", "file"):
+            value = output.get(key)
+            if value:
+                return get_output_url(value)
 
-
-def output_url(output: object) -> str | None:
-    url = getattr(output, "url", None)
-    if isinstance(url, str) and url:
-        return url
-
-    if isinstance(output, str) and output.startswith(("http://", "https://")):
-        return output
-
-    return None
+    raise RuntimeError("Prediction succeeded but no audio URL was returned.")
 
 
-def write_output(output: object, output_path: Path) -> None:
-    output = first_output(output)
-
-    if hasattr(output, "read"):
-        output_path.write_bytes(output.read())
-        return
-
-    if isinstance(output, bytes):
-        output_path.write_bytes(output)
-        return
-
-    url = output_url(output)
-    if url:
-        with urlopen(url, timeout=120) as response:
-            output_path.write_bytes(response.read())
-        return
-
-    raise RuntimeError("Prediction succeeded but no downloadable audio output was returned.")
+def download_file(file_url: str, output_path: Path) -> None:
+    response = requests.get(file_url, timeout=120)
+    response.raise_for_status()
+    output_path.write_bytes(response.content)
 
 
 def validate_range(name: str, value: float, minimum: float, maximum: float) -> None:
@@ -247,18 +264,25 @@ def main() -> None:
     )
     parser.add_argument(
         "--replicate-base-url",
-        default=os.environ.get("REPLICATE_BASE_URL"),
-        help="Optional Replicate-compatible API base URL. Defaults to the official Replicate API.",
+        default=os.environ.get("REPLICATE_BASE_URL", DEFAULT_REPLICATE_BASE_URL),
+        help="Replicate-compatible API base URL.",
+    )
+    parser.add_argument(
+        "--poll-interval",
+        type=float,
+        default=DEFAULT_POLL_INTERVAL,
+        help="Seconds to wait between prediction status checks if Prefer: wait returns early.",
     )
     args = parser.parse_args()
 
     validate_range("speed", args.speed, 0.5, 2.0)
     validate_range("volume", args.volume, 0, 10)
     validate_range("pitch", args.pitch, -12, 12)
+    validate_range("poll-interval", args.poll_interval, 0.1, 60)
 
-    api_token = os.environ.get("REPLICATE_API_TOKEN")
+    api_token = os.environ.get("HACK_CLUB_AI_KEY") or os.environ.get("REPLICATE_API_TOKEN")
     if not api_token:
-        raise RuntimeError("REPLICATE_API_TOKEN is not set. Add it to .env or export it in your shell.")
+        raise RuntimeError("HACK_CLUB_AI_KEY is not set. Add it to .env or export it in your shell.")
 
     if not args.voice_id:
         raise RuntimeError("--voice-id is required. Use the voice_id printed by minimax-vc.py.")
@@ -285,16 +309,17 @@ def main() -> None:
         "language_boost": args.language_boost,
     }
 
-    base_url = args.replicate_base_url.rstrip("/") if args.replicate_base_url else None
-    client = replicate.Client(api_token=api_token, base_url=base_url)
+    base_url = args.replicate_base_url.rstrip("/")
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output = client.run(args.model, input=model_input)
-    write_output(output, output_path)
+    prediction = create_prediction(api_token, base_url, args.model, model_input)
+    if prediction.get("status") != "succeeded":
+        prediction = wait_for_prediction(api_token, base_url, prediction["id"], args.poll_interval)
 
-    url = output_url(first_output(output))
-    if url:
-        print(f"audio_url: {url}")
+    output_url = get_output_url(prediction.get("output"))
+    download_file(output_url, output_path)
+
+    print(f"audio_url: {output_url}")
     print(f"saved: {output_path}")
 
 

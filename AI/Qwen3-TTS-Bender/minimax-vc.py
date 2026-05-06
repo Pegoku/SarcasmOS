@@ -37,24 +37,36 @@ def file_to_data_uri(file_path: Path) -> str:
     return f"data:{mime_type};base64,{encoded}"
 
 
-def create_prediction(api_token: str, model_input: dict) -> dict:
+def voice_file_input(voice_file: str) -> str:
+    if voice_file.startswith(("http://", "https://", "data:")):
+        return voice_file
+
+    voice_path = Path(voice_file)
+    if not voice_path.is_file():
+        raise FileNotFoundError(f"Voice file not found: {voice_path}")
+
+    return file_to_data_uri(voice_path)
+
+
+def create_prediction(api_token: str, base_url: str, model_input: dict) -> dict:
     response = requests.post(
-        f"{DEFAULT_REPLICATE_BASE_URL}/models/{DEFAULT_MODEL}/predictions",
+        f"{base_url}/models/{DEFAULT_MODEL}/predictions",
         headers={
             "Authorization": f"Bearer {api_token}",
             "Content-Type": "application/json",
+            "Prefer": "wait",
         },
         json={"input": model_input},
-        timeout=120,
+        timeout=300,
     )
     response.raise_for_status()
     return response.json()
 
 
-def wait_for_prediction(api_token: str, prediction_id: str) -> dict:
+def wait_for_prediction(api_token: str, base_url: str, prediction_id: str, poll_interval: float) -> dict:
     while True:
         response = requests.get(
-            f"{DEFAULT_REPLICATE_BASE_URL}/predictions/{prediction_id}",
+            f"{base_url}/predictions/{prediction_id}",
             headers={"Authorization": f"Bearer {api_token}"},
             timeout=120,
         )
@@ -69,7 +81,7 @@ def wait_for_prediction(api_token: str, prediction_id: str) -> dict:
             error = prediction.get("error") or f"Prediction ended with status: {status}"
             raise RuntimeError(error)
 
-        time.sleep(DEFAULT_POLL_INTERVAL)
+        time.sleep(poll_interval)
 
 
 def download_file(file_url: str, output_path: Path) -> None:
@@ -79,12 +91,20 @@ def download_file(file_url: str, output_path: Path) -> None:
 
 
 def main() -> None:
+    load_dotenv(Path(__file__).with_name(".env"))
+
     parser = argparse.ArgumentParser(
         description="Clone a voice with Minimax voice-cloning via the Hack Club Replicate proxy"
     )
     parser.add_argument(
         "voice_file",
-        help="Reference audio path. Must be MP3, M4A, or WAV, 10s to 5min, under 20MB",
+        nargs="?",
+        help="Reference audio path, data URI, or URL. Local files should be MP3, M4A, or WAV, 10s to 5min, under 20MB",
+    )
+    parser.add_argument(
+        "--voice-file",
+        dest="voice_file_flag",
+        help="Reference audio path, data URI, or URL. Overrides the positional voice_file argument.",
     )
     parser.add_argument(
         "--model",
@@ -112,30 +132,44 @@ def main() -> None:
         "--preview-output",
         help="Optional path to save the preview audio returned by Minimax",
     )
+    parser.add_argument(
+        "--replicate-base-url",
+        default=os.environ.get("REPLICATE_BASE_URL", DEFAULT_REPLICATE_BASE_URL),
+        help="Replicate-compatible API base URL",
+    )
+    parser.add_argument(
+        "--poll-interval",
+        type=float,
+        default=DEFAULT_POLL_INTERVAL,
+        help="Seconds to wait between prediction status checks if Prefer: wait returns early",
+    )
     args = parser.parse_args()
 
     if not 0 <= args.accuracy <= 1:
         raise ValueError("--accuracy must be between 0 and 1")
+    if not 0.1 <= args.poll_interval <= 60:
+        raise ValueError("--poll-interval must be between 0.1 and 60")
 
-    load_dotenv(Path(__file__).with_name(".env"))
-    api_token = os.environ.get("REPLICATE_API_TOKEN")
+    api_token = os.environ.get("HACK_CLUB_AI_KEY") or os.environ.get("REPLICATE_API_TOKEN")
     if not api_token:
-        raise RuntimeError("REPLICATE_API_TOKEN is not set. Add it to .env or export it in your shell.")
+        raise RuntimeError("HACK_CLUB_AI_KEY is not set. Add it to .env or export it in your shell.")
 
-    voice_file = Path(args.voice_file)
-    if not voice_file.is_file():
-        raise FileNotFoundError(f"Voice file not found: {voice_file}")
+    voice_file = args.voice_file_flag or args.voice_file
+    if not voice_file:
+        raise RuntimeError("voice_file is required. Pass it positionally or with --voice-file.")
 
     model_input = {
-        "voice_file": file_to_data_uri(voice_file),
+        "voice_file": voice_file_input(voice_file),
         "model": args.model,
         "accuracy": args.accuracy,
         "need_noise_reduction": args.need_noise_reduction,
         "need_volume_normalization": args.need_volume_normalization,
     }
 
-    prediction = create_prediction(api_token, model_input)
-    prediction = wait_for_prediction(api_token, prediction["id"])
+    base_url = args.replicate_base_url.rstrip("/")
+    prediction = create_prediction(api_token, base_url, model_input)
+    if prediction.get("status") != "succeeded":
+        prediction = wait_for_prediction(api_token, base_url, prediction["id"], args.poll_interval)
 
     output = prediction.get("output")
     if not isinstance(output, dict):

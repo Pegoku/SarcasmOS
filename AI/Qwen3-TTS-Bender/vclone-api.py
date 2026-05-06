@@ -18,6 +18,21 @@ DEFAULT_TEXT = (
     "superior. Que quieres? Habla rapido, que mi bateria no se va a cargar sola... "
     "y no pienso hacerlo gratis"
 )
+MODES = ["custom_voice", "voice_clone", "voice_design"]
+SPEAKERS = ["Aiden", "Dylan", "Eric", "Ono_anna", "Ryan", "Serena", "Sohee", "Uncle_fu", "Vivian"]
+LANGUAGES = [
+    "auto",
+    "Chinese",
+    "English",
+    "Japanese",
+    "Korean",
+    "French",
+    "German",
+    "Italian",
+    "Spanish",
+    "Portuguese",
+    "Russian",
+]
 
 
 def load_dotenv(env_path: Path) -> None:
@@ -35,9 +50,14 @@ def load_dotenv(env_path: Path) -> None:
         os.environ.setdefault(key, value)
 
 
-def load_reference_text(ref_audio: Path, ref_text_path: Path | None) -> str:
+def load_reference_text(ref_audio: Path | None, ref_text_path: Path | None) -> str | None:
+    if ref_text_path is None and ref_audio is not None:
+        default_ref_text_path = ref_audio.with_suffix(".txt")
+        if default_ref_text_path.is_file():
+            ref_text_path = default_ref_text_path
+
     if ref_text_path is None:
-        ref_text_path = ref_audio.with_suffix(".txt")
+        return None
 
     if not ref_text_path.is_file():
         raise FileNotFoundError(f"Reference transcript not found: {ref_text_path}")
@@ -58,24 +78,36 @@ def file_to_data_uri(file_path: Path) -> str:
     return f"data:{mime_type};base64,{encoded}"
 
 
-def create_prediction(api_token: str, model_input: dict, stream: bool) -> dict:
+def audio_input(reference_audio: str) -> tuple[str, Path | None]:
+    if reference_audio.startswith(("http://", "https://", "data:")):
+        return reference_audio, None
+
+    reference_audio_path = Path(reference_audio)
+    if not reference_audio_path.is_file():
+        raise FileNotFoundError(f"Reference audio not found: {reference_audio_path}")
+
+    return file_to_data_uri(reference_audio_path), reference_audio_path
+
+
+def create_prediction(api_token: str, base_url: str, model: str, model_input: dict, stream: bool) -> dict:
     response = requests.post(
-        f"{DEFAULT_REPLICATE_BASE_URL}/models/{DEFAULT_MODEL}/predictions",
+        f"{base_url}/models/{model}/predictions",
         headers={
             "Authorization": f"Bearer {api_token}",
             "Content-Type": "application/json",
+            "Prefer": "wait",
         },
         json={"input": model_input, "stream": stream},
-        timeout=120,
+        timeout=300,
     )
     response.raise_for_status()
     return response.json()
 
 
-def wait_for_prediction(api_token: str, prediction_id: str) -> dict:
+def wait_for_prediction(api_token: str, base_url: str, prediction_id: str, poll_interval: float) -> dict:
     while True:
         response = requests.get(
-            f"{DEFAULT_REPLICATE_BASE_URL}/predictions/{prediction_id}",
+            f"{base_url}/predictions/{prediction_id}",
             headers={"Authorization": f"Bearer {api_token}"},
             timeout=120,
         )
@@ -90,7 +122,7 @@ def wait_for_prediction(api_token: str, prediction_id: str) -> dict:
             error = prediction.get("error") or f"Prediction ended with status: {status}"
             raise RuntimeError(error)
 
-        time.sleep(DEFAULT_POLL_INTERVAL)
+        time.sleep(poll_interval)
 
 
 def resolve_stream_player() -> list[str]:
@@ -126,14 +158,32 @@ def download_output(output_url: str, output_path: Path, stream_audio: bool) -> N
         player.wait()
 
 
+def get_output_url(output: object) -> str:
+    if isinstance(output, str) and output:
+        return output
+
+    if isinstance(output, list) and output:
+        return get_output_url(output[0])
+
+    if isinstance(output, dict):
+        for key in ("audio", "url", "output", "file"):
+            value = output.get(key)
+            if value:
+                return get_output_url(value)
+
+    raise RuntimeError("Prediction succeeded but no output URL was returned.")
+
+
 def main():
+    load_dotenv(Path(__file__).with_name(".env"))
+
     parser = argparse.ArgumentParser(
         description="Clone speech with Replicate's qwen/qwen3-tts API"
     )
     parser.add_argument(
         "ref_audio",
         nargs="?",
-        help="Reference audio path. If --ref-text is omitted, the transcript defaults to the same filename with .txt",
+        help="Reference audio path for voice_clone mode. If --ref-text is omitted, a sibling .txt transcript is used when present",
     )
     parser.add_argument(
         "--ref-audio",
@@ -141,13 +191,38 @@ def main():
         help="Reference audio path for voice cloning",
     )
     parser.add_argument(
+        "--reference-audio",
+        help="Reference audio path, URL, or data URI for voice_clone mode",
+    )
+    parser.add_argument(
         "--ref-text",
-        help="Reference transcript path. Defaults to the same filename as the reference audio with .txt",
+        dest="reference_text_file",
+        help="Reference transcript path. If omitted, a sibling .txt file is used when present",
+    )
+    parser.add_argument(
+        "--reference-text",
+        help="Transcript of the reference audio for voice_clone mode",
     )
     parser.add_argument(
         "--text",
         default=DEFAULT_TEXT,
         help="Target text to synthesize into speech",
+    )
+    parser.add_argument(
+        "--mode",
+        default="voice_clone",
+        choices=MODES,
+        help="TTS mode: custom_voice, voice_clone, or voice_design",
+    )
+    parser.add_argument(
+        "--speaker",
+        default="Serena",
+        choices=SPEAKERS,
+        help="Preset speaker voice for custom_voice mode",
+    )
+    parser.add_argument(
+        "--voice-description",
+        help="Natural-language voice description for voice_design mode",
     )
     parser.add_argument(
         "--output",
@@ -157,19 +232,7 @@ def main():
     parser.add_argument(
         "--language",
         default="Spanish",
-        choices=[
-            "auto",
-            "Chinese",
-            "English",
-            "Japanese",
-            "Korean",
-            "French",
-            "German",
-            "Italian",
-            "Spanish",
-            "Portuguese",
-            "Russian",
-        ],
+        choices=LANGUAGES,
         help="Target language for the synthesized text",
     )
     parser.add_argument(
@@ -182,42 +245,69 @@ def main():
         action="store_true",
         help="Play audio while downloading the final output file after generation completes",
     )
+    parser.add_argument(
+        "--model",
+        default=DEFAULT_MODEL,
+        help="Replicate model ref",
+    )
+    parser.add_argument(
+        "--replicate-base-url",
+        default=os.environ.get("REPLICATE_BASE_URL", DEFAULT_REPLICATE_BASE_URL),
+        help="Replicate-compatible API base URL",
+    )
+    parser.add_argument(
+        "--poll-interval",
+        type=float,
+        default=DEFAULT_POLL_INTERVAL,
+        help="Seconds to wait between prediction status checks if Prefer: wait returns early",
+    )
     args = parser.parse_args()
 
-    load_dotenv(Path(__file__).with_name(".env"))
-    api_token = os.environ.get("REPLICATE_API_TOKEN")
+    if not 0.1 <= args.poll_interval <= 60:
+        raise ValueError("--poll-interval must be between 0.1 and 60")
+
+    api_token = os.environ.get("HACK_CLUB_AI_KEY") or os.environ.get("REPLICATE_API_TOKEN")
     if not api_token:
-        raise RuntimeError("REPLICATE_API_TOKEN is not set. Add it to .env or export it in your shell.")
+        raise RuntimeError("HACK_CLUB_AI_KEY is not set. Add it to .env or export it in your shell.")
 
-    ref_audio_value = args.ref_audio_flag or args.ref_audio
-    if not ref_audio_value:
-        raise RuntimeError("Reference audio is required. Pass it as the positional argument or with --ref-audio.")
-
-    ref_audio = Path(ref_audio_value)
-    if not ref_audio.is_file():
-        raise FileNotFoundError(f"Reference audio not found: {ref_audio}")
-
-    ref_text_path = Path(args.ref_text) if args.ref_text else None
-    ref_text = load_reference_text(ref_audio, ref_text_path)
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     model_input = {
-        "mode": "voice_clone",
+        "mode": args.mode,
         "text": args.text,
         "language": args.language,
-        "reference_text": ref_text,
     }
+    if args.mode == "custom_voice":
+        model_input["speaker"] = args.speaker
+
+    if args.mode == "voice_design":
+        if not args.voice_description:
+            raise RuntimeError("--voice-description is required for voice_design mode.")
+        model_input["voice_description"] = args.voice_description
+
+    if args.mode == "voice_clone":
+        ref_audio_value = args.reference_audio or args.ref_audio_flag or args.ref_audio
+        if not ref_audio_value:
+            raise RuntimeError("Reference audio is required for voice_clone mode. Pass it positionally, with --ref-audio, or with --reference-audio.")
+
+        reference_audio, local_ref_audio = audio_input(ref_audio_value)
+        ref_text_path = Path(args.reference_text_file) if args.reference_text_file else None
+        reference_text = args.reference_text or load_reference_text(local_ref_audio, ref_text_path)
+
+        model_input["reference_audio"] = reference_audio
+        if reference_text:
+            model_input["reference_text"] = reference_text
+
     if args.style_instruction:
         model_input["style_instruction"] = args.style_instruction
 
-    model_input["reference_audio"] = file_to_data_uri(ref_audio)
-    prediction = create_prediction(api_token, model_input, args.stream)
-    prediction = wait_for_prediction(api_token, prediction["id"])
+    base_url = args.replicate_base_url.rstrip("/")
+    prediction = create_prediction(api_token, base_url, args.model, model_input, args.stream)
+    if prediction.get("status") != "succeeded":
+        prediction = wait_for_prediction(api_token, base_url, prediction["id"], args.poll_interval)
 
-    output_url = prediction.get("output")
-    if not output_url:
-        raise RuntimeError("Prediction succeeded but no output URL was returned.")
+    output_url = get_output_url(prediction.get("output"))
 
     print(output_url)
     download_output(output_url, output_path, args.stream)

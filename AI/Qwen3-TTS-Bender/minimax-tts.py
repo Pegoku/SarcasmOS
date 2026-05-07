@@ -1,5 +1,7 @@
 import argparse
 import os
+import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -103,7 +105,7 @@ def read_text_arg(text: str | None, text_file: str | None) -> str:
     raise ValueError("Text is required. Pass --text or --text-file.")
 
 
-def create_prediction(api_token: str, base_url: str, model: str, model_input: dict) -> dict:
+def create_prediction(api_token: str, base_url: str, model: str, model_input: dict, stream: bool) -> dict:
     response = requests.post(
         f"{base_url}/models/{model}/predictions",
         headers={
@@ -111,7 +113,7 @@ def create_prediction(api_token: str, base_url: str, model: str, model_input: di
             "Content-Type": "application/json",
             "Prefer": "wait",
         },
-        json={"input": model_input},
+        json={"input": model_input, "stream": stream},
         timeout=300,
     )
     response.raise_for_status()
@@ -155,10 +157,29 @@ def get_output_url(output: object) -> str:
     raise RuntimeError("Prediction succeeded but no audio URL was returned.")
 
 
-def download_file(file_url: str, output_path: Path) -> None:
-    response = requests.get(file_url, timeout=120)
+def resolve_stream_player(audio_path: Path) -> list[str]:
+    if shutil.which("ffplay"):
+        return ["ffplay", "-hide_banner", "-loglevel", "error", "-autoexit", "-nodisp", str(audio_path)]
+
+    if shutil.which("vlc"):
+        return ["vlc", "--play-and-exit", str(audio_path)]
+
+    raise RuntimeError("--stream requires ffplay or vlc to be installed.")
+
+
+def download_file(file_url: str, output_path: Path, stream_audio: bool) -> None:
+    response = requests.get(file_url, stream=True, timeout=120)
     response.raise_for_status()
-    output_path.write_bytes(response.content)
+
+    with output_path.open("wb") as file:
+        for chunk in response.iter_content(chunk_size=65536):
+            if not chunk:
+                continue
+
+            file.write(chunk)
+
+    if stream_audio:
+        subprocess.run(resolve_stream_player(output_path), check=True)
 
 
 def validate_range(name: str, value: float, minimum: float, maximum: float) -> None:
@@ -273,6 +294,11 @@ def main() -> None:
         default=DEFAULT_POLL_INTERVAL,
         help="Seconds to wait between prediction status checks if Prefer: wait returns early.",
     )
+    parser.add_argument(
+        "--stream",
+        action="store_true",
+        help="Play audio while downloading the final output file after generation completes.",
+    )
     args = parser.parse_args()
 
     validate_range("speed", args.speed, 0.5, 2.0)
@@ -312,12 +338,12 @@ def main() -> None:
     base_url = args.replicate_base_url.rstrip("/")
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    prediction = create_prediction(api_token, base_url, args.model, model_input)
+    prediction = create_prediction(api_token, base_url, args.model, model_input, args.stream)
     if prediction.get("status") != "succeeded":
         prediction = wait_for_prediction(api_token, base_url, prediction["id"], args.poll_interval)
 
     output_url = get_output_url(prediction.get("output"))
-    download_file(output_url, output_path)
+    download_file(output_url, output_path, args.stream)
 
     print(f"audio_url: {output_url}")
     print(f"saved: {output_path}")

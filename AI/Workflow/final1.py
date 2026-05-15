@@ -1,11 +1,14 @@
 import argparse
 import base64
+import datetime as dt
 import json
 import mimetypes
 import os
 import shutil
 import subprocess
 import time
+import urllib.parse
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pathlib import Path
 
 import requests
@@ -21,6 +24,7 @@ DEFAULT_LLM_MODEL = "~anthropic/claude-sonnet-latest"
 DEFAULT_TTS_MODEL = "minimax/speech-02-turbo"
 DEFAULT_OUTPUT = "answer.wav"
 DEFAULT_POLL_INTERVAL = 1.0
+MAX_TOOL_ROUNDS = 6
 
 LANGUAGES = [
     "None", "afrikaans", "albanian", "amharic", "arabic", "armenian", "assamese", "azerbaijani",
@@ -47,6 +51,97 @@ LANGUAGE_BOOSTS = [
     "Nynorsk", "Tamil", "Afrikaans",
 ]
 
+TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get current weather for a place. Use for weather, rain, temperature, umbrella, sky, or outdoor clothing questions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": "City or place name, for example Madrid, Spain.",
+                    }
+                },
+                "required": ["location"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_time",
+            "description": "Get the current local time. Use for time, date, day, or clock questions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "timezone": {
+                        "type": "string",
+                        "description": "IANA timezone such as Europe/Madrid. Defaults to Europe/Madrid.",
+                    }
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "eye_look",
+            "description": "Emulate robot eye movement in the CLI. This implements commands like eye.look.left, eye.look.right, eye.look.up, eye.look.down, and eye.look.center.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "direction": {
+                        "type": "string",
+                        "enum": ["left", "right", "up", "down", "center"],
+                    }
+                },
+                "required": ["direction"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_expression",
+            "description": "Emulate the robot's eyes and teeth/mouth in the CLI for visual expressions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "expression": {
+                        "type": "string",
+                        "enum": [
+                            "neutral", "sarcastic", "angry", "happy_fake", "suspicious",
+                            "tired", "asleep", "surprised", "bored", "dramatic",
+                            "watch", "party", "error", "battery_low", "sunny",
+                            "rainy", "cloudy", "stormy", "snowy",
+                        ],
+                    }
+                },
+                "required": ["expression"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "robot_status",
+            "description": "Return available robot status. Use for battery, Wi-Fi, sensors, eyes, mouth, microphone, or internal temperature questions.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
 
 def load_dotenv(env_path: Path) -> None:
     if not env_path.is_file():
@@ -65,6 +160,57 @@ def normalize_replicate_base_url(base_url: str) -> str:
     if base_url == DEFAULT_OPENROUTER_BASE_URL:
         return f"{base_url}/replicate"
     return base_url
+
+
+def render_face(state: str, detail: str = "") -> None:
+    faces = {
+        "idle": ("o o", "-----"),
+        "thinking": ("@ @", "#####"),
+        "tool": ("> <", "====="),
+        "speaking": ("^ ^", "#####"),
+        "left": ("<o <o", "-----"),
+        "right": ("o> o>", "-----"),
+        "up": ("^ ^", "-----"),
+        "down": ("v v", "-----"),
+        "center": ("o o", "-----"),
+        "neutral": ("o o", "-----"),
+        "sarcastic": ("- o", "~~---"),
+        "angry": ("> <", "#####"),
+        "happy_fake": ("^ ^", "====="),
+        "suspicious": ("- -", "--_--"),
+        "tired": ("u u", "....."),
+        "asleep": ("- -", "_____"),
+        "surprised": ("O O", "  O  "),
+        "bored": ("- -", "-----"),
+        "dramatic": ("* *", "#####"),
+        "watch": ("0 0", "====="),
+        "party": ("^ *", "\\___/"),
+        "error": ("X X", "!!!!!"),
+        "battery_low": ("_ _", ".._.."),
+        "sunny": ("\\o/ \\o/", "\\___/"),
+        "rainy": ("; ;", "~~~~~"),
+        "cloudy": ("- -", "(___)"),
+        "stormy": ("! !", "ZZZZZ"),
+        "snowy": ("* *", "....."),
+    }
+    eyes, teeth = faces.get(state, faces["idle"])
+    suffix = f" {detail}" if detail else ""
+    print(f"[face:{state}] eyes[{eyes}] teeth[{teeth}]{suffix}")
+
+
+def weather_expression(weather_text: str) -> str:
+    text = weather_text.lower()
+    if any(word in text for word in ("sun", "clear", "soleado", "despejado")):
+        return "sunny"
+    if any(word in text for word in ("rain", "drizzle", "shower", "lluv")):
+        return "rainy"
+    if any(word in text for word in ("thunder", "storm", "tormenta")):
+        return "stormy"
+    if any(word in text for word in ("snow", "sleet", "nieve")):
+        return "snowy"
+    if any(word in text for word in ("cloud", "overcast", "nube", "cubierto")):
+        return "cloudy"
+    return "neutral"
 
 
 def file_to_data_uri(file_path: Path) -> str:
@@ -176,28 +322,178 @@ def extract_transcript(output: object) -> str:
     raise RuntimeError(f"Could not extract transcript from Whisper output: {json.dumps(output, ensure_ascii=False)[:500]}")
 
 
-def generate_answer(api_token: str, base_url: str, model: str, transcript: str, sysprompt: str) -> str:
+def get_weather(location: str) -> dict:
+    encoded_location = urllib.parse.quote(location)
+    response = requests.get(f"https://wttr.in/{encoded_location}", params={"format": "j1"}, timeout=30)
+    response.raise_for_status()
+    data = response.json()
+
+    current = data["current_condition"][0]
+    area = data.get("nearest_area", [{}])[0]
+    area_name = area.get("areaName", [{"value": location}])[0]["value"]
+    country = area.get("country", [{"value": ""}])[0]["value"]
+    condition = current.get("weatherDesc", [{"value": "unknown"}])[0]["value"]
+    expression = weather_expression(condition)
+    render_face(expression, condition)
+
+    return {
+        "location": ", ".join(part for part in (area_name, country) if part),
+        "condition": condition,
+        "temperature_c": current.get("temp_C"),
+        "feels_like_c": current.get("FeelsLikeC"),
+        "humidity_percent": current.get("humidity"),
+        "wind_kmph": current.get("windspeedKmph"),
+        "precipitation_mm": current.get("precipMM"),
+        "expression": expression,
+    }
+
+
+def get_time(timezone: str | None = None) -> dict:
+    timezone = timezone or "Europe/Madrid"
+    try:
+        now = dt.datetime.now(ZoneInfo(timezone))
+    except ZoneInfoNotFoundError:
+        timezone = "Europe/Madrid"
+        now = dt.datetime.now(ZoneInfo(timezone))
+
+    return {
+        "timezone": timezone,
+        "iso": now.isoformat(timespec="seconds"),
+        "date": now.strftime("%Y-%m-%d"),
+        "time": now.strftime("%H:%M:%S"),
+        "weekday": now.strftime("%A"),
+    }
+
+
+def robot_status() -> dict:
+    return {
+        "battery": "unknown; no real battery sensor is connected",
+        "wifi": "unknown; no real Wi-Fi telemetry is connected",
+        "sensors": "none connected to this CLI script",
+        "eyes": "CLI emulation active",
+        "mouth": "CLI teeth emulation active",
+        "microphone": "input audio file only; no live microphone sensor",
+        "internal_temperature": "unknown; no internal temperature sensor is connected",
+    }
+
+
+def run_tool_call(name: str, arguments: dict) -> object:
+    render_face("tool", name)
+
+    if name == "get_weather":
+        return get_weather(arguments["location"])
+
+    if name == "get_time":
+        return get_time(arguments.get("timezone"))
+
+    if name == "eye_look":
+        direction = arguments["direction"]
+        render_face(direction, f"eye.look.{direction}")
+        return {"ok": True, "command": f"eye.look.{direction}"}
+
+    if name == "set_expression":
+        expression = arguments["expression"]
+        render_face(expression)
+        return {"ok": True, "expression": expression}
+
+    if name == "robot_status":
+        render_face("watch", "checking status")
+        return robot_status()
+
+    return {"ok": False, "error": f"Unknown tool: {name}"}
+
+
+def parse_tool_arguments(raw_arguments: str | dict | None) -> dict:
+    if raw_arguments is None:
+        return {}
+    if isinstance(raw_arguments, dict):
+        return raw_arguments
+    if not raw_arguments:
+        return {}
+    return json.loads(raw_arguments)
+
+
+def chat_completion(api_token: str, base_url: str, payload: dict) -> dict:
     response = requests.post(
         f"{base_url.rstrip('/')}/chat/completions",
         headers={
             "Authorization": f"Bearer {api_token}",
             "Content-Type": "application/json",
         },
-        json={
-            "model": model,
-            "messages": [
-                {"role": "system", "content": sysprompt},
-                {"role": "user", "content": transcript},
-            ],
-        },
+        json=payload,
         timeout=300,
     )
     response.raise_for_status()
-    data = response.json()
-    answer = data["choices"][0]["message"]["content"]
-    if not answer or not answer.strip():
-        raise RuntimeError("LLM returned an empty answer.")
-    return answer.strip()
+    return response.json()
+
+
+def generate_answer(api_token: str, base_url: str, model: str, transcript: str, sysprompt: str) -> str:
+    tool_prompt = (
+        sysprompt
+        + "\n\nTOOLS AVAILABLE:\n"
+        + "- Use get_weather for real weather instead of guessing.\n"
+        + "- Use get_time for current time/date instead of guessing.\n"
+        + "- Use eye_look to implement eye.look.left/right/up/down/center in the CLI.\n"
+        + "- Use set_expression for robot face states, including weather states like sunny/rainy/cloudy/stormy/snowy.\n"
+        + "- Use robot_status for robot state questions; do not invent unavailable sensor readings.\n"
+        + "When waiting, thinking, or calling tools, the CLI face will emulate eyes and teeth."
+    )
+    messages = [
+        {"role": "system", "content": tool_prompt},
+        {"role": "user", "content": transcript},
+    ]
+    final_expression = "speaking"
+
+    for _ in range(MAX_TOOL_ROUNDS):
+        render_face("thinking", "generating/tool planning")
+        data = chat_completion(
+            api_token,
+            base_url,
+            {
+                "model": model,
+                "messages": messages,
+                "tools": TOOLS,
+                "tool_choice": "auto",
+            },
+        )
+        message = data["choices"][0]["message"]
+        tool_calls = message.get("tool_calls") or []
+
+        if not tool_calls:
+            answer = message.get("content")
+            if not answer or not answer.strip():
+                raise RuntimeError("LLM returned an empty answer.")
+            render_face(final_expression, "final answer ready")
+            return answer.strip()
+
+        messages.append(
+            {
+                "role": "assistant",
+                "content": message.get("content"),
+                "tool_calls": tool_calls,
+            }
+        )
+        for tool_call in tool_calls:
+            function = tool_call.get("function", {})
+            name = function.get("name", "")
+            try:
+                arguments = parse_tool_arguments(function.get("arguments"))
+                result = run_tool_call(name, arguments)
+            except Exception as error:
+                render_face("error", name)
+                result = {"ok": False, "error": str(error)}
+            if isinstance(result, dict) and result.get("expression"):
+                final_expression = str(result["expression"])
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call["id"],
+                    "name": name,
+                    "content": json.dumps(result, ensure_ascii=False),
+                }
+            )
+
+    raise RuntimeError("LLM exceeded maximum tool-call rounds.")
 
 
 def get_output_url(output: object) -> str:
@@ -242,6 +538,25 @@ def download_file(file_url: str, output_path: Path, stream_audio: bool) -> None:
 def validate_range(name: str, value: float, minimum: float, maximum: float) -> None:
     if not minimum <= value <= maximum:
         raise ValueError(f"--{name} must be between {minimum:g} and {maximum:g}")
+
+
+def format_duration(seconds: float) -> str:
+    minutes, remaining_seconds = divmod(seconds, 60)
+    hours, minutes = divmod(int(minutes), 60)
+    if hours:
+        return f"{hours:d}h {minutes:02d}m {remaining_seconds:05.2f}s"
+    if minutes:
+        return f"{minutes:d}m {remaining_seconds:05.2f}s"
+    return f"{remaining_seconds:.2f}s"
+
+
+def print_timing(label: str, started_at: float, previous_at: float) -> float:
+    now = time.perf_counter()
+    print(
+        f"{label}: {format_duration(now - previous_at)} "
+        f"(total {format_duration(now - started_at)})"
+    )
+    return now
 
 
 def read_sysprompt(sysprompt: str | None, sysprompt_file: str | None) -> str:
@@ -305,6 +620,8 @@ def main() -> None:
 
     replicate_base_url = normalize_replicate_base_url(args.replicate_base_url)
     sysprompt = read_sysprompt(args.sysprompt, args.sysprompt_file)
+    started_at = time.perf_counter()
+    last_timing_at = started_at
 
     stt_input = {
         "audio": audio_input(args.audio),
@@ -317,15 +634,18 @@ def main() -> None:
     if args.hf_token:
         stt_input["hf_token"] = args.hf_token
 
+    render_face("thinking", "listening/transcribing")
     print("transcribing...")
     transcript = extract_transcript(
         run_prediction(replicate_token, replicate_base_url, args.stt_model, stt_input, args.poll_interval)
     )
+    last_timing_at = print_timing("transcription time", started_at, last_timing_at)
 
     print("generating answer...")
     answer = generate_answer(openrouter_token, args.openrouter_base_url, args.llm_model, transcript, sysprompt)
     if len(answer) > 10000:
         raise ValueError("LLM answer is longer than the 10,000 character TTS limit.")
+    last_timing_at = print_timing("llm time", started_at, last_timing_at)
 
     tts_input = {
         "text": answer,
@@ -343,6 +663,7 @@ def main() -> None:
         "language_boost": args.language_boost,
     }
 
+    render_face("speaking", "synthesizing audio")
     print("synthesizing audio...")
     tts_output = run_prediction(
         replicate_token,
@@ -353,10 +674,13 @@ def main() -> None:
         extra_body={"stream": args.stream},
     )
     output_url = get_output_url(tts_output)
+    last_timing_at = print_timing("tts time", started_at, last_timing_at)
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    render_face("speaking", "downloading/playback")
     download_file(output_url, output_path, args.stream)
+    print_timing("download/playback time", started_at, last_timing_at)
 
     if args.print_text:
         print(f"transcript: {transcript}")

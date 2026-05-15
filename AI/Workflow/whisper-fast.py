@@ -10,7 +10,10 @@ import requests
 
 
 DEFAULT_REPLICATE_BASE_URL = "https://ai.hackclub.com/proxy/v1/replicate"
-DEFAULT_MODEL = "vaibhavs10/incredibly-fast-whisper"
+DEFAULT_MODEL = (
+    "vaibhavs10/incredibly-fast-whisper:"
+    "3ab86df6c8f54c11309d4d1f930ac292bad43ace52d10c80d87eb258b3c9f79c"
+)
 DEFAULT_OUTPUT = "whisper-output.json"
 DEFAULT_POLL_INTERVAL = 1.0
 
@@ -29,6 +32,13 @@ LANGUAGES = [
     "thai", "tibetan", "turkish", "turkmen", "ukrainian", "urdu", "uzbek", "vietnamese", "welsh",
     "yiddish", "yoruba",
 ]
+
+
+def normalize_replicate_base_url(base_url: str) -> str:
+    base_url = base_url.rstrip("/")
+    if base_url == "https://ai.hackclub.com/proxy/v1":
+        return f"{base_url}/replicate"
+    return base_url
 
 
 def load_dotenv(env_path: Path) -> None:
@@ -60,15 +70,23 @@ def audio_input(audio: str) -> str:
     return file_to_data_uri(audio_path)
 
 
-def create_prediction(api_token: str, base_url: str, model: str, model_input: dict) -> dict:
+def prediction_request(model_ref: str, model_input: dict) -> tuple[str, dict]:
+    if ":" not in model_ref:
+        return f"/models/{model_ref}/predictions", {"input": model_input}
+    _, version = model_ref.split(":", 1)
+    return "/predictions", {"version": version, "input": model_input}
+
+
+def create_prediction(api_token: str, base_url: str, model_ref: str, model_input: dict) -> dict:
+    path, body = prediction_request(model_ref, model_input)
     response = requests.post(
-        f"{base_url}/models/{model}/predictions",
+        f"{base_url}{path}",
         headers={
             "Authorization": f"Bearer {api_token}",
             "Content-Type": "application/json",
             "Prefer": "wait",
         },
-        json={"input": model_input},
+        json=body,
         timeout=300,
     )
     response.raise_for_status()
@@ -110,7 +128,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Transcribe or translate audio with incredibly-fast-whisper")
     parser.add_argument("--audio", required=True, help="Audio path, URL, or data URI.")
     parser.add_argument("--task", default="transcribe", choices=["transcribe", "translate"])
-    parser.add_argument("--language", default="None", choices=LANGUAGES)
+    parser.add_argument("--language", default="spanish", choices=LANGUAGES)
     parser.add_argument("--timestamp", default="chunk", choices=["chunk", "word"])
     parser.add_argument("--batch-size", type=int, default=24)
     parser.add_argument("--diarise-audio", action="store_true")
@@ -141,7 +159,7 @@ def main() -> None:
     if args.hf_token:
         model_input["hf_token"] = args.hf_token
 
-    base_url = args.replicate_base_url.rstrip("/")
+    base_url = normalize_replicate_base_url(args.replicate_base_url)
     prediction = create_prediction(api_token, base_url, args.model, model_input)
     if prediction.get("status") != "succeeded":
         prediction = wait_for_prediction(api_token, base_url, prediction["id"], args.poll_interval)

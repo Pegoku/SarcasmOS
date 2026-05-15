@@ -3,6 +3,8 @@ import base64
 import json
 import mimetypes
 import os
+import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -214,7 +216,17 @@ def get_output_url(output: object) -> str:
     raise RuntimeError("TTS prediction succeeded but no audio URL was returned.")
 
 
-def download_file(file_url: str, output_path: Path) -> None:
+def resolve_stream_player(audio_path: Path) -> list[str]:
+    if shutil.which("ffplay"):
+        return ["ffplay", "-hide_banner", "-loglevel", "error", "-autoexit", "-nodisp", str(audio_path)]
+
+    if shutil.which("vlc"):
+        return ["vlc", "--play-and-exit", str(audio_path)]
+
+    raise RuntimeError("--stream requires ffplay or vlc to be installed.")
+
+
+def download_file(file_url: str, output_path: Path, stream_audio: bool) -> None:
     response = requests.get(file_url, stream=True, timeout=120)
     response.raise_for_status()
 
@@ -222,6 +234,9 @@ def download_file(file_url: str, output_path: Path) -> None:
         for chunk in response.iter_content(chunk_size=65536):
             if chunk:
                 file.write(chunk)
+
+    if stream_audio:
+        subprocess.run(resolve_stream_player(output_path), check=True)
 
 
 def validate_range(name: str, value: float, minimum: float, maximum: float) -> None:
@@ -267,6 +282,7 @@ def main() -> None:
     parser.add_argument("--openrouter-base-url", default=os.environ.get("OPENROUTER_BASE_URL", DEFAULT_OPENROUTER_BASE_URL))
     parser.add_argument("--replicate-base-url", default=os.environ.get("REPLICATE_BASE_URL", DEFAULT_REPLICATE_BASE_URL))
     parser.add_argument("--poll-interval", type=float, default=DEFAULT_POLL_INTERVAL)
+    parser.add_argument("--stream", action="store_true", help="Play the generated answer audio after downloading it.")
     parser.add_argument("--print-text", action="store_true", help="Print transcript and LLM answer.")
     args = parser.parse_args()
 
@@ -334,13 +350,13 @@ def main() -> None:
         args.tts_model,
         tts_input,
         args.poll_interval,
-        extra_body={"stream": False},
+        extra_body={"stream": args.stream},
     )
     output_url = get_output_url(tts_output)
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    download_file(output_url, output_path)
+    download_file(output_url, output_path, args.stream)
 
     if args.print_text:
         print(f"transcript: {transcript}")

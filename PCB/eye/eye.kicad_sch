@@ -6593,7 +6593,7 @@
 				)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Button_Switch_SMD:SW_SPST_TS-1088-xR025"
 			(at 57.15 93.98 0)
 			(hide yes)
 			(show_name no)
@@ -11282,7 +11282,7 @@
 				)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Button_Switch_SMD:SW_SPST_TS-1088-xR025"
 			(at 55.88 83.82 0)
 			(hide yes)
 			(show_name no)

@@ -4912,8 +4912,44 @@
 		(uuid "fc625257-693f-4ded-aae4-904fdd90a6e7")
 	)
 	(no_connect
+		(at 124.46 142.24)
+		(uuid "3877fff1-53cc-46b6-946b-83aad2f39e53")
+	)
+	(no_connect
+		(at 124.46 132.08)
+		(uuid "41b6b090-2fcb-442f-871f-02586bfd3708")
+	)
+	(no_connect
+		(at 124.46 144.78)
+		(uuid "42c36f08-0c28-4a73-8065-94bcc96beb76")
+	)
+	(no_connect
+		(at 124.46 134.62)
+		(uuid "530d81f0-8eb8-49cf-9394-b1baaec7d76b")
+	)
+	(no_connect
+		(at 124.46 137.16)
+		(uuid "5f31cd9f-0c38-4373-9a47-156028fcda38")
+	)
+	(no_connect
+		(at 124.46 81.28)
+		(uuid "78b30abe-856a-403b-b94f-3fd4d3b15074")
+	)
+	(no_connect
+		(at 124.46 114.3)
+		(uuid "8f8425e3-7a46-42d5-a014-9aba31886424")
+	)
+	(no_connect
 		(at 73.66 96.52)
 		(uuid "b9235c8c-eba6-4b8c-b9db-69fa26800502")
+	)
+	(no_connect
+		(at 124.46 147.32)
+		(uuid "c47866c6-4de7-49f9-a0d0-3804652ba8a4")
+	)
+	(no_connect
+		(at 124.46 149.86)
+		(uuid "c8b44e8a-86ca-4f55-a8f6-1f615cbf9547")
 	)
 	(no_connect
 		(at 73.66 99.06)
@@ -5889,6 +5925,30 @@
 		)
 		(uuid "f0f0f299-4488-44cc-8355-30c92e737f91")
 	)
+	(global_label "RST"
+		(shape input)
+		(at 208.28 100.33 270)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "0c3d84a0-de76-4387-ae83-07e6f60c1499")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 208.28 106.7623 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+	)
 	(global_label "CS"
 		(shape input)
 		(at 223.52 53.34 180)
@@ -5902,6 +5962,30 @@
 		(uuid "0dc68d60-0755-4582-989e-81b07306f450")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 218.0553 53.34 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+	)
+	(global_label "BL"
+		(shape input)
+		(at 195.58 100.33 270)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "15a092a8-a5d5-43bc-8d06-943d1b106c86")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 195.58 105.6133 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6081,6 +6165,30 @@
 			)
 		)
 	)
+	(global_label "SCK"
+		(shape input)
+		(at 203.2 100.33 270)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "4423b849-1bd6-4a0e-bef9-0ddec11025ab")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 203.2 107.0647 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+	)
 	(global_label "RUN"
 		(shape input)
 		(at 69.85 88.9 90)
@@ -6142,6 +6250,54 @@
 		(uuid "5bdd18da-e867-4402-ac2e-3f8084d34de3")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 217.0877 60.96 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+	)
+	(global_label "MOSI"
+		(shape input)
+		(at 205.74 100.33 270)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "62e87c6b-c575-40bc-9d44-20a7164ed9f7")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 205.74 107.9114 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+	)
+	(global_label "CS"
+		(shape input)
+		(at 200.66 100.33 270)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "74c21329-e34d-4503-833d-50bd5e404bf9")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 200.66 105.7947 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6382,6 +6538,30 @@
 		(uuid "d5182a4c-0b4e-4757-a227-eef81d726bdd")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 65.6553 180.34 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+	)
+	(global_label "DC"
+		(shape input)
+		(at 198.12 100.33 270)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "d6895fee-808a-47a1-b42f-f4b49b4324bd")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 198.12 105.8552 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6809,7 +6989,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "070a15d0-3f0c-4c28-8361-6a64bfe34306")
-		(property "Reference" "TP10"
+		(property "Reference" "G15"
 			(at 136.144 111.76 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6871,7 +7051,7 @@
 		(instances
 			(project "eye"
 				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
-					(reference "TP10")
+					(reference "G15")
 					(unit 1)
 				)
 			)
@@ -6966,7 +7146,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "0a522dd7-511d-4c88-8d5f-1953d0afd6e3")
-		(property "Reference" "TP4"
+		(property "Reference" "G9"
 			(at 136.144 96.52 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -7028,7 +7208,7 @@
 		(instances
 			(project "eye"
 				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
-					(reference "TP4")
+					(reference "G9")
 					(unit 1)
 				)
 			)
@@ -8500,7 +8680,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "4ebf1580-9309-4297-8e48-df9e50ee7e11")
-		(property "Reference" "TP2"
+		(property "Reference" "G7"
 			(at 136.144 91.44 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -8562,7 +8742,7 @@
 		(instances
 			(project "eye"
 				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
-					(reference "TP2")
+					(reference "G7")
 					(unit 1)
 				)
 			)
@@ -8816,7 +8996,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "5a91db29-b977-4e90-a706-f918c71b8fc0")
-		(property "Reference" "TP7"
+		(property "Reference" "G12"
 			(at 136.144 104.14 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -8878,7 +9058,7 @@
 		(instances
 			(project "eye"
 				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
-					(reference "TP7")
+					(reference "G12")
 					(unit 1)
 				)
 			)
@@ -8895,7 +9075,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "60d075ad-b62c-44d8-abd1-a19460b77528")
-		(property "Reference" "TP6"
+		(property "Reference" "G11"
 			(at 136.144 101.6 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -8957,7 +9137,7 @@
 		(instances
 			(project "eye"
 				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
-					(reference "TP6")
+					(reference "G11")
 					(unit 1)
 				)
 			)
@@ -9288,7 +9468,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "745bc05b-5aa3-4ed0-aa61-6e34ebff43c6")
-		(property "Reference" "TP3"
+		(property "Reference" "G8"
 			(at 136.144 93.98 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -9350,7 +9530,7 @@
 		(instances
 			(project "eye"
 				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
-					(reference "TP3")
+					(reference "G8")
 					(unit 1)
 				)
 			)
@@ -9510,6 +9690,85 @@
 			(project "eye"
 				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
 					(reference "#PWR015")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:+3.3V")
+		(at 190.5 100.33 180)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "76695854-5b02-43c9-85cc-49dbf854eff5")
+		(property "Reference" "#PWR033"
+			(at 190.5 96.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+3.3V"
+			(at 190.4999 104.14 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" ""
+			(at 190.5 100.33 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 190.5 100.33 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
+			(at 190.5 100.33 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "68b749bf-224f-4f90-bd61-d1b5385faf80")
+		)
+		(instances
+			(project "eye"
+				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
+					(reference "#PWR033")
 					(unit 1)
 				)
 			)
@@ -9862,7 +10121,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Connector_PinSocket_2.54mm:PinSocket_1x08_P2.54mm_Vertical"
+		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_2x04_P2.54mm_Vertical"
 			(at 76.2 170.18 0)
 			(hide yes)
 			(show_name no)
@@ -10256,6 +10515,104 @@
 			(project "eye"
 				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
 					(reference "#PWR032")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector_Generic:Conn_01x08")
+		(at 198.12 95.25 90)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "b03ec4a9-93f8-4c1d-b92f-9f812d0543a0")
+		(property "Reference" "J4"
+			(at 199.39 88.9 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "Conn_01x08"
+			(at 199.39 91.44 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_2x04_P2.54mm_Vertical"
+			(at 198.12 95.25 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 198.12 95.25 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Generic connector, single row, 01x08, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(at 198.12 95.25 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "7"
+			(uuid "daba6531-45a6-489c-89f1-c5cbe8529b0f")
+		)
+		(pin "6"
+			(uuid "5d82b023-646e-4122-9707-4dfe7d42998b")
+		)
+		(pin "1"
+			(uuid "0218ebd3-ebf3-4641-9b7b-b3150b052f72")
+		)
+		(pin "3"
+			(uuid "bc05bfce-980c-40d7-83a9-0cfd92e46d70")
+		)
+		(pin "5"
+			(uuid "cabe355b-97ba-4d04-b3a0-b2b5cee87d03")
+		)
+		(pin "4"
+			(uuid "ab57cf90-ad19-4f2a-8ef7-14d03648dc6e")
+		)
+		(pin "2"
+			(uuid "3d01410a-0ddd-45a9-998f-fd43af7937eb")
+		)
+		(pin "8"
+			(uuid "ce126a13-21f4-4955-9620-e730cdb48556")
+		)
+		(instances
+			(project "eye"
+				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
+					(reference "J4")
 					(unit 1)
 				)
 			)
@@ -10671,7 +11028,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "c5e09e4e-bc73-48e7-a5a4-e1c7e6897278")
-		(property "Reference" "TP1"
+		(property "Reference" "G6"
 			(at 136.144 88.9 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -10733,7 +11090,7 @@
 		(instances
 			(project "eye"
 				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
-					(reference "TP1")
+					(reference "G6")
 					(unit 1)
 				)
 			)
@@ -11498,7 +11855,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "cf957b33-79b6-4ce4-9b0f-ccaa80387c27")
-		(property "Reference" "TP5"
+		(property "Reference" "G10"
 			(at 136.144 99.06 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -11560,7 +11917,7 @@
 		(instances
 			(project "eye"
 				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
-					(reference "TP5")
+					(reference "G10")
 					(unit 1)
 				)
 			)
@@ -12241,7 +12598,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "e593511e-c616-4721-b8e2-8e7c14de8fd7")
-		(property "Reference" "TP9"
+		(property "Reference" "G14"
 			(at 136.144 109.22 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -12303,7 +12660,7 @@
 		(instances
 			(project "eye"
 				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
-					(reference "TP9")
+					(reference "G14")
 					(unit 1)
 				)
 			)
@@ -12501,7 +12858,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Crystal:Crystal_SMD_0603-4Pin_6.0x3.5mm"
+		(property "Footprint" "Crystal:Crystal_SMD_3225-4Pin_3.2x2.5mm"
 			(at 67.31 132.08 0)
 			(hide yes)
 			(show_name no)
@@ -12974,6 +13331,85 @@
 		)
 	)
 	(symbol
+		(lib_id "power:GND")
+		(at 193.04 100.33 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "f27d00ee-b087-472c-bc7f-b09685fa6935")
+		(property "Reference" "#PWR034"
+			(at 193.04 106.68 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 193.0399 104.14 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" ""
+			(at 193.04 100.33 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 193.04 100.33 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 193.04 100.33 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "5dc6d597-3dd0-4b2e-bf0a-a4d1c5878a06")
+		)
+		(instances
+			(project "eye"
+				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
+					(reference "#PWR034")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Connector:TestPoint")
 		(at 130.81 106.68 270)
 		(unit 1)
@@ -12984,7 +13420,7 @@
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "f6e1daa9-200a-40a4-826f-77f01a7c4fd0")
-		(property "Reference" "TP8"
+		(property "Reference" "G13"
 			(at 136.144 106.68 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -13046,7 +13482,7 @@
 		(instances
 			(project "eye"
 				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
-					(reference "TP8")
+					(reference "G13")
 					(unit 1)
 				)
 			)

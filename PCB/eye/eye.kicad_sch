@@ -6753,7 +6753,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "00142afb-d591-4527-b01b-2b8f768d7bf4")
-		(property "Reference" "SW1"
+		(property "Reference" "BOOT1"
 			(at 57.15 91.44 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6815,7 +6815,7 @@
 		(instances
 			(project "eye"
 				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
-					(reference "SW1")
+					(reference "BOOT1")
 					(unit 1)
 				)
 			)
@@ -11619,7 +11619,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "cca5df15-8356-4ce8-8aae-cc9fe344bd93")
-		(property "Reference" "SW2"
+		(property "Reference" "RUN1"
 			(at 55.88 81.28 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -11681,7 +11681,7 @@
 		(instances
 			(project "eye"
 				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
-					(reference "SW2")
+					(reference "RUN1")
 					(unit 1)
 				)
 			)

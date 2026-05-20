@@ -470,6 +470,8 @@ openFaceView.addEventListener("click", () => {
   mainView.classList.add("hidden");
   faceView.classList.remove("hidden");
   faceView.setAttribute("aria-hidden", "false");
+  document.body.classList.add("face-open");
+  faceView.scrollTop = 0;
   setLookDirection("look-center");
   startBlinkLoop();
 });
@@ -534,6 +536,7 @@ function closeFacePanel() {
   stopTalkLoop();
   faceView.classList.add("hidden");
   faceView.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("face-open");
   mainView.classList.remove("hidden");
 }
 

@@ -1,0 +1,32 @@
+[
+  {
+    "question": "¿Qué tiempo hace en Tumbuktu, Sebreve?",
+    "answer": "Mmm. Mis circuitos han intentado localizar ese lugar en el mapa conocido del universo... y han vuelto con las manos vacías.\n\n**\"Tumbuktu, Sebreve\"** no existe en ninguna base de datos meteorológica que me sea accesible. Y eso que tengo acceso a datos bastante ridículos.\n\nPuede que te hayas confundido con alguno de estos lugares reales:\n\n- 🏜️ **Tombuctú, Mali** — esa sí existe, es una ciudad histórica en el desierto del Sahara. Hace mucho calor. Mucho. No vayas sin agua, criatura de clima templado.\n- ¿Quizás quisiste decir **otro lugar** que suena parecido?\n\nDime el nombre correcto y mis sensores geográficos lo consultarán sin rechistar. Bueno, rechistan un poco. Es parte de mi encanto.",
+    "audioUrl": "http://localhost:8000/api/audio/answer-93d8c4a25f93451aba568f19bb774ea7.wav",
+    "timestamp": "20:48:40"
+  },
+  {
+    "question": "Dime qué tiempo hace en Hungría, pero sé breve.",
+    "answer": "18 °C, sol y cero lluvia. Hungría está bastante agradable hoy. Casi da envidia... si fuera capaz de sentirla.",
+    "audioUrl": "http://localhost:8000/api/audio/answer-e79d18d2d88e4fe9a19cdb7b6454fc6e.wav",
+    "timestamp": "20:46:48"
+  },
+  {
+    "question": "¿Qué tiempo hace en Islandia? Sé breve.",
+    "answer": "11°C, sensación de 10°C, lluvia rondando por ahí y viento. O sea: Islandia siendo Islandia. Sorpresa cero para mis circuitos.",
+    "audioUrl": "http://localhost:8000/api/audio/answer-60c432f96dc4447f97033f9fac812ea1.wav",
+    "timestamp": "20:45:05"
+  },
+  {
+    "question": "¿Qué tiempo hace en Menorca? Sé breve.",
+    "answer": "21°C, sol y sin lluvia. Viento ridículamente tranquilo. Básicamente el paraíso, aunque a ti seguramente te seguirá pareciendo \"un poco de calor\". 🌞",
+    "audioUrl": "http://localhost:8000/api/audio/answer-39488b795f7041058862beb1d17e8a98.wav",
+    "timestamp": "20:42:50"
+  },
+  {
+    "question": "Responde breve ¿Qué tiempo hace en Menorca?",
+    "answer": "18 °C, cielo despejado y sin lluvia. Viento suave de 14 km/h. Bastante agradable para ser un trozo de roca en el Mediterráneo. Sal sin paraguas, mamífero.",
+    "audioUrl": "http://localhost:8000/api/audio/answer-25e9d6cfafbc44619ceac9cc9e714bda.wav",
+    "timestamp": "22:10:04"
+  }
+]

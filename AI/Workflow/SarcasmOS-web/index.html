@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SarcasmOS - Bender Console</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main id="mainView" class="app view">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">SarcasmOS</p>
+          <h1>Bender Audio Console</h1>
+          <p class="subtitle">Upload, record, or type. The robot complains, then helps.</p>
+        </div>
+        <div class="status-card">
+          <p class="status-label">Robot status</p>
+          <pre id="statusOutput">Click refresh to check.</pre>
+          <button id="statusBtn" class="ghost">Refresh status</button>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="face-callout face-callout--top">
+          <div>
+            <p class="label">Face view</p>
+            <p class="subtitle">Open the full-screen Bender display.</p>
+          </div>
+          <button id="openFaceView" class="accent">Open face view</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Audio Input</h2>
+        <div class="controls">
+          <label class="file-input">
+            <input id="uploadInput" type="file" accept="audio/*" />
+            <span>Choose audio file</span>
+          </label>
+          <button id="uploadSend">Send upload</button>
+          <button id="recordBtn" class="accent">Record</button>
+          <button id="stopBtn" disabled>Stop</button>
+        </div>
+        <div class="meter">
+          <span id="recordState">Idle</span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Text Input</h2>
+        <div class="controls">
+          <input id="textInput" type="text" placeholder="Type a message for Bender" />
+          <button id="textSend" class="accent">Send text</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Result</h2>
+        <div class="grid">
+          <div>
+            <p class="label">Transcript</p>
+            <pre id="transcriptOutput">Waiting for audio...</pre>
+          </div>
+          <div>
+            <p class="label">Answer</p>
+            <pre id="answerOutput">Waiting for response...</pre>
+          </div>
+        </div>
+        <audio id="audioPlayer" controls></audio>
+        <p id="errorOutput" class="error"></p>
+      </section>
+
+      <section class="panel">
+        <div class="history-header">
+          <h2>Chat History</h2>
+          <button id="clearHistory" class="ghost">Clear history</button>
+        </div>
+        <div id="historyList" class="history-list"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Commands</h2>
+        <div class="controls">
+          <button data-command="eye.look.left">Look left</button>
+          <button data-command="eye.look.center">Look center</button>
+          <button data-command="eye.look.right">Look right</button>
+          <button data-command="expression.happy_fake">Expression: happy</button>
+          <button data-command="expression.sarcastic">Expression: sarcastic</button>
+          <button data-command="expression.angry">Expression: angry</button>
+        </div>
+      </section>
+    </main>
+
+    <section id="faceView" class="face-view hidden" aria-hidden="true">
+      <div class="face-head">
+        <div class="antenna">
+          <div class="antenna-tip"></div>
+        </div>
+        <div class="face-frame">
+          <div class="face-top">
+            <div class="forehead-panel"></div>
+          </div>
+        <div class="eyes">
+          <div class="eye-plate">
+            <div class="eye">
+              <div class="eye-white">
+                <div class="pupil"></div>
+              </div>
+            </div>
+            <div class="eye">
+              <div class="eye-white">
+                <div class="pupil"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mouth"></div>
+        </div>
+      </div>
+      <div class="face-controls">
+        <div class="controls">
+          <label class="file-input">
+            <input id="faceUploadInput" type="file" accept="audio/*" />
+            <span>Choose audio file</span>
+          </label>
+          <button id="faceUploadSend">Send upload</button>
+          <div class="tooltip">
+            <button id="faceRecordBtn" class="accent">Record</button>
+            <div class="tooltip-card" role="tooltip">
+              <div class="tooltip-title">Microphone</div>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="9" y="2" width="6" height="12" rx="3"></rect>
+                <path d="M6 10a6 6 0 0 0 12 0"></path>
+                <line x1="12" y1="16" x2="12" y2="20"></line>
+                <line x1="8" y1="20" x2="16" y2="20"></line>
+              </svg>
+            </div>
+          </div>
+          <button id="faceStopBtn" disabled>Stop</button>
+        </div>
+        <div class="meter">
+          <span id="faceRecordState">Idle</span>
+        </div>
+        <div class="controls">
+          <input id="faceTextInput" type="text" placeholder="Type a message for Bender" />
+          <div class="tooltip">
+            <button id="faceTextSend" class="accent">Send text</button>
+            <div class="tooltip-card" role="tooltip">
+              <div class="tooltip-title">Text</div>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="4" y="4" width="16" height="12" rx="2"></rect>
+                <path d="M8 20l4-4h8"></path>
+                <line x1="7" y1="8" x2="17" y2="8"></line>
+                <line x1="7" y1="11" x2="13" y2="11"></line>
+              </svg>
+            </div>
+          </div>
+        </div>
+        <div class="face-result">
+          <div>
+            <p class="label">Transcript</p>
+            <pre id="faceTranscriptOutput">Waiting for audio...</pre>
+          </div>
+          <div>
+            <p class="label">Answer</p>
+            <pre id="faceAnswerOutput">Waiting for response...</pre>
+          </div>
+          <audio id="faceAudioPlayer" controls></audio>
+        </div>
+        <div class="face-history">
+          <div class="history-header">
+            <p class="label">Chat history</p>
+            <button id="clearFaceHistory" class="ghost">Clear</button>
+          </div>
+          <div id="faceHistoryList" class="history-list"></div>
+        </div>
+      </div>
+      <button id="closeFaceView" class="accent">Back to console</button>
+    </section>
+
+    <script src="app.js"></script>
+  </body>
+</html>

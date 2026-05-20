@@ -1,0 +1,8 @@
+[
+  {
+    "question": "Responde breve ¿Qué tiempo hace en Menorca?",
+    "answer": "18 °C, cielo despejado y sin lluvia. Viento suave de 14 km/h. Bastante agradable para ser un trozo de roca en el Mediterráneo. Sal sin paraguas, mamífero.",
+    "audioUrl": "http://localhost:8000/api/audio/answer-25e9d6cfafbc44619ceac9cc9e714bda.wav",
+    "timestamp": "22:10:04"
+  }
+]

@@ -36,6 +36,16 @@ SUPPORTED_INPUT_EXTENSIONS = {
     ".aac",
 }
 
+SUPPORTED_OUTPUT_EXTENSIONS = {
+    "wav",
+    "mp3",
+    "flac",
+    "m4a",
+    "ogg",
+    "opus",
+    "aac",
+}
+
 _CACHED_FFMPEG: str | None = None
 
 LANGUAGES = [
@@ -247,7 +257,11 @@ def load_dotenv(env_path: Path) -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
+        key = key.strip()
+        value = value.strip().strip("\"'")
+        current = os.environ.get(key)
+        if current is None or current == "":
+            os.environ[key] = value
 
 
 def normalize_replicate_base_url(base_url: str) -> str:
@@ -610,6 +624,14 @@ def get_output_url(output: object) -> str:
     raise RuntimeError("TTS prediction succeeded but no audio URL was returned.")
 
 
+def detect_audio_extension(file_url: str, fallback: str) -> str:
+    parsed = urllib.parse.urlparse(file_url)
+    suffix = Path(parsed.path).suffix.lower().lstrip(".")
+    if suffix in SUPPORTED_OUTPUT_EXTENSIONS:
+        return suffix
+    return fallback
+
+
 def resolve_stream_player(audio_path: Path) -> list[str]:
     if shutil.which("ffplay"):
         return ["ffplay", "-hide_banner", "-loglevel", "error", "-autoexit", "-nodisp", str(audio_path)]
@@ -775,12 +797,15 @@ def synthesize_speech(text: str, config: BenderConfig) -> Path:
         extra_body={"stream": False},
     )
     output_url = get_output_url(tts_output)
+    extension = detect_audio_extension(output_url, config.audio_format)
 
     output_dir = config.outputs_dir or Path(__file__).resolve().parent / "outputs"
     output_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"answer-{uuid.uuid4().hex}.{config.audio_format}"
+    filename = f"answer-{uuid.uuid4().hex}.{extension}"
     output_path = output_dir / filename
     download_file(output_url, output_path, stream_audio=False)
+    if output_path.stat().st_size < 1024:
+        raise RuntimeError("TTS returned an empty audio file.")
     return output_path
 
 

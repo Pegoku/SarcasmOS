@@ -289,10 +289,13 @@ h2 {
   inset: 0;
   z-index: 20;
   display: grid;
-  grid-template-rows: minmax(320px, 44vh) auto;
+  grid-template-rows: auto auto;
   justify-items: center;
   gap: 22px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: auto;
+  touch-action: pan-y;
   padding: 28px 18px 40px;
   background:
     radial-gradient(circle at 51% 16%, rgba(255, 255, 255, 0.24), transparent 15%),
@@ -313,7 +316,7 @@ h2 {
 }
 
 .face-head {
-  align-self: end;
+  align-self: start;
   width: min(520px, 86vw);
   position: relative;
   z-index: 1;
@@ -389,8 +392,12 @@ h2 {
 .face-history {
   display: grid;
   gap: 12px;
-  max-height: 260px;
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+body.face-open {
+  overflow: hidden;
 }
 
 #closeFaceView {
@@ -500,7 +507,7 @@ h2 {
   }
 
   .face-view {
-    grid-template-rows: minmax(260px, 34vh) auto;
+    grid-template-rows: auto auto;
     padding-top: 64px;
   }
 

@@ -44,6 +44,8 @@ let pendingQuestion = "";
 let blinkTimer = null;
 let talkTimer = null;
 let talkRaf = null;
+const audioSyncMap = new Map();
+let audioSyncEnabled = false;
 
 function initSvgRefs() {
   svgEyes = Array.from(document.querySelectorAll(".svg-eye"));
@@ -122,23 +124,103 @@ function stopBlinkLoop() {
 }
 
 function startTalkLoop() {
-  if (talkRaf || !svgMouthGroup) {
+  if (!svgMouthGroup) {
     return;
   }
-  const start = performance.now();
-  const tick = (now) => {
-    const t = (now - start) / 1000;
-    const scale = 0.82 + Math.abs(Math.sin(t * 10)) * 0.35;
-    svgMouthGroup.style.transform = `scaleY(${scale.toFixed(3)})`;
-    talkRaf = requestAnimationFrame(tick);
-  };
-  talkRaf = requestAnimationFrame(tick);
+  svgMouthGroup.style.transform = "scaleY(1)";
 }
 
 function stopTalkLoop() {
-  if (talkRaf) {
-    cancelAnimationFrame(talkRaf);
-    talkRaf = null;
+  if (svgMouthGroup) {
+    svgMouthGroup.style.transform = "scaleY(1)";
+  }
+}
+
+function getAudioSyncState(audioEl) {
+  if (!audioSyncEnabled) {
+    return null;
+  }
+  if (audioSyncMap.has(audioEl)) {
+    return audioSyncMap.get(audioEl);
+  }
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) {
+    return null;
+  }
+  const context = new AudioContext();
+  const analyser = context.createAnalyser();
+  analyser.fftSize = 1024;
+  analyser.smoothingTimeConstant = 0.7;
+  const source = context.createMediaElementSource(audioEl);
+  source.connect(analyser);
+  analyser.connect(context.destination);
+
+  const state = {
+    context,
+    analyser,
+    data: new Uint8Array(analyser.fftSize),
+    rafId: null,
+    smoothed: 0,
+  };
+  audioSyncMap.set(audioEl, state);
+  return state;
+}
+
+function enableAudioSync() {
+  if (audioSyncEnabled) {
+    return;
+  }
+  audioSyncEnabled = true;
+  for (const state of audioSyncMap.values()) {
+    if (state.context.state === "suspended") {
+      state.context.resume().catch(() => {});
+    }
+  }
+  if (!audioPlayer.paused) {
+    startMouthSync(audioPlayer);
+  }
+  if (!faceAudioPlayer.paused) {
+    startMouthSync(faceAudioPlayer);
+  }
+}
+
+function startMouthSync(audioEl) {
+  if (!svgMouthGroup) {
+    return;
+  }
+  const state = getAudioSyncState(audioEl);
+  if (!state || state.rafId) {
+    return;
+  }
+  if (state.context.state === "suspended") {
+    state.context.resume().catch(() => {});
+  }
+  const minScale = 0.72;
+  const maxScale = 1.05;
+  const silenceThreshold = 0.025;
+  const tick = () => {
+    state.analyser.getByteTimeDomainData(state.data);
+    let sum = 0;
+    for (let i = 0; i < state.data.length; i += 1) {
+      const v = (state.data[i] - 128) / 128;
+      sum += v * v;
+    }
+    const rms = Math.sqrt(sum / state.data.length);
+    state.smoothed = state.smoothed * 0.85 + rms * 0.15;
+    const level = Math.max(0, state.smoothed - silenceThreshold) / (0.25 - silenceThreshold);
+    const clamped = Math.min(Math.max(level, 0), 1);
+    const scale = clamped === 0 ? 1 : minScale + (maxScale - minScale) * clamped;
+    svgMouthGroup.style.transform = `scaleY(${scale.toFixed(3)})`;
+    state.rafId = requestAnimationFrame(tick);
+  };
+  state.rafId = requestAnimationFrame(tick);
+}
+
+function stopMouthSync(audioEl) {
+  const state = audioSyncMap.get(audioEl);
+  if (state && state.rafId) {
+    cancelAnimationFrame(state.rafId);
+    state.rafId = null;
   }
   if (svgMouthGroup) {
     svgMouthGroup.style.transform = "scaleY(1)";
@@ -470,6 +552,8 @@ openFaceView.addEventListener("click", () => {
   mainView.classList.add("hidden");
   faceView.classList.remove("hidden");
   faceView.setAttribute("aria-hidden", "false");
+  document.body.classList.add("face-open");
+  faceView.scrollTop = 0;
   setLookDirection("look-center");
   startBlinkLoop();
 });
@@ -489,9 +573,18 @@ document.addEventListener("keydown", (event) => {
 });
 
 for (const player of [audioPlayer, faceAudioPlayer]) {
-  player.addEventListener("play", () => setSpeaking(true));
-  player.addEventListener("pause", () => setSpeaking(false));
-  player.addEventListener("ended", () => setSpeaking(false));
+  player.addEventListener("play", () => {
+    setSpeaking(true);
+    startMouthSync(player);
+  });
+  player.addEventListener("pause", () => {
+    setSpeaking(false);
+    stopMouthSync(player);
+  });
+  player.addEventListener("ended", () => {
+    setSpeaking(false);
+    stopMouthSync(player);
+  });
 }
 
 for (const button of document.querySelectorAll("button[data-command]")) {
@@ -532,8 +625,11 @@ function closeFacePanel() {
   faceView.classList.remove("blinking");
   setLookDirection("look-center");
   stopTalkLoop();
+  stopMouthSync(audioPlayer);
+  stopMouthSync(faceAudioPlayer);
   faceView.classList.add("hidden");
   faceView.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("face-open");
   mainView.classList.remove("hidden");
 }
 
@@ -542,3 +638,6 @@ document.addEventListener("DOMContentLoaded", () => {
   setLookDirection("look-center");
   loadHistory().then(() => renderHistory());
 });
+
+document.addEventListener("pointerdown", enableAudioSync, { once: true });
+document.addEventListener("keydown", enableAudioSync, { once: true });

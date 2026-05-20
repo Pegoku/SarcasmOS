@@ -31,6 +31,9 @@ const historyList = document.getElementById("historyList");
 const faceHistoryList = document.getElementById("faceHistoryList");
 const clearHistory = document.getElementById("clearHistory");
 const clearFaceHistory = document.getElementById("clearFaceHistory");
+let svgEyes = [];
+let svgPupils = [];
+let svgMouthGroup = null;
 
 const HISTORY_STORAGE_KEY = "sarcasmos.chatHistory";
 let mediaRecorder = null;
@@ -38,12 +41,117 @@ let audioChunks = [];
 let activePlaybackTarget = "main";
 const chatHistory = [];
 let pendingQuestion = "";
+let blinkTimer = null;
+let talkTimer = null;
+let talkRaf = null;
+
+function initSvgRefs() {
+  svgEyes = Array.from(document.querySelectorAll(".svg-eye"));
+  svgPupils = Array.from(document.querySelectorAll(".svg-pupil"));
+  svgMouthGroup = document.querySelector(".svg-mouth-group");
+
+  for (const eye of svgEyes) {
+    eye.style.transformBox = "fill-box";
+    eye.style.transformOrigin = "center";
+  }
+  for (const pupil of svgPupils) {
+    pupil.style.transformBox = "fill-box";
+    pupil.style.transformOrigin = "center";
+  }
+  if (svgMouthGroup) {
+    svgMouthGroup.style.transformBox = "fill-box";
+    svgMouthGroup.style.transformOrigin = "center";
+  }
+}
+
+function setLookDirection(direction) {
+  const directions = ["look-left", "look-right", "look-up", "look-down", "look-center"];
+  for (const item of directions) {
+    faceView.classList.remove(item);
+  }
+  if (direction) {
+    faceView.classList.add(direction);
+  }
+  const offsets = {
+    "look-left": { x: -10, y: 0, r: 8 },
+    "look-right": { x: 10, y: 0, r: -8 },
+    "look-up": { x: 0, y: -8, r: 0 },
+    "look-down": { x: 0, y: 8, r: 0 },
+    "look-center": { x: 0, y: 0, r: 0 },
+  };
+  const target = offsets[direction] || offsets["look-center"];
+  for (const pupil of svgPupils) {
+    pupil.setAttribute(
+      "transform",
+      `translate(${target.x} ${target.y}) rotate(${target.r})`
+    );
+  }
+}
+
+function triggerBlink() {
+  faceView.classList.remove("blinking");
+  void faceView.offsetWidth;
+  faceView.classList.add("blinking");
+  for (const eye of svgEyes) {
+    eye.style.transform = "scaleY(0.08)";
+  }
+  setTimeout(() => {
+    for (const eye of svgEyes) {
+      eye.style.transform = "scaleY(1)";
+    }
+  }, 120);
+}
+
+function startBlinkLoop() {
+  if (blinkTimer) {
+    return;
+  }
+  blinkTimer = setInterval(() => {
+    triggerBlink();
+  }, 4200);
+}
+
+function stopBlinkLoop() {
+  if (blinkTimer) {
+    clearInterval(blinkTimer);
+    blinkTimer = null;
+  }
+  for (const eye of svgEyes) {
+    eye.style.transform = "scaleY(1)";
+  }
+}
+
+function startTalkLoop() {
+  if (talkRaf || !svgMouthGroup) {
+    return;
+  }
+  const start = performance.now();
+  const tick = (now) => {
+    const t = (now - start) / 1000;
+    const scale = 0.82 + Math.abs(Math.sin(t * 10)) * 0.35;
+    svgMouthGroup.style.transform = `scaleY(${scale.toFixed(3)})`;
+    talkRaf = requestAnimationFrame(tick);
+  };
+  talkRaf = requestAnimationFrame(tick);
+}
+
+function stopTalkLoop() {
+  if (talkRaf) {
+    cancelAnimationFrame(talkRaf);
+    talkRaf = null;
+  }
+  if (svgMouthGroup) {
+    svgMouthGroup.style.transform = "scaleY(1)";
+  }
+}
 
 function setSpeaking(isSpeaking) {
   if (isSpeaking) {
     faceView.classList.add("speaking");
+    startTalkLoop();
   } else {
     faceView.classList.remove("speaking");
+    stopTalkLoop();
   }
 }
 
@@ -62,12 +170,6 @@ function setLoading(isLoading, label) {
   faceUploadSend.disabled = isLoading;
   faceTextSend.disabled = isLoading;
   setRecordingState(label || (isLoading ? "Thinking..." : "Idle"));
-}
-
-function closeFacePanel() {
-  faceView.classList.add("hidden");
-  faceView.setAttribute("aria-hidden", "true");
-  mainView.classList.remove("hidden");
 }
 
 function showError(message) {
@@ -368,6 +470,8 @@ openFaceView.addEventListener("click", () => {
   mainView.classList.add("hidden");
   faceView.classList.remove("hidden");
   faceView.setAttribute("aria-hidden", "false");
+  setLookDirection("look-center");
+  startBlinkLoop();
 });
 
 closeFaceView.addEventListener("click", closeFacePanel);
@@ -405,10 +509,36 @@ for (const button of document.querySelectorAll("button[data-command]")) {
         throw new Error(data.error || "Command failed");
       }
       answerOutput.textContent = JSON.stringify(data, null, 2);
+      if (command.startsWith("eye.look.")) {
+        const direction = command.split(".").pop();
+        const map = {
+          left: "look-left",
+          right: "look-right",
+          up: "look-up",
+          down: "look-down",
+          center: "look-center",
+        };
+        setLookDirection(map[direction] || "look-center");
+      }
     } catch (error) {
       showError(error.message || "Command failed");
     }
   });
 }
 
-loadHistory().then(() => renderHistory());
+function closeFacePanel() {
+  stopBlinkLoop();
+  faceView.classList.remove("speaking");
+  faceView.classList.remove("blinking");
+  setLookDirection("look-center");
+  stopTalkLoop();
+  faceView.classList.add("hidden");
+  faceView.setAttribute("aria-hidden", "true");
+  mainView.classList.remove("hidden");
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  initSvgRefs();
+  setLookDirection("look-center");
+  loadHistory().then(() => renderHistory());
+});

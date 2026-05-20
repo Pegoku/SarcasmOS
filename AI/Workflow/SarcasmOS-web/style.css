@@ -159,16 +159,51 @@ input[type="text"] {
   display: block;
 }
 
-.face-view.speaking .svg-eye {
+.face-svg .svg-eye,
+.face-svg .svg-mouth-group {
+  transform-box: fill-box;
   transform-origin: center;
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+.face-svg .svg-pupil {
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform;
+}
+
+.face-view.speaking .svg-eye {
   animation: blink 3.2s ease-in-out infinite;
 }
 
-.face-view.speaking .svg-mouth,
-.face-view.speaking .svg-mouth-line,
-.face-view.speaking .svg-tooth {
-  transform-origin: center;
+.face-view.speaking .svg-mouth-group {
   animation: talk 0.18s ease-in-out infinite;
+}
+
+.face-view.blinking .svg-eye {
+  transform-origin: center;
+  animation: blink 0.35s ease-in-out 1;
+}
+
+.face-view.look-left .svg-pupil {
+  transform: translateX(-10px) rotate(8deg);
+}
+
+.face-view.look-right .svg-pupil {
+  transform: translateX(10px) rotate(-8deg);
+}
+
+.face-view.look-up .svg-pupil {
+  transform: translateY(-8px);
+}
+
+.face-view.look-down .svg-pupil {
+  transform: translateY(8px);
+}
+
+.face-view.look-center .svg-pupil {
+  transform: translate(0, 0);
 }
 
 .antenna {

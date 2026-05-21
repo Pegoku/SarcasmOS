@@ -5194,12 +5194,6 @@
 		(uuid "9bc4b4d9-82bd-4c97-b767-0629d618ddba")
 	)
 	(junction
-		(at 213.36 24.13)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "9f752f9c-3b88-46f0-80ee-a6260816601c")
-	)
-	(junction
 		(at 205.74 31.75)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -5216,12 +5210,6 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "a5c67849-818c-488a-881b-04b1802190f1")
-	)
-	(junction
-		(at 275.59 25.4)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "a63d2535-c3bc-45ad-835d-0d7c5921616a")
 	)
 	(junction
 		(at 87.63 26.67)
@@ -5248,6 +5236,12 @@
 		(uuid "b4e44e17-7765-4d85-8c04-ca837a0ac3a4")
 	)
 	(junction
+		(at 213.36 24.13)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "b9480071-5b38-463b-9bb5-cf23e78b7ba5")
+	)
+	(junction
 		(at 109.22 66.04)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -5270,6 +5264,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "e278e908-dc4c-4d37-8cd8-f71771f96e7f")
+	)
+	(junction
+		(at 275.59 25.4)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "ea35291c-a146-437f-b4bb-3b8ed2501d62")
 	)
 	(junction
 		(at 138.43 50.8)
@@ -8652,7 +8652,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_2x08_P2.54mm_Vertical"
+		(property "Footprint" "Connector_PinSocket_2.54mm:PinSocket_2x08_P2.54mm_Vertical"
 			(at 231.14 111.76 0)
 			(hide yes)
 			(show_name no)
@@ -8737,6 +8737,84 @@
 			(project "mouth"
 				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
 					(reference "J5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:+5V")
+		(at 213.36 24.13 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "118b169b-7418-498b-899a-a2c3649c9640")
+		(property "Reference" "#PWR050"
+			(at 213.36 27.94 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+5V"
+			(at 213.36 19.05 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 213.36 24.13 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 213.36 24.13 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"+5V\""
+			(at 213.36 24.13 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "c6374053-1357-4ce5-ad05-9591c97d7369")
+		)
+		(instances
+			(project "mouth"
+				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
+					(reference "#PWR050")
 					(unit 1)
 				)
 			)
@@ -13809,7 +13887,7 @@
 		)
 	)
 	(symbol
-		(lib_id "power:+3.3V")
+		(lib_id "power:+5V")
 		(at 275.59 25.4 0)
 		(unit 1)
 		(body_style 1)
@@ -13819,8 +13897,8 @@
 		(in_pos_files yes)
 		(dnp no)
 		(fields_autoplaced yes)
-		(uuid "b5b47ad6-d0ac-402f-a401-fc68acbb2029")
-		(property "Reference" "#PWR033"
+		(uuid "b1d7a461-c1cf-4fdf-99a2-4ae9c0131471")
+		(property "Reference" "#PWR051"
 			(at 275.59 29.21 0)
 			(hide yes)
 			(show_name no)
@@ -13831,7 +13909,7 @@
 				)
 			)
 		)
-		(property "Value" "+3.3V"
+		(property "Value" "+5V"
 			(at 275.59 20.32 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -13863,7 +13941,7 @@
 				)
 			)
 		)
-		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
+		(property "Description" "Power symbol creates a global label with name \"+5V\""
 			(at 275.59 25.4 0)
 			(hide yes)
 			(show_name no)
@@ -13875,12 +13953,12 @@
 			)
 		)
 		(pin "1"
-			(uuid "d7174b14-a9e5-4c0d-a100-64f1b18c01ef")
+			(uuid "7e33d518-3cc7-4677-aaa5-e8bf6b104dcd")
 		)
 		(instances
 			(project "mouth"
 				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
-					(reference "#PWR033")
+					(reference "#PWR051")
 					(unit 1)
 				)
 			)
@@ -15926,84 +16004,6 @@
 			(project "mouth"
 				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
 					(reference "R7")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "power:+3.3V")
-		(at 213.36 24.13 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "de473b67-aa40-49ef-b890-614fe9a8f3bd")
-		(property "Reference" "#PWR020"
-			(at 213.36 27.94 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "+3.3V"
-			(at 213.36 19.05 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 213.36 24.13 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 213.36 24.13 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
-			(at 213.36 24.13 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "ae2d644c-31b9-4674-bf69-c2bb1cfa2b87")
-		)
-		(instances
-			(project "mouth"
-				(path "/43a36e01-9c03-487f-b76f-d3e0c5ffafba"
-					(reference "#PWR020")
 					(unit 1)
 				)
 			)

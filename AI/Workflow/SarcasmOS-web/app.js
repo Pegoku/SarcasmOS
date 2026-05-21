@@ -15,8 +15,11 @@ const statusBtn = document.getElementById("statusBtn");
 const statusOutput = document.getElementById("statusOutput");
 const mainView = document.getElementById("mainView");
 const faceView = document.getElementById("faceView");
+const voiceChatView = document.getElementById("voiceChatView");
 const openFaceView = document.getElementById("openFaceView");
+const openVoiceChatView = document.getElementById("openVoiceChatView");
 const closeFaceView = document.getElementById("closeFaceView");
+const closeVoiceChatView = document.getElementById("closeVoiceChatView");
 const faceUploadInput = document.getElementById("faceUploadInput");
 const faceUploadSend = document.getElementById("faceUploadSend");
 const faceRecordBtn = document.getElementById("faceRecordBtn");
@@ -27,6 +30,12 @@ const faceTextSend = document.getElementById("faceTextSend");
 const faceTranscriptOutput = document.getElementById("faceTranscriptOutput");
 const faceAnswerOutput = document.getElementById("faceAnswerOutput");
 const faceAudioPlayer = document.getElementById("faceAudioPlayer");
+const voiceChatList = document.getElementById("voiceChatList");
+const voiceChatRecordBtn = document.getElementById("voiceChatRecordBtn");
+const voiceChatStopBtn = document.getElementById("voiceChatStopBtn");
+const voiceChatTextInput = document.getElementById("voiceChatTextInput");
+const voiceChatTextSend = document.getElementById("voiceChatTextSend");
+const voiceChatRecordState = document.getElementById("voiceChatRecordState");
 const historyList = document.getElementById("historyList");
 const faceHistoryList = document.getElementById("faceHistoryList");
 const clearHistory = document.getElementById("clearHistory");
@@ -45,6 +54,8 @@ let blinkTimer = null;
 let talkTimer = null;
 let talkRaf = null;
 let thinkTimer = null;
+let thinkLongTimer = null;
+let isBusy = false;
 const audioSyncMap = new Map();
 let audioSyncEnabled = false;
 
@@ -236,21 +247,67 @@ function stopMouthSync(audioEl) {
 function setSpeaking(isSpeaking) {
   if (isSpeaking) {
     faceView.classList.add("speaking");
+    voiceChatView.classList.add("speaking");
     startTalkLoop();
   } else {
     faceView.classList.remove("speaking");
+    voiceChatView.classList.remove("speaking");
     stopTalkLoop();
   }
 }
 
-function setThinking(isThinking) {
+function getAllAudioElements() {
+  return [
+    audioPlayer,
+    faceAudioPlayer,
+    ...document.querySelectorAll(".voice-chat-audio"),
+  ];
+}
+
+function pauseAllAudio(except) {
+  for (const player of getAllAudioElements()) {
+    if (player && player !== except && !player.paused) {
+      player.pause();
+    }
+  }
+}
+
+function setThinking(isThinking, mode = "") {
   document.body.classList.toggle("thinking", isThinking);
+  document.body.classList.toggle("thinking-audio", isThinking && mode === "audio");
+  document.body.classList.toggle("thinking-long", false);
   faceView.classList.toggle("thinking", isThinking);
+  faceView.classList.toggle("thinking-audio", isThinking && mode === "audio");
+  faceView.classList.toggle("thinking-long", false);
+  voiceChatView.classList.toggle("thinking", isThinking);
+  voiceChatView.classList.toggle("thinking-audio", isThinking && mode === "audio");
+  voiceChatView.classList.toggle("thinking-long", false);
   if (isThinking) {
     startThinkingLoop();
+    startThinkingLongTimer();
   } else {
     stopThinkingLoop();
+    stopThinkingLongTimer();
   }
+}
+
+function startThinkingLongTimer() {
+  if (thinkLongTimer) {
+    return;
+  }
+  thinkLongTimer = setTimeout(() => {
+    document.body.classList.add("thinking-long");
+    faceView.classList.add("thinking-long");
+  }, 3800);
+}
+
+function stopThinkingLongTimer() {
+  if (thinkLongTimer) {
+    clearTimeout(thinkLongTimer);
+    thinkLongTimer = null;
+  }
+  document.body.classList.remove("thinking-long");
+  faceView.classList.remove("thinking-long");
 }
 
 function startThinkingLoop() {
@@ -288,9 +345,11 @@ function stopThinkingLoop() {
 function setRecordingState(label) {
   recordState.textContent = label;
   faceRecordState.textContent = label;
+  voiceChatRecordState.textContent = label;
 }
 
-function setLoading(isLoading, label) {
+function setLoading(isLoading, label, mode = "") {
+  isBusy = isLoading;
   recordBtn.disabled = isLoading;
   stopBtn.disabled = !mediaRecorder || !mediaRecorder.state || mediaRecorder.state === "inactive";
   uploadSend.disabled = isLoading;
@@ -299,8 +358,11 @@ function setLoading(isLoading, label) {
   faceStopBtn.disabled = !mediaRecorder || !mediaRecorder.state || mediaRecorder.state === "inactive";
   faceUploadSend.disabled = isLoading;
   faceTextSend.disabled = isLoading;
+  voiceChatRecordBtn.disabled = isLoading;
+  voiceChatStopBtn.disabled = !mediaRecorder || !mediaRecorder.state || mediaRecorder.state === "inactive";
+  voiceChatTextSend.disabled = isLoading;
   setRecordingState(label || (isLoading ? "Thinking..." : "Idle"));
-  setThinking(isLoading);
+  setThinking(isLoading, mode);
 }
 
 function showError(message) {
@@ -335,12 +397,25 @@ function updateResult(data) {
     const audioUrl = `${API_BASE}${data.audio_url}`;
     audioPlayer.src = audioUrl;
     faceAudioPlayer.src = audioUrl;
-    if (activePlaybackTarget === "face") {
+    if (activePlaybackTarget === "voice") {
+      const voiceAudios = voiceChatList.querySelectorAll(".voice-chat-audio");
+      const voiceAudio = voiceAudios[voiceAudios.length - 1];
+      if (voiceAudio) {
+        pauseAllAudio(voiceAudio);
+        voiceAudio.play().catch(() => {
+          setRecordingState("Audio ready (click play)." );
+        });
+        setSpeaking(true);
+        startMouthSync(voiceAudio);
+      }
+    } else if (activePlaybackTarget === "face") {
+      pauseAllAudio(faceAudioPlayer);
       faceAudioPlayer.play().catch(() => {
         setRecordingState("Audio ready (click play)." );
       });
       setSpeaking(true);
     } else {
+      pauseAllAudio(audioPlayer);
       audioPlayer.play().catch(() => {
         setRecordingState("Audio ready (click play)." );
       });
@@ -366,7 +441,54 @@ function renderHistory() {
   const html = items.join("");
   historyList.innerHTML = html;
   faceHistoryList.innerHTML = html;
+  renderVoiceChat();
   bindHistoryClicks();
+}
+
+function renderVoiceChat() {
+  const items = [...chatHistory].reverse();
+  const html = items
+    .map((entry) => {
+      const question = entry.question || "";
+      const answer = entry.answer || "";
+      const audio = entry.audioUrl
+        ? `<audio class="voice-chat-audio" controls src="${entry.audioUrl}"></audio>`
+        : "";
+      return `
+        <div class="voice-chat-message user">
+          <div class="label">You</div>
+          <p>${question}</p>
+        </div>
+        <div class="voice-chat-message assistant">
+          <div class="label">Bender</div>
+          <p>${answer}</p>
+          ${audio}
+        </div>
+      `;
+    })
+    .join("");
+  voiceChatList.innerHTML = html;
+  bindVoiceChatAudio();
+  voiceChatList.scrollTop = voiceChatList.scrollHeight;
+}
+
+function bindVoiceChatAudio() {
+  for (const player of voiceChatList.querySelectorAll(".voice-chat-audio")) {
+    player.crossOrigin = "anonymous";
+    player.addEventListener("play", () => {
+      pauseAllAudio(player);
+      setSpeaking(true);
+      startMouthSync(player);
+    });
+    player.addEventListener("pause", () => {
+      setSpeaking(false);
+      stopMouthSync(player);
+    });
+    player.addEventListener("ended", () => {
+      setSpeaking(false);
+      stopMouthSync(player);
+    });
+  }
 }
 
 function bindHistoryClicks() {
@@ -456,7 +578,7 @@ async function loadHistory() {
 async function sendAudioBlob(blob, filename) {
   const formData = new FormData();
   formData.append("audio", blob, filename);
-  setLoading(true, "Sending audio...");
+  setLoading(true, "Sending audio...", "audio");
   showError("");
 
   try {
@@ -529,8 +651,10 @@ async function startRecording() {
     setRecordingState("Recording...");
     recordBtn.disabled = true;
     faceRecordBtn.disabled = true;
+    voiceChatRecordBtn.disabled = true;
     stopBtn.disabled = false;
     faceStopBtn.disabled = false;
+    voiceChatStopBtn.disabled = false;
   } catch (error) {
     showError("Microphone permission denied or unavailable.");
   }
@@ -541,8 +665,10 @@ function stopRecording() {
     mediaRecorder.stop();
     stopBtn.disabled = true;
     faceStopBtn.disabled = true;
+    voiceChatStopBtn.disabled = true;
     recordBtn.disabled = false;
     faceRecordBtn.disabled = false;
+    voiceChatRecordBtn.disabled = false;
     setRecordingState("Processing recording...");
   }
 }
@@ -579,8 +705,14 @@ faceRecordBtn.addEventListener("click", () => {
   startRecording();
 });
 
+voiceChatRecordBtn.addEventListener("click", () => {
+  activePlaybackTarget = "voice";
+  startRecording();
+});
+
 stopBtn.addEventListener("click", stopRecording);
 faceStopBtn.addEventListener("click", stopRecording);
+voiceChatStopBtn.addEventListener("click", stopRecording);
 
 textSend.addEventListener("click", () => {
   activePlaybackTarget = "main";
@@ -596,6 +728,17 @@ textSend.addEventListener("click", () => {
 faceTextSend.addEventListener("click", () => {
   activePlaybackTarget = "face";
   const message = faceTextInput.value.trim();
+  if (!message) {
+    showError("Type a message first.");
+    return;
+  }
+  pendingQuestion = message;
+  sendTextMessage(message);
+});
+
+voiceChatTextSend.addEventListener("click", () => {
+  activePlaybackTarget = "voice";
+  const message = voiceChatTextInput.value.trim();
   if (!message) {
     showError("Type a message first.");
     return;
@@ -628,17 +771,31 @@ openFaceView.addEventListener("click", () => {
   startBlinkLoop();
 });
 
+openVoiceChatView.addEventListener("click", () => {
+  mainView.classList.add("hidden");
+  voiceChatView.classList.remove("hidden");
+  voiceChatView.setAttribute("aria-hidden", "false");
+  document.body.classList.add("face-open");
+  setLookDirection("look-center");
+  startBlinkLoop();
+  renderVoiceChat();
+});
+
 closeFaceView.addEventListener("click", closeFacePanel);
+closeVoiceChatView.addEventListener("click", closeVoiceChatPanel);
 
 faceView.addEventListener("click", (event) => {
-  if (event.target === faceView) {
+  if (event.target === faceView && !isBusy) {
     closeFacePanel();
   }
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !faceView.classList.contains("hidden")) {
+  if (event.key === "Escape" && !faceView.classList.contains("hidden") && !isBusy) {
     closeFacePanel();
+  }
+  if (event.key === "Escape" && !voiceChatView.classList.contains("hidden") && !isBusy) {
+    closeVoiceChatPanel();
   }
 });
 
@@ -703,7 +860,26 @@ function closeFacePanel() {
   mainView.classList.remove("hidden");
 }
 
+function closeVoiceChatPanel() {
+  stopBlinkLoop();
+  voiceChatView.classList.remove("speaking");
+  setLookDirection("look-center");
+  stopTalkLoop();
+  voiceChatView.classList.add("hidden");
+  voiceChatView.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("face-open");
+  mainView.classList.remove("hidden");
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  const faceSvg = faceView.querySelector(".face-svg");
+  const voiceFaceHead = document.getElementById("voiceChatFace");
+  if (faceSvg && voiceFaceHead) {
+    const cloned = faceSvg.outerHTML
+      .replaceAll("id=\"shadow\"", "id=\"shadow-voice\"")
+      .replaceAll("url(#shadow)", "url(#shadow-voice)");
+    voiceFaceHead.innerHTML = cloned;
+  }
   initSvgRefs();
   setLookDirection("look-center");
   loadHistory().then(() => renderHistory());

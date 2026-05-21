@@ -32,6 +32,16 @@
       </section>
 
       <section class="panel">
+        <div class="face-callout face-callout--top">
+          <div>
+            <p class="label">Voice chat</p>
+            <p class="subtitle">Full-screen voice chat with Bender.</p>
+          </div>
+          <button id="openVoiceChatView" class="accent">Open voice chat</button>
+        </div>
+      </section>
+
+      <section class="panel">
         <h2>Audio Input</h2>
         <div class="controls">
           <label class="file-input">
@@ -187,6 +197,35 @@
       </div>
       <button id="closeFaceView" class="accent">Back to console</button>
     </section>
+
+    <section id="voiceChatView" class="voice-chat-view hidden" aria-hidden="true">
+      <div class="face-head" id="voiceChatFace"></div>
+      <div class="voice-chat-body">
+        <div class="voice-chat-messages" id="voiceChatList"></div>
+        <div class="voice-chat-input">
+          <div class="controls">
+            <button id="voiceChatRecordBtn" class="accent">Record</button>
+            <button id="voiceChatStopBtn" disabled>Stop</button>
+            <input id="voiceChatTextInput" type="text" placeholder="Type a message for Bender" />
+            <button id="voiceChatTextSend" class="accent">Send</button>
+          </div>
+          <div class="meter">
+            <span id="voiceChatRecordState">Idle</span>
+          </div>
+        </div>
+      </div>
+      <button id="closeVoiceChatView" class="accent">Back to console</button>
+    </section>
+
+    <div class="thinking-phrases" aria-hidden="true">
+      <span>Mmmm...</span>
+      <span>Heem...</span>
+      <span>Heeee...</span>
+      <span>Hmmmm...</span>
+      <span>Ummm...</span>
+      <span>Eh...</span>
+      <span>Ah...</span>
+    </div>
 
     <script src="app.js"></script>
   </body>

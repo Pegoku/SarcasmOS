@@ -44,8 +44,12 @@ let pendingQuestion = "";
 let blinkTimer = null;
 let talkTimer = null;
 let talkRaf = null;
+let thinkTimer = null;
 const audioSyncMap = new Map();
 let audioSyncEnabled = false;
+
+audioPlayer.crossOrigin = "anonymous";
+faceAudioPlayer.crossOrigin = "anonymous";
 
 function initSvgRefs() {
   svgEyes = Array.from(document.querySelectorAll(".svg-eye"));
@@ -171,6 +175,8 @@ function enableAudioSync() {
     return;
   }
   audioSyncEnabled = true;
+  getAudioSyncState(audioPlayer);
+  getAudioSyncState(faceAudioPlayer);
   for (const state of audioSyncMap.values()) {
     if (state.context.state === "suspended") {
       state.context.resume().catch(() => {});
@@ -237,6 +243,48 @@ function setSpeaking(isSpeaking) {
   }
 }
 
+function setThinking(isThinking) {
+  document.body.classList.toggle("thinking", isThinking);
+  faceView.classList.toggle("thinking", isThinking);
+  if (isThinking) {
+    startThinkingLoop();
+  } else {
+    stopThinkingLoop();
+  }
+}
+
+function startThinkingLoop() {
+  if (thinkTimer || svgPupils.length === 0) {
+    return;
+  }
+  const sequence = [
+    { x: -6, y: -2, r: 6 },
+    { x: 4, y: -5, r: -4 },
+    { x: 8, y: 1, r: -6 },
+    { x: -4, y: 6, r: 4 },
+    { x: 0, y: 0, r: 0 },
+  ];
+  let step = 0;
+  thinkTimer = setInterval(() => {
+    const target = sequence[step % sequence.length];
+    for (const pupil of svgPupils) {
+      pupil.setAttribute(
+        "transform",
+        `translate(${target.x} ${target.y}) rotate(${target.r})`
+      );
+    }
+    step += 1;
+  }, 520);
+}
+
+function stopThinkingLoop() {
+  if (thinkTimer) {
+    clearInterval(thinkTimer);
+    thinkTimer = null;
+  }
+  setLookDirection("look-center");
+}
+
 function setRecordingState(label) {
   recordState.textContent = label;
   faceRecordState.textContent = label;
@@ -252,6 +300,7 @@ function setLoading(isLoading, label) {
   faceUploadSend.disabled = isLoading;
   faceTextSend.disabled = isLoading;
   setRecordingState(label || (isLoading ? "Thinking..." : "Idle"));
+  setThinking(isLoading);
 }
 
 function showError(message) {
@@ -303,10 +352,15 @@ function updateResult(data) {
 function renderHistory() {
   const items = chatHistory.map((entry, index) => {
     return `
-      <button class="history-item" data-history-index="${index}">
-        <div class="label">${entry.timestamp}</div>
-        <p>${entry.question}</p>
-      </button>
+      <div class="history-item" data-history-index="${index}">
+        <div class="history-meta">
+          <div class="label">${entry.timestamp}</div>
+          <button class="history-delete" type="button" aria-label="Delete this chat">Delete</button>
+        </div>
+        <button class="history-open" type="button">
+          <p>${entry.question}</p>
+        </button>
+      </div>
     `;
   });
   const html = items.join("");
@@ -317,21 +371,37 @@ function renderHistory() {
 
 function bindHistoryClicks() {
   for (const item of document.querySelectorAll(".history-item")) {
-    item.addEventListener("click", () => {
-      const index = Number(item.dataset.historyIndex);
-      const entry = chatHistory[index];
-      if (!entry) {
-        return;
-      }
-      transcriptOutput.textContent = entry.question || "(empty transcript)";
-      faceTranscriptOutput.textContent = transcriptOutput.textContent;
-      answerOutput.textContent = entry.answer || "(empty answer)";
-      faceAnswerOutput.textContent = answerOutput.textContent;
-      if (entry.audioUrl) {
-        audioPlayer.src = entry.audioUrl;
-        faceAudioPlayer.src = entry.audioUrl;
-      }
-    });
+    const openButton = item.querySelector(".history-open");
+    const deleteButton = item.querySelector(".history-delete");
+    if (openButton) {
+      openButton.addEventListener("click", () => {
+        const index = Number(item.dataset.historyIndex);
+        const entry = chatHistory[index];
+        if (!entry) {
+          return;
+        }
+        transcriptOutput.textContent = entry.question || "(empty transcript)";
+        faceTranscriptOutput.textContent = transcriptOutput.textContent;
+        answerOutput.textContent = entry.answer || "(empty answer)";
+        faceAnswerOutput.textContent = answerOutput.textContent;
+        if (entry.audioUrl) {
+          audioPlayer.src = entry.audioUrl;
+          faceAudioPlayer.src = entry.audioUrl;
+        }
+      });
+    }
+    if (deleteButton) {
+      deleteButton.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        const index = Number(item.dataset.historyIndex);
+        if (Number.isNaN(index)) {
+          return;
+        }
+        chatHistory.splice(index, 1);
+        renderHistory();
+        await persistHistory();
+      });
+    }
   }
 }
 

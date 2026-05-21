@@ -259,6 +259,8 @@ h2 {
   border-radius: 14px;
   padding: 12px;
   background: rgba(255, 255, 255, 0.035);
+  display: grid;
+  gap: 8px;
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
@@ -267,6 +269,38 @@ h2 {
   transform: translateY(-1px);
   border-color: rgba(255, 255, 255, 0.2);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+
+.history-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.history-open {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.history-open p {
+  margin: 0;
+}
+
+.history-delete {
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.history-delete:hover:enabled {
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.35);
 }
 
 .face-callout {
@@ -366,6 +400,44 @@ h2 {
   backdrop-filter: blur(18px);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
   animation: fadeIn 0.45s 0.08s ease both;
+}
+
+body.thinking .face-head,
+.face-view.thinking .face-head {
+  animation: workPulse 1.6s ease-in-out infinite;
+}
+
+body.thinking .face-controls,
+.face-view.thinking .face-controls {
+  overflow: hidden;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3), 0 0 24px rgba(246, 196, 69, 0.25);
+}
+
+body.thinking .face-controls::before,
+.face-view.thinking .face-controls::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(120deg, transparent 20%, rgba(246, 196, 69, 0.14) 50%, transparent 80%);
+  transform: translateX(-60%);
+  animation: workSweep 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+body.thinking .panel {
+  position: relative;
+  overflow: hidden;
+}
+
+body.thinking .panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 30%, rgba(246, 196, 69, 0.08) 50%, transparent 70%);
+  transform: translateX(-65%);
+  animation: workSweep 2.2s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .face-controls .controls:first-child {
@@ -493,6 +565,27 @@ body.face-open {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes workPulse {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-6px) scale(1.01);
+  }
+}
+
+@keyframes workSweep {
+  0% {
+    transform: translateX(-70%);
+  }
+  50% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(70%);
   }
 }
 

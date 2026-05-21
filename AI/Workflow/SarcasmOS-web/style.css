@@ -259,6 +259,8 @@ h2 {
   border-radius: 14px;
   padding: 12px;
   background: rgba(255, 255, 255, 0.035);
+  display: grid;
+  gap: 8px;
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
@@ -267,6 +269,38 @@ h2 {
   transform: translateY(-1px);
   border-color: rgba(255, 255, 255, 0.2);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+
+.history-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.history-open {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.history-open p {
+  margin: 0;
+}
+
+.history-delete {
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.history-delete:hover:enabled {
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.35);
 }
 
 .face-callout {
@@ -303,7 +337,105 @@ h2 {
     linear-gradient(180deg, #87919a 0%, #707b84 58%, #56616a 100%);
 }
 
+.voice-chat-view {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 18px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: auto;
+  touch-action: pan-y;
+  padding: 28px 18px 40px;
+  justify-items: center;
+  background:
+    radial-gradient(circle at 51% 16%, rgba(255, 255, 255, 0.24), transparent 15%),
+    radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.16), transparent 23%),
+    linear-gradient(180deg, #87919a 0%, #707b84 58%, #56616a 100%);
+}
+
+/* Use the same sizing as the face view */
+.voice-chat-view .face-head {
+  align-self: start;
+  width: min(520px, 86vw);
+  position: relative;
+  z-index: 1;
+  animation: rise 0.45s ease both;
+}
+
+.voice-chat-body {
+  width: min(900px, 94vw);
+  justify-self: center;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 16px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(13, 18, 25, 0.74);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
+  padding: 0;
+}
+
+.voice-chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  padding: 18px 18px 0;
+  padding-right: 6px;
+}
+
+.voice-chat-message {
+  max-width: 82%;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(6, 10, 16, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.voice-chat-message.user {
+  align-self: flex-end;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.voice-chat-message.assistant {
+  align-self: flex-start;
+}
+
+.voice-chat-message .label {
+  margin-bottom: 6px;
+}
+
+.voice-chat-input {
+  display: grid;
+  gap: 8px;
+  padding: 0 18px 18px;
+}
+
+#closeVoiceChatView {
+  position: fixed;
+  top: 28px;
+  right: 28px;
+  z-index: 2;
+}
+
 .face-view::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.18;
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.65) 1px, transparent 1.5px),
+    linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.28) 100%);
+  background-size: 92px 92px, auto;
+}
+
+.voice-chat-view::before {
   content: "";
   position: fixed;
   inset: 0;
@@ -340,16 +472,20 @@ h2 {
 }
 
 .face-view.speaking .svg-eye,
-.face-view.blinking .svg-eye {
+.face-view.blinking .svg-eye,
+.voice-chat-view.speaking .svg-eye,
+.voice-chat-view.blinking .svg-eye {
   animation: svgBlink 3.2s ease-in-out infinite;
 }
 
-.face-view.blinking .svg-eye {
+.face-view.blinking .svg-eye,
+.voice-chat-view.blinking .svg-eye {
   animation-duration: 0.32s;
   animation-iteration-count: 1;
 }
 
-.face-view.speaking .svg-mouth-group {
+.face-view.speaking .svg-mouth-group,
+.voice-chat-view.speaking .svg-mouth-group {
   animation: talk 0.18s ease-in-out infinite;
 }
 
@@ -366,6 +502,100 @@ h2 {
   backdrop-filter: blur(18px);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
   animation: fadeIn 0.45s 0.08s ease both;
+}
+
+body.thinking .face-head,
+.face-view.thinking .face-head,
+.voice-chat-view.thinking .face-head {
+  animation: workPulse 1.6s ease-in-out infinite;
+}
+
+body.thinking .face-controls,
+.face-view.thinking .face-controls,
+.voice-chat-view.thinking .face-controls {
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3), 0 0 24px rgba(246, 196, 69, 0.25);
+}
+
+body.thinking .face-controls::before,
+.face-view.thinking .face-controls::before,
+.voice-chat-view.thinking .face-controls::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(120deg, transparent 20%, rgba(246, 196, 69, 0.14) 50%, transparent 80%);
+  transform: translateX(-60%);
+  animation: workSweep 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+body.thinking-audio .face-svg,
+.face-view.thinking-audio .face-svg,
+.voice-chat-view.thinking-audio .face-svg {
+  animation: focusGlow 1.4s ease-in-out infinite;
+}
+
+body.thinking-audio .svg-eye,
+.face-view.thinking-audio .svg-eye,
+.voice-chat-view.thinking-audio .svg-eye {
+  animation: focusSquint 1.2s ease-in-out infinite;
+}
+
+body.thinking-long .svg-eye,
+.face-view.thinking-long .svg-eye,
+.voice-chat-view.thinking-long .svg-eye {
+  animation: focusSquintHard 0.9s ease-in-out infinite;
+}
+
+body.thinking-long .svg-mouth-group,
+.face-view.thinking-long .svg-mouth-group,
+.voice-chat-view.thinking-long .svg-mouth-group {
+  animation: focusMouth 1.1s ease-in-out infinite;
+}
+
+.thinking-phrases {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 5;
+}
+
+body.thinking .thinking-phrases {
+  opacity: 0.8;
+}
+
+.thinking-phrases span {
+  position: absolute;
+  color: rgba(237, 243, 248, 0.7);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  animation: thoughtFloat 3.6s ease-in-out infinite;
+}
+
+.thinking-phrases span:nth-child(1) { left: 8%; top: 18%; animation-delay: 0s; }
+.thinking-phrases span:nth-child(2) { left: 70%; top: 12%; animation-delay: 0.4s; }
+.thinking-phrases span:nth-child(3) { left: 18%; top: 62%; animation-delay: 0.8s; }
+.thinking-phrases span:nth-child(4) { left: 62%; top: 68%; animation-delay: 1.2s; }
+.thinking-phrases span:nth-child(5) { left: 38%; top: 30%; animation-delay: 1.6s; }
+.thinking-phrases span:nth-child(6) { left: 78%; top: 48%; animation-delay: 2s; }
+.thinking-phrases span:nth-child(7) { left: 28%; top: 80%; animation-delay: 2.4s; }
+
+body.thinking .panel {
+  position: relative;
+}
+
+body.thinking .panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 30%, rgba(246, 196, 69, 0.08) 50%, transparent 70%);
+  transform: translateX(-65%);
+  animation: workSweep 2.2s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .face-controls .controls:first-child {
@@ -496,6 +726,80 @@ body.face-open {
   }
 }
 
+@keyframes workPulse {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-6px) scale(1.01);
+  }
+}
+
+@keyframes workSweep {
+  0% {
+    transform: translateX(-70%);
+  }
+  50% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(70%);
+  }
+}
+
+@keyframes focusGlow {
+  0%, 100% {
+    filter: drop-shadow(0 22px 18px rgba(0, 0, 0, 0.22));
+  }
+  50% {
+    filter: drop-shadow(0 26px 26px rgba(0, 0, 0, 0.35)) drop-shadow(0 0 16px rgba(246, 196, 69, 0.25));
+  }
+}
+
+@keyframes focusSquint {
+  0%, 100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(0.75);
+  }
+}
+
+@keyframes focusSquintHard {
+  0%, 100% {
+    transform: scaleY(0.45);
+  }
+  50% {
+    transform: scaleY(0.25);
+  }
+}
+
+@keyframes focusMouth {
+  0%, 100% {
+    transform: scaleY(0.9);
+  }
+  50% {
+    transform: scaleY(0.72);
+  }
+}
+
+@keyframes thoughtFloat {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  35% {
+    opacity: 0.85;
+  }
+  70% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px) scale(1.02);
+  }
+}
+
 @media (max-width: 760px) {
   body {
     padding: 24px 14px 48px;
@@ -508,6 +812,10 @@ body.face-open {
 
   .face-view {
     grid-template-rows: auto auto;
+    padding-top: 64px;
+  }
+
+  .voice-chat-view {
     padding-top: 64px;
   }
 

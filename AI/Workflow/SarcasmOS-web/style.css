@@ -369,6 +369,7 @@ h2 {
   width: min(900px, 94vw);
   justify-self: center;
   display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
   grid-template-rows: 1fr auto;
   gap: 16px;
   border-radius: 24px;
@@ -377,6 +378,83 @@ h2 {
   backdrop-filter: blur(18px);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
   padding: 0;
+}
+
+.voice-chat-sidebar {
+  grid-row: 1 / -1;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  min-height: 0;
+  padding: 18px 0 18px 18px;
+}
+
+.voice-chat-sidebar-header {
+  display: grid;
+  gap: 10px;
+}
+
+.voice-chat-sidebar-header .label {
+  margin-bottom: 0;
+}
+
+.voice-chat-sessions {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.voice-chat-session {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.voice-chat-session-open,
+.voice-chat-session-delete,
+.voice-chat-message-delete {
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.voice-chat-session-open {
+  min-width: 0;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.voice-chat-session-open.active {
+  border-color: rgba(246, 196, 69, 0.5);
+  box-shadow: 0 0 0 3px rgba(246, 196, 69, 0.12);
+}
+
+.voice-chat-session-title,
+.voice-chat-session-meta {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-chat-session-title {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.voice-chat-session-meta {
+  margin-top: 3px;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+}
+
+.voice-chat-session-delete,
+.voice-chat-message-delete {
+  padding: 6px 9px;
+  color: var(--muted);
 }
 
 .voice-chat-messages {
@@ -410,7 +488,19 @@ h2 {
   margin-bottom: 6px;
 }
 
+.voice-chat-message-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.voice-chat-message-top .label {
+  margin-bottom: 0;
+}
+
 .voice-chat-input {
+  grid-column: 2;
   display: grid;
   gap: 8px;
   padding: 0 18px 18px;
@@ -817,6 +907,20 @@ body.face-open {
 
   .voice-chat-view {
     padding-top: 64px;
+  }
+
+  .voice-chat-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(320px, 1fr) auto;
+  }
+
+  .voice-chat-sidebar {
+    grid-row: auto;
+    padding: 18px 18px 0;
+  }
+
+  .voice-chat-input {
+    grid-column: 1;
   }
 
   .face-controls .controls:first-child,

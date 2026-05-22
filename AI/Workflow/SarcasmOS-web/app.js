@@ -38,6 +38,9 @@ const voiceChatTextSend = document.getElementById("voiceChatTextSend");
 const voiceChatRecordState = document.getElementById("voiceChatRecordState");
 const voiceChatNewChat = document.getElementById("voiceChatNewChat");
 const voiceChatSessions = document.getElementById("voiceChatSessions");
+const voiceChatFontSmall = document.getElementById("voiceChatFontSmall");
+const voiceChatFontLarge = document.getElementById("voiceChatFontLarge");
+const voiceChatFontSize = document.getElementById("voiceChatFontSize");
 const historyList = document.getElementById("historyList");
 const faceHistoryList = document.getElementById("faceHistoryList");
 const clearHistory = document.getElementById("clearHistory");
@@ -47,6 +50,7 @@ let svgPupils = [];
 let svgMouthGroup = null;
 
 const HISTORY_STORAGE_KEY = "sarcasmos.chatHistory";
+const CHAT_FONT_STORAGE_KEY = "sarcasmos.voiceChatFontScale";
 const DEFAULT_CHAT_ID = "default";
 let mediaRecorder = null;
 let audioChunks = [];
@@ -61,6 +65,7 @@ let talkRaf = null;
 let thinkTimer = null;
 let thinkLongTimer = null;
 let isBusy = false;
+let voiceChatFontScale = 1;
 const audioSyncMap = new Map();
 let audioSyncEnabled = false;
 
@@ -372,6 +377,41 @@ function setLoading(isLoading, label, mode = "") {
 
 function showError(message) {
   errorOutput.textContent = message || "";
+}
+
+function applyVoiceChatFontScale() {
+  const scale = Math.min(Math.max(voiceChatFontScale, 0.9), 1.45);
+  voiceChatFontScale = scale;
+  const size = 1.08 * scale;
+  voiceChatList.style.setProperty("--voice-chat-font-size", `${size.toFixed(2)}rem`);
+  if (voiceChatFontSize) {
+    voiceChatFontSize.textContent = `${Math.round(scale * 100)}%`;
+  }
+  try {
+    localStorage.setItem(CHAT_FONT_STORAGE_KEY, String(scale));
+  } catch (error) {
+    console.warn("Failed to save chat font size.", error);
+  }
+}
+
+function loadVoiceChatFontScale() {
+  try {
+    const raw = localStorage.getItem(CHAT_FONT_STORAGE_KEY);
+    if (raw) {
+      const parsed = Number(raw);
+      if (!Number.isNaN(parsed)) {
+        voiceChatFontScale = parsed;
+      }
+    }
+  } catch (error) {
+    console.warn("Failed to load chat font size.", error);
+  }
+  applyVoiceChatFontScale();
+}
+
+function changeVoiceChatFontScale(delta) {
+  voiceChatFontScale += delta;
+  applyVoiceChatFontScale();
 }
 
 function escapeHtml(value) {
@@ -1016,6 +1056,8 @@ clearFaceHistory.addEventListener("click", async () => {
 });
 
 voiceChatNewChat.addEventListener("click", createNewVoiceChat);
+voiceChatFontSmall.addEventListener("click", () => changeVoiceChatFontScale(-0.1));
+voiceChatFontLarge.addEventListener("click", () => changeVoiceChatFontScale(0.1));
 
 openFaceView.addEventListener("click", () => {
   mainView.classList.add("hidden");
@@ -1138,6 +1180,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   initSvgRefs();
   setLookDirection("look-center");
+  loadVoiceChatFontScale();
   loadHistory().then(() => renderAllHistoryViews());
 });
 

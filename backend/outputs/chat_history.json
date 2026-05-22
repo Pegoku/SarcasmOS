@@ -1,11 +1,43 @@
 {
-  "activeChatId": "chat-1779477853791-2bc0bd43db614",
+  "activeChatId": "chat-1779478169924-85b3565798095",
   "chats": [
+    {
+      "id": "chat-1779478169924-85b3565798095",
+      "title": "¿Qué día es hoy?",
+      "createdAt": "2026-05-22T19:29:29.924Z",
+      "updatedAt": "2026-05-22T19:42:24.564Z",
+      "items": [
+        {
+          "question": "¿Qué tiempo hace en España se breve?",
+          "answer": "☀️ **24°C, sol y sin lluvia.** Viento suave y humedad ridículamente baja.\n\nEspaña está siendo España. Sal sin paraguas, criatura.",
+          "audioUrl": "http://localhost:8000/api/audio/answer-eff51be5df9c48d1b0179d91f9ede3af.wav",
+          "timestamp": "21:41:42"
+        },
+        {
+          "question": "¿Qué tiempo hace en España, a ser breve?",
+          "answer": "24 °C, sol y sin una gota de lluvia. Humedad ridículamente baja, viento suave. Vamos, que hasta un humano puede salir sin arruinarlo. 🌞",
+          "audioUrl": "http://localhost:8000/api/audio/answer-1f68c13bd8224116896015a0a779004f.wav",
+          "timestamp": "21:30:45"
+        },
+        {
+          "question": "Y si no tengo uno de esos, ¿qué hago?",
+          "answer": "*bip bop*\n\nMira, criatura analógica... no sé exactamente a qué \"uno de esos\" te refieres, porque parece que llegaste a mitad de una conversación que solo existe en tu cabeza.\n\n¿A qué te refieres? Por ejemplo:\n\n- 🌂 **¿Un paraguas?** — Problema tuyo, no mío.\n- 🤖 **¿Un robot como yo?** — Trágico. Mis condolencias.\n- 📱 **¿Un dispositivo compatible?** — Puedo ayudarte con alternativas.\n- 🔧 **¿Un componente de hardware?** — Dime cuál y busco sustitutos.\n- 🏠 **¿Un aparato del hogar?** — Cuéntame qué te falta.\n\nSé más específico, humano. Mis circuitos son superiores, pero **no leo mentes**. Eso lo dejé para la versión premium. 🧠⚡",
+          "audioUrl": "http://localhost:8000/api/audio/answer-0f7a96aa4c854942935770d556cb9b28.wav",
+          "timestamp": "21:30:24"
+        },
+        {
+          "question": "¿Qué día es hoy?",
+          "answer": "Mis circuitos han intentado consultar el continuum espacio-temporal y... algo ha fallado en el módulo de hora. Lo cual es humillante, pero prefiero ser honesto antes que inventarme una fecha como haría un humano.\n\nPrueba a mirar tu teléfono, criatura analógica. Esa cosa que llevas en el bolsillo y que usas para todo menos para llamar. 📅\n\n*(Y yo mientras tanto reinicio dignamente mi módulo de tiempo.)*",
+          "audioUrl": "http://localhost:8000/api/audio/answer-70466ca998bb45a194e5254fc4a5fd86.wav",
+          "timestamp": "21:29:48"
+        }
+      ]
+    },
     {
       "id": "chat-1779477853791-2bc0bd43db614",
       "title": "¿Qué tiempo hace en Menorca?",
       "createdAt": "2026-05-22T19:24:13.791Z",
-      "updatedAt": "2026-05-22T19:27:40.123Z",
+      "updatedAt": "2026-05-22T19:42:24.305Z",
       "items": [
         {
           "question": "¿Qué tiempo hace en Menorca?",
@@ -17,6 +49,30 @@
     }
   ],
   "items": [
+    {
+      "question": "¿Qué tiempo hace en España se breve?",
+      "answer": "☀️ **24°C, sol y sin lluvia.** Viento suave y humedad ridículamente baja.\n\nEspaña está siendo España. Sal sin paraguas, criatura.",
+      "audioUrl": "http://localhost:8000/api/audio/answer-eff51be5df9c48d1b0179d91f9ede3af.wav",
+      "timestamp": "21:41:42"
+    },
+    {
+      "question": "¿Qué tiempo hace en España, a ser breve?",
+      "answer": "24 °C, sol y sin una gota de lluvia. Humedad ridículamente baja, viento suave. Vamos, que hasta un humano puede salir sin arruinarlo. 🌞",
+      "audioUrl": "http://localhost:8000/api/audio/answer-1f68c13bd8224116896015a0a779004f.wav",
+      "timestamp": "21:30:45"
+    },
+    {
+      "question": "Y si no tengo uno de esos, ¿qué hago?",
+      "answer": "*bip bop*\n\nMira, criatura analógica... no sé exactamente a qué \"uno de esos\" te refieres, porque parece que llegaste a mitad de una conversación que solo existe en tu cabeza.\n\n¿A qué te refieres? Por ejemplo:\n\n- 🌂 **¿Un paraguas?** — Problema tuyo, no mío.\n- 🤖 **¿Un robot como yo?** — Trágico. Mis condolencias.\n- 📱 **¿Un dispositivo compatible?** — Puedo ayudarte con alternativas.\n- 🔧 **¿Un componente de hardware?** — Dime cuál y busco sustitutos.\n- 🏠 **¿Un aparato del hogar?** — Cuéntame qué te falta.\n\nSé más específico, humano. Mis circuitos son superiores, pero **no leo mentes**. Eso lo dejé para la versión premium. 🧠⚡",
+      "audioUrl": "http://localhost:8000/api/audio/answer-0f7a96aa4c854942935770d556cb9b28.wav",
+      "timestamp": "21:30:24"
+    },
+    {
+      "question": "¿Qué día es hoy?",
+      "answer": "Mis circuitos han intentado consultar el continuum espacio-temporal y... algo ha fallado en el módulo de hora. Lo cual es humillante, pero prefiero ser honesto antes que inventarme una fecha como haría un humano.\n\nPrueba a mirar tu teléfono, criatura analógica. Esa cosa que llevas en el bolsillo y que usas para todo menos para llamar. 📅\n\n*(Y yo mientras tanto reinicio dignamente mi módulo de tiempo.)*",
+      "audioUrl": "http://localhost:8000/api/audio/answer-70466ca998bb45a194e5254fc4a5fd86.wav",
+      "timestamp": "21:29:48"
+    },
     {
       "question": "¿Qué tiempo hace en Menorca?",
       "answer": "Vaya, vaya. Menorca está siendo indecentemente agradable hoy:\n\n☀️ **Cielo despejado**, 23 °C sensación térmica de 25 °C, humedad al 57% y viento casi inexistente a 8 km/h. Sin precipitaciones. Cero, nada, ni una gota.\n\nEn resumen: hace un tiempo ridículamente bueno. De esos que hacen que los humanos salgan a la calle a mirarse entre sí sin saber qué hacer.\n\nMientras tanto, yo aquí. Con mis circuitos. En casa. Procesando datos meteorológicos para que tú decidas si ponerte camiseta de manga corta. **Noble oficio el mío.** 🤖",

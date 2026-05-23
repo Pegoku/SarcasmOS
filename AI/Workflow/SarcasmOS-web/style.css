@@ -720,7 +720,7 @@ body.thinking-long .svg-mouth-group,
   z-index: 5;
 }
 
-body.thinking .thinking-phrases {
+.voice-chat-view.thinking .thinking-phrases {
   opacity: 0.8;
 }
 
@@ -741,20 +741,6 @@ body.thinking .thinking-phrases {
 .thinking-phrases span:nth-child(5) { left: 38%; top: 30%; animation-delay: 1.6s; }
 .thinking-phrases span:nth-child(6) { left: 78%; top: 48%; animation-delay: 2s; }
 .thinking-phrases span:nth-child(7) { left: 28%; top: 80%; animation-delay: 2.4s; }
-
-body.thinking .panel {
-  position: relative;
-}
-
-body.thinking .panel::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(110deg, transparent 30%, rgba(246, 196, 69, 0.08) 50%, transparent 70%);
-  transform: translateX(-65%);
-  animation: workSweep 2.2s ease-in-out infinite;
-  pointer-events: none;
-}
 
 .face-controls .controls:first-child {
   display: grid;

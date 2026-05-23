@@ -4,7 +4,7 @@ import mimetypes
 from urllib.parse import unquote, urlparse
 import uuid
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -14,6 +14,8 @@ from .bender_core import process_audio_file, process_text_message, robot_status,
 
 class TextRequest(BaseModel):
     message: str
+    context: list[dict] | None = None
+    chatId: str | None = None
 
 
 class CommandRequest(BaseModel):
@@ -33,8 +35,12 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
         "http://localhost:8000",
         "http://127.0.0.1:8000",
+        "http://localhost:8001",
+        "http://127.0.0.1:8001",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -78,6 +84,45 @@ def audio_filename_from_url(audio_url: str) -> str | None:
     if not filename.startswith("answer-"):
         return None
     return filename
+
+
+def parse_context_payload(raw_context: str | None) -> list[dict]:
+    if not raw_context:
+        return []
+    try:
+        parsed = json.loads(raw_context)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid context JSON.")
+    if not isinstance(parsed, list):
+        raise HTTPException(status_code=400, detail="Context must be a list.")
+    return [item for item in parsed if isinstance(item, dict)]
+
+
+def context_from_saved_chat(chat_id: str | None) -> list[dict]:
+    if not chat_id:
+        return []
+    path = history_path()
+    if not path.is_file():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    chats = data.get("chats") if isinstance(data, dict) else None
+    if not isinstance(chats, list):
+        return []
+    for chat in chats:
+        if isinstance(chat, dict) and chat.get("id") == chat_id and isinstance(chat.get("items"), list):
+            return [item for item in chat["items"] if isinstance(item, dict)]
+    return []
+
+
+def best_chat_context(client_context: list[dict] | None, chat_id: str | None) -> list[dict]:
+    client_items = client_context or []
+    saved_items = context_from_saved_chat(chat_id)
+    if len(saved_items) > len(client_items):
+        return saved_items
+    return client_items
 
 
 def history_items_from_payload(payload: dict) -> list[dict]:
@@ -161,7 +206,11 @@ def handle_command(command: str) -> dict:
 
 
 @app.post("/api/chat/audio")
-async def chat_audio(audio: UploadFile = File(...)) -> JSONResponse:
+async def chat_audio(
+    audio: UploadFile = File(...),
+    context: str | None = Form(default=None),
+    chatId: str | None = Form(default=None),
+) -> JSONResponse:
     try:
         suffix = Path(audio.filename or "").suffix
         if not suffix:
@@ -174,7 +223,10 @@ async def chat_audio(audio: UploadFile = File(...)) -> JSONResponse:
         contents = await audio.read()
         upload_path.write_bytes(contents)
 
-        result = process_audio_file(str(upload_path))
+        result = process_audio_file(
+            str(upload_path),
+            {"context": best_chat_context(parse_context_payload(context), chatId)},
+        )
         output_name = Path(result["audio_path"]).name
         return JSONResponse(
             content={
@@ -194,7 +246,10 @@ async def chat_text(payload: TextRequest) -> JSONResponse:
     try:
         if not payload.message.strip():
             raise HTTPException(status_code=400, detail="Message cannot be empty.")
-        result = process_text_message(payload.message)
+        result = process_text_message(
+            payload.message,
+            {"context": best_chat_context(payload.context, payload.chatId)},
+        )
         output_name = Path(result["audio_path"]).name
         return JSONResponse(
             content={

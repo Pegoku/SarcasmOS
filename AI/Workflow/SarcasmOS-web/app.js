@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:8000";
+const API_BASE = "http://localhost:8001";
 
 const uploadInput = document.getElementById("uploadInput");
 const uploadSend = document.getElementById("uploadSend");
@@ -308,6 +308,7 @@ function startThinkingLongTimer() {
   thinkLongTimer = setTimeout(() => {
     document.body.classList.add("thinking-long");
     faceView.classList.add("thinking-long");
+    voiceChatView.classList.add("thinking-long");
   }, 3800);
 }
 
@@ -318,6 +319,7 @@ function stopThinkingLongTimer() {
   }
   document.body.classList.remove("thinking-long");
   faceView.classList.remove("thinking-long");
+  voiceChatView.classList.remove("thinking-long");
 }
 
 function startThinkingLoop() {
@@ -461,6 +463,14 @@ function syncActiveChat() {
 
 function getAllHistoryItems() {
   return chatSessions.flatMap((chat) => Array.isArray(chat.items) ? chat.items : []);
+}
+
+function getActiveChatContext() {
+  return [...chatHistory].reverse().map((entry) => ({
+    question: entry.question || "",
+    answer: entry.answer || "",
+    timestamp: entry.timestamp || "",
+  }));
 }
 
 function renderAllHistoryViews() {
@@ -858,6 +868,8 @@ async function loadHistory() {
 async function sendAudioBlob(blob, filename) {
   const formData = new FormData();
   formData.append("audio", blob, filename);
+  formData.append("context", JSON.stringify(getActiveChatContext()));
+  formData.append("chatId", activeChatId);
   setLoading(true, "Sending audio...", "audio");
   showError("");
 
@@ -886,7 +898,7 @@ async function sendTextMessage(message) {
     const response = await fetch(`${API_BASE}/api/chat/text`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, context: getActiveChatContext(), chatId: activeChatId }),
     });
     const data = await response.json();
     if (!response.ok) {

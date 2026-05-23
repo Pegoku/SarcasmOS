@@ -13,6 +13,8 @@ const audioPlayer = document.getElementById("audioPlayer");
 const errorOutput = document.getElementById("errorOutput");
 const statusBtn = document.getElementById("statusBtn");
 const statusOutput = document.getElementById("statusOutput");
+const apiHealthRefresh = document.getElementById("apiHealthRefresh");
+const apiHealthList = document.getElementById("apiHealthList");
 const mainView = document.getElementById("mainView");
 const faceView = document.getElementById("faceView");
 const voiceChatView = document.getElementById("voiceChatView");
@@ -379,6 +381,129 @@ function setLoading(isLoading, label, mode = "") {
 
 function showError(message) {
   errorOutput.textContent = message || "";
+}
+
+const API_HEALTH_CHECKS = [
+  {
+    name: "Backend",
+    path: "/api/status",
+    method: "GET",
+    description: "Main backend reachability",
+  },
+  {
+    name: "Robot status",
+    path: "/api/status",
+    method: "GET",
+    description: "Bender runtime status",
+  },
+  {
+    name: "Chat history",
+    path: "/api/history",
+    method: "GET",
+    description: "Saved conversations",
+  },
+  {
+    name: "API schema",
+    path: "/openapi.json",
+    method: "GET",
+    description: "Backend route registry",
+  },
+  {
+    name: "AI services",
+    path: "/api/services/status",
+    method: "GET",
+    description: "STT, LLM, and TTS configuration",
+    expandServices: true,
+  },
+];
+
+function renderApiHealth(items, isChecking = false) {
+  if (!apiHealthList) {
+    return;
+  }
+  apiHealthList.innerHTML = "";
+  const checks = items.length ? items : API_HEALTH_CHECKS.map((item) => ({
+    ...item,
+    status: isChecking ? "checking" : "unknown",
+    detail: isChecking ? "Checking..." : "Not checked yet",
+  }));
+
+  for (const item of checks) {
+    const row = document.createElement("div");
+    row.className = `api-health-item ${item.status}`;
+
+    const text = document.createElement("div");
+    const title = document.createElement("p");
+    title.className = "api-health-title";
+    title.textContent = item.name;
+    const meta = document.createElement("p");
+    meta.className = "api-health-meta";
+    meta.textContent = `${item.method} ${item.path} - ${item.description}`;
+    const detail = document.createElement("p");
+    detail.className = "api-health-detail";
+    detail.textContent = item.detail;
+    text.append(title, meta, detail);
+
+    const badge = document.createElement("span");
+    badge.className = "api-health-badge";
+    badge.textContent = item.status === "ok" ? "OK" : item.status === "checking" ? "..." : "FAIL";
+
+    row.append(text, badge);
+    apiHealthList.append(row);
+  }
+}
+
+async function checkApiHealth() {
+  if (!apiHealthRefresh) {
+    return;
+  }
+  apiHealthRefresh.disabled = true;
+  renderApiHealth([], true);
+  const results = [];
+  for (const check of API_HEALTH_CHECKS) {
+    const started = performance.now();
+    try {
+      const response = await fetch(`${API_BASE}${check.path}`, {
+        method: check.method,
+        cache: "no-store",
+      });
+      const elapsed = Math.round(performance.now() - started);
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        throw new Error(`${response.status} ${response.statusText}${body ? ` - ${body.slice(0, 120)}` : ""}`);
+      }
+      const data = await response.json().catch(() => null);
+      if (check.expandServices && data && data.services) {
+        for (const key of ["stt", "llm", "tts"]) {
+          const service = data.services[key] || {};
+          results.push({
+            name: service.name || key.toUpperCase(),
+            path: check.path,
+            method: check.method,
+            description: service.model ? `Model: ${service.model}` : `${key.toUpperCase()} service`,
+            status: service.ok ? "ok" : "fail",
+            detail: service.ok
+              ? `${service.detail || "Configured"} - ${service.base_url || "No base URL shown"}`
+              : service.detail || data.error || "Service is not configured correctly",
+          });
+        }
+        continue;
+      }
+      results.push({
+        ...check,
+        status: "ok",
+        detail: `Responding in ${elapsed} ms`,
+      });
+    } catch (error) {
+      results.push({
+        ...check,
+        status: "fail",
+        detail: error.message || "Failed to fetch",
+      });
+    }
+  }
+  renderApiHealth(results);
+  apiHealthRefresh.disabled = false;
 }
 
 function applyVoiceChatFontScale() {
@@ -1040,6 +1165,7 @@ voiceChatTextSend.addEventListener("click", () => {
 });
 
 statusBtn.addEventListener("click", refreshStatus);
+apiHealthRefresh.addEventListener("click", checkApiHealth);
 
 clearHistory.addEventListener("click", async () => {
   const filenames = Array.from(new Set(chatHistory.map((entry) => getAudioFilename(entry.audioUrl)).filter(Boolean)));
@@ -1194,6 +1320,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setLookDirection("look-center");
   loadVoiceChatFontScale();
   loadHistory().then(() => renderAllHistoryViews());
+  checkApiHealth();
 });
 
 document.addEventListener("pointerdown", enableAudioSync, { once: true });

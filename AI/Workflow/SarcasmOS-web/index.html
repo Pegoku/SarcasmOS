@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SarcasmOS - Bender Console</title>
+    <title>SarcasmOS Console</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
@@ -11,7 +11,7 @@
       <header class="hero">
         <div class="hero-copy">
           <p class="eyebrow">SarcasmOS</p>
-          <h1>Bender Audio Console</h1>
+          <h1>SarcasmOS Console</h1>
           <p class="subtitle">Talk to Bender by voice, upload audio, or type a message.</p>
         </div>
         <div class="status-card">
@@ -93,6 +93,17 @@
         </div>
         <audio id="audioPlayer" controls></audio>
         <p id="errorOutput" class="error"></p>
+      </section>
+
+      <section class="panel api-health-panel">
+        <div class="history-header">
+          <div>
+            <h2>API Health</h2>
+            <p class="helper-text">Endpoint checks for the backend services used by this console.</p>
+          </div>
+          <button id="apiHealthRefresh" class="ghost" type="button">Check APIs</button>
+        </div>
+        <div id="apiHealthList" class="api-health-list" aria-live="polite"></div>
       </section>
 
       <section class="panel">

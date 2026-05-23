@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from .bender_core import process_audio_file, process_text_message, robot_status, run_tool_call
+from .bender_core import process_audio_file, process_text_message, robot_status, run_tool_call, service_status
 
 
 class TextRequest(BaseModel):
@@ -283,6 +283,11 @@ async def delete_audio(filename: str) -> JSONResponse:
 @app.get("/api/status")
 async def get_status() -> JSONResponse:
     return JSONResponse(content=robot_status())
+
+
+@app.get("/api/services/status")
+async def get_services_status() -> JSONResponse:
+    return JSONResponse(content=service_status())
 
 
 @app.post("/api/command")

@@ -489,6 +489,53 @@ def robot_status() -> dict:
     }
 
 
+def service_status() -> dict:
+    try:
+        config = BenderConfig.from_env()
+    except Exception as error:
+        return {
+            "ok": False,
+            "error": str(error),
+            "services": {
+                "stt": {"ok": False, "detail": "Configuration failed before STT could be checked."},
+                "llm": {"ok": False, "detail": "Configuration failed before LLM could be checked."},
+                "tts": {"ok": False, "detail": "Configuration failed before TTS could be checked."},
+            },
+        }
+
+    stt_ok = bool(config.replicate_token and config.replicate_base_url and config.stt_model)
+    llm_ok = bool(config.openrouter_token and config.openrouter_base_url and config.llm_model)
+    tts_ok = bool(config.replicate_token and config.replicate_base_url and config.tts_model and config.voice_id)
+
+    return {
+        "ok": stt_ok and llm_ok and tts_ok,
+        "services": {
+            "stt": {
+                "ok": stt_ok,
+                "name": "STT",
+                "model": config.stt_model,
+                "base_url": config.replicate_base_url,
+                "detail": "Configured" if stt_ok else "Missing Replicate/Hack Club token, base URL, or STT model.",
+            },
+            "llm": {
+                "ok": llm_ok,
+                "name": "LLM",
+                "model": config.llm_model,
+                "base_url": config.openrouter_base_url,
+                "detail": "Configured" if llm_ok else "Missing OpenRouter/Hack Club token, base URL, or LLM model.",
+            },
+            "tts": {
+                "ok": tts_ok,
+                "name": "TTS",
+                "model": config.tts_model,
+                "base_url": config.replicate_base_url,
+                "voice_id": config.voice_id,
+                "detail": "Configured" if tts_ok else "Missing Replicate/Hack Club token, base URL, TTS model, or voice ID.",
+            },
+        },
+    }
+
+
 def run_tool_call(name: str, arguments: dict) -> object:
     render_face("tool", name)
 

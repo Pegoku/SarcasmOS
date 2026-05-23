@@ -395,6 +395,100 @@ h2 {
   border-radius: 999px;
 }
 
+.api-health-list {
+  display: grid;
+  gap: 10px;
+  height: 360px;
+  max-height: 42vh;
+  overflow-y: auto;
+  padding: 10px 12px 10px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  scrollbar-color: rgba(246, 196, 69, 0.55) rgba(255, 255, 255, 0.08);
+  scrollbar-width: auto;
+  scrollbar-gutter: stable;
+}
+
+.api-health-list::-webkit-scrollbar {
+  width: 12px;
+}
+
+.api-health-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 999px;
+}
+
+.api-health-list::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+  border: 2px solid rgba(13, 18, 25, 0.84);
+  border-radius: 999px;
+}
+
+.api-health-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.api-health-item.ok {
+  border-color: rgba(95, 214, 143, 0.25);
+  background: rgba(95, 214, 143, 0.055);
+}
+
+.api-health-item.fail {
+  border-color: rgba(255, 107, 107, 0.3);
+  background: rgba(255, 107, 107, 0.07);
+}
+
+.api-health-title,
+.api-health-meta,
+.api-health-detail {
+  margin: 0;
+}
+
+.api-health-title {
+  font-weight: 800;
+}
+
+.api-health-meta,
+.api-health-detail {
+  margin-top: 4px;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.82rem;
+}
+
+.api-health-detail {
+  overflow-wrap: anywhere;
+}
+
+.api-health-badge {
+  min-width: 54px;
+  border-radius: 999px;
+  padding: 7px 10px;
+  text-align: center;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.08);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.api-health-item.ok .api-health-badge {
+  color: #dffbea;
+  background: rgba(95, 214, 143, 0.18);
+}
+
+.api-health-item.fail .api-health-badge {
+  color: #ffdede;
+  background: rgba(255, 107, 107, 0.18);
+}
+
 .history-item {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
@@ -1182,6 +1276,11 @@ body.face-open {
 
   .history-list {
     max-height: 420px;
+  }
+
+  .api-health-list {
+    height: 300px;
+    max-height: 38vh;
   }
 
   .face-view {

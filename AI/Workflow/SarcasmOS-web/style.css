@@ -30,12 +30,13 @@ html {
 body {
   min-height: 100vh;
   margin: 0;
-  padding: 38px 18px 70px;
+  padding: 34px 18px 70px;
   color: var(--text);
   font-family: "IBM Plex Sans", sans-serif;
   background:
-    radial-gradient(circle at 15% 10%, rgba(246, 196, 69, 0.12), transparent 30%),
-    radial-gradient(circle at 82% 0%, rgba(91, 154, 255, 0.12), transparent 34%),
+    radial-gradient(circle at 12% 8%, rgba(246, 196, 69, 0.16), transparent 28%),
+    radial-gradient(circle at 82% 0%, rgba(91, 154, 255, 0.16), transparent 34%),
+    radial-gradient(circle at 70% 72%, rgba(86, 174, 160, 0.08), transparent 28%),
     linear-gradient(160deg, #111923 0%, #070b10 56%, #05070a 100%);
 }
 
@@ -126,7 +127,7 @@ audio {
 }
 
 .app {
-  width: min(1120px, 100%);
+  width: min(1280px, 100%);
   margin: 0 auto;
   position: relative;
   z-index: 1;
@@ -142,12 +143,36 @@ audio {
 
 .hero {
   display: grid;
-  grid-template-columns: 1fr minmax(260px, 360px);
-  gap: 22px;
-  align-items: end;
-  padding: 28px;
-  border-radius: 28px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 390px);
+  gap: 26px;
+  align-items: stretch;
+  padding: 32px;
+  border-radius: 26px;
   margin-bottom: 18px;
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(18, 26, 36, 0.94), rgba(8, 12, 18, 0.9)),
+    var(--panel);
+}
+
+.hero::after {
+  content: "";
+  position: absolute;
+  right: -90px;
+  bottom: -120px;
+  width: 360px;
+  height: 360px;
+  border-radius: 50%;
+  border: 42px solid rgba(246, 196, 69, 0.08);
+  pointer-events: none;
+}
+
+.hero-copy {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  align-content: center;
 }
 
 .eyebrow,
@@ -169,7 +194,7 @@ h2 {
 }
 
 h1 {
-  font-size: clamp(2.2rem, 7vw, 5.2rem);
+  font-size: clamp(2.8rem, 6.6vw, 6rem);
   line-height: 0.95;
 }
 
@@ -192,10 +217,89 @@ h2 {
   padding: 16px;
 }
 
+.status-card {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  align-content: center;
+  gap: 12px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015)),
+    rgba(5, 9, 14, 0.72);
+}
+
+.status-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.status-heading .status-label {
+  margin-bottom: 0;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 18px rgba(246, 196, 69, 0.72);
+}
+
 .panel {
-  border-radius: 24px;
-  padding: 22px;
+  border-radius: 22px;
+  padding: 24px;
   margin-top: 18px;
+}
+
+.quick-actions,
+.console-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.quick-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.console-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.input-panel {
+  min-height: 190px;
+}
+
+.panel-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+
+.panel-title-row h2 {
+  margin-bottom: 0;
+}
+
+.step-pill {
+  flex: 0 0 auto;
+  border: 1px solid rgba(246, 196, 69, 0.28);
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: var(--accent);
+  background: rgba(246, 196, 69, 0.08);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.helper-text {
+  margin: 0 0 16px;
+  color: var(--muted);
 }
 
 .controls {
@@ -203,6 +307,10 @@ h2 {
   flex-wrap: wrap;
   gap: 12px;
   align-items: center;
+}
+
+.text-controls {
+  margin-top: 20px;
 }
 
 .file-input {
@@ -237,6 +345,14 @@ h2 {
   margin-bottom: 16px;
 }
 
+.grid > div {
+  min-height: 104px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .error {
   margin: 10px 0 0;
   color: var(--error);
@@ -247,17 +363,42 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  margin-bottom: 14px;
+}
+
+.history-header h2 {
+  margin-bottom: 4px;
 }
 
 .history-list {
   display: grid;
   gap: 10px;
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-color: rgba(246, 196, 69, 0.55) rgba(255, 255, 255, 0.08);
+  scrollbar-width: auto;
+}
+
+.history-list::-webkit-scrollbar {
+  width: 12px;
+}
+
+.history-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 999px;
+}
+
+.history-list::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+  border: 2px solid rgba(13, 18, 25, 0.84);
+  border-radius: 999px;
 }
 
 .history-item {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
-  padding: 12px;
+  padding: 14px;
   background: rgba(255, 255, 255, 0.035);
   display: grid;
   gap: 8px;
@@ -304,14 +445,18 @@ h2 {
 }
 
 .face-callout {
+  min-height: 96px;
   padding: 18px;
   border-radius: 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  background: linear-gradient(135deg, rgba(246, 196, 69, 0.2), rgba(255, 138, 36, 0.1));
+  background:
+    linear-gradient(135deg, rgba(246, 196, 69, 0.2), rgba(255, 138, 36, 0.1)),
+    rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(246, 196, 69, 0.25);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .face-callout .subtitle {
@@ -325,12 +470,13 @@ h2 {
   display: grid;
   grid-template-rows: auto auto;
   justify-items: center;
+  align-content: start;
   gap: 22px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: auto;
   touch-action: pan-y;
-  padding: 28px 18px 40px;
+  padding: 38px 56px 36px 24px;
   background:
     radial-gradient(circle at 51% 16%, rgba(255, 255, 255, 0.24), transparent 15%),
     radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.16), transparent 23%),
@@ -343,13 +489,13 @@ h2 {
   z-index: 20;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 18px;
+  gap: 52px;
   height: 100vh;
   overflow: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: none;
   touch-action: none;
-  padding: 28px 18px;
+  padding: 34px 18px 28px;
   justify-items: center;
   background:
     radial-gradient(circle at 51% 16%, rgba(255, 255, 255, 0.24), transparent 15%),
@@ -364,6 +510,7 @@ h2 {
   position: relative;
   z-index: 1;
   animation: rise 0.45s ease both;
+  margin-bottom: 0;
 }
 
 .voice-chat-body {
@@ -607,10 +754,11 @@ h2 {
 
 .face-head {
   align-self: start;
-  width: min(520px, 86vw);
+  width: min(640px, 86vw);
   position: relative;
   z-index: 1;
   animation: rise 0.45s ease both;
+  margin-bottom: -92px;
 }
 
 .face-svg {
@@ -648,18 +796,24 @@ h2 {
 }
 
 .face-controls {
-  width: min(780px, 94vw);
+  width: min(1200px, calc(100vw - 170px));
   position: relative;
   z-index: 1;
   display: grid;
-  gap: 16px;
-  padding: 20px;
+  grid-template-columns: minmax(440px, 0.95fr) minmax(500px, 1.05fr);
+  grid-template-areas:
+    "audio result"
+    "text history";
+  align-items: start;
+  gap: 18px;
+  padding: 22px;
   border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(13, 18, 25, 0.74);
   backdrop-filter: blur(18px);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
   animation: fadeIn 0.45s 0.08s ease both;
+  margin-top: 0;
 }
 
 body.thinking .face-head,
@@ -743,20 +897,53 @@ body.thinking-long .svg-mouth-group,
 .thinking-phrases span:nth-child(7) { left: 28%; top: 80%; animation-delay: 2.4s; }
 
 .face-controls .controls:first-child {
+  grid-area: audio;
   display: grid;
-  grid-template-columns: 1.25fr auto auto auto;
+  grid-template-columns: minmax(180px, 1fr) 86px 86px 70px;
+  align-self: stretch;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.face-controls .controls:first-child button,
+.face-controls .controls:first-child .file-input {
+  width: 100%;
+  min-width: 0;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.face-controls .controls:first-child button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.face-controls > .meter {
+  grid-area: audio;
+  align-self: end;
+  margin: 72px 16px 0;
 }
 
 .face-controls .meter + .controls {
+  grid-area: text;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .face-result {
+  grid-area: result;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
-  min-height: 150px;
+  min-height: 170px;
 }
 
 .face-result audio {
@@ -764,10 +951,17 @@ body.thinking-long .svg-mouth-group,
 }
 
 .face-history {
+  grid-area: history;
   display: grid;
   gap: 12px;
-  max-height: none;
-  overflow: visible;
+  max-height: 280px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.face-history .history-list {
+  max-height: 180px;
+  overflow-y: auto;
 }
 
 body.face-open {
@@ -777,8 +971,24 @@ body.face-open {
 #closeFaceView {
   position: fixed;
   top: 18px;
-  right: 18px;
+  right: 42px;
   z-index: 2;
+}
+
+@media (max-width: 1180px) {
+  .face-controls {
+    width: min(860px, calc(100vw - 96px));
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "audio"
+      "text"
+      "result"
+      "history";
+  }
+
+  .face-controls > .meter {
+    margin-top: 72px;
+  }
 }
 
 .tooltip {
@@ -954,13 +1164,57 @@ body.face-open {
     padding: 22px;
   }
 
+  .quick-actions,
+  .console-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .face-callout {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .history-header,
+  .panel-title-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .history-list {
+    max-height: 420px;
+  }
+
   .face-view {
     grid-template-rows: auto auto;
     padding-top: 64px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .face-head {
+    width: min(560px, 92vw);
+    margin-bottom: -76px;
+  }
+
+  .face-controls {
+    width: min(100%, calc(100vw - 28px));
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "audio"
+      "text"
+      "result"
+      "history";
+    padding: 16px;
+  }
+
+  .face-controls > .meter {
+    grid-area: audio;
+    margin: 84px 16px 0;
   }
 
   .voice-chat-view {
     grid-template-rows: auto minmax(0, 1fr);
+    gap: 22px;
     padding-top: 64px;
     padding-bottom: 14px;
   }
@@ -992,6 +1246,14 @@ body.face-open {
   .face-controls .meter + .controls,
   .face-result {
     grid-template-columns: 1fr;
+  }
+
+  .face-result audio {
+    grid-column: auto;
+  }
+
+  .face-history {
+    max-height: 360px;
   }
 
   .controls {

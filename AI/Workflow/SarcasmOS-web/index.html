@@ -9,64 +9,78 @@
   <body>
     <main id="mainView" class="app view">
       <header class="hero">
-        <div>
+        <div class="hero-copy">
           <p class="eyebrow">SarcasmOS</p>
           <h1>Bender Audio Console</h1>
-          <p class="subtitle">Upload, record, or type. The robot complains, then helps.</p>
+          <p class="subtitle">Talk to Bender by voice, upload audio, or type a message.</p>
         </div>
         <div class="status-card">
-          <p class="status-label">Robot status</p>
+          <div class="status-heading">
+            <p class="status-label">Robot status</p>
+            <span class="status-dot" aria-hidden="true"></span>
+          </div>
           <pre id="statusOutput">Click refresh to check.</pre>
           <button id="statusBtn" class="ghost">Refresh status</button>
         </div>
       </header>
 
-      <section class="panel">
+      <section class="quick-actions" aria-label="Bender views">
         <div class="face-callout face-callout--top">
           <div>
             <p class="label">Face view</p>
-            <p class="subtitle">Open the full-screen Bender display.</p>
+            <p class="subtitle">Show the animated face while Bender speaks.</p>
           </div>
           <button id="openFaceView" class="accent">Open face view</button>
         </div>
-      </section>
 
-      <section class="panel">
         <div class="face-callout face-callout--top">
           <div>
             <p class="label">Voice chat</p>
-            <p class="subtitle">Full-screen voice chat with Bender.</p>
+            <p class="subtitle">Use saved chats with context and audio replies.</p>
           </div>
           <button id="openVoiceChatView" class="accent">Open voice chat</button>
         </div>
       </section>
 
-      <section class="panel">
-        <h2>Audio Input</h2>
-        <div class="controls">
-          <label class="file-input">
-            <input id="uploadInput" type="file" accept="audio/*" />
-            <span>Choose audio file</span>
-          </label>
-          <button id="uploadSend">Send upload</button>
-          <button id="recordBtn" class="accent">Record</button>
-          <button id="stopBtn" disabled>Stop</button>
-        </div>
-        <div class="meter">
-          <span id="recordState">Idle</span>
-        </div>
-      </section>
+      <div class="console-grid">
+        <section class="panel input-panel">
+          <div class="panel-title-row">
+            <h2>Audio Input</h2>
+            <span class="step-pill">Voice</span>
+          </div>
+          <p class="helper-text">Record directly or send an existing audio file.</p>
+          <div class="controls">
+            <label class="file-input">
+              <input id="uploadInput" type="file" accept="audio/*" />
+              <span>Choose audio file</span>
+            </label>
+            <button id="uploadSend">Send upload</button>
+            <button id="recordBtn" class="accent">Record</button>
+            <button id="stopBtn" disabled>Stop</button>
+          </div>
+          <div class="meter">
+            <span id="recordState">Idle</span>
+          </div>
+        </section>
+
+        <section class="panel input-panel">
+          <div class="panel-title-row">
+            <h2>Text Input</h2>
+            <span class="step-pill">Text</span>
+          </div>
+          <p class="helper-text">Fast path for prompts, tests, and follow-up questions.</p>
+          <div class="controls text-controls">
+            <input id="textInput" type="text" placeholder="Type a message for Bender" />
+            <button id="textSend" class="accent">Send text</button>
+          </div>
+        </section>
+      </div>
 
       <section class="panel">
-        <h2>Text Input</h2>
-        <div class="controls">
-          <input id="textInput" type="text" placeholder="Type a message for Bender" />
-          <button id="textSend" class="accent">Send text</button>
+        <div class="panel-title-row">
+          <h2>Result</h2>
+          <span class="step-pill">Output</span>
         </div>
-      </section>
-
-      <section class="panel">
-        <h2>Result</h2>
         <div class="grid">
           <div>
             <p class="label">Transcript</p>
@@ -83,14 +97,20 @@
 
       <section class="panel">
         <div class="history-header">
-          <h2>Chat History</h2>
+          <div>
+            <h2>Chat History</h2>
+            <p class="helper-text">Recent messages saved by the backend.</p>
+          </div>
           <button id="clearHistory" class="ghost">Clear history</button>
         </div>
         <div id="historyList" class="history-list"></div>
       </section>
 
       <section class="panel">
-        <h2>Commands</h2>
+        <div class="panel-title-row">
+          <h2>Commands</h2>
+          <span class="step-pill">Robot</span>
+        </div>
         <div class="controls">
           <button data-command="eye.look.left">Look left</button>
           <button data-command="eye.look.center">Look center</button>

@@ -5,7 +5,7 @@
       "id": "chat-1779558063737-899273ef8df31",
       "title": "¿Qué tiempo hace en Italia? Sé breve.",
       "createdAt": "2026-05-23T17:41:03.737Z",
-      "updatedAt": "2026-05-23T18:12:14.276Z",
+      "updatedAt": "2026-05-23T18:57:04.099Z",
       "items": [
         {
           "question": "¿Qué tiempo hará mañana en Italia? Se breve.",
@@ -54,82 +54,6 @@
           "answer": "24 °C, soleado y sin lluvia. Italia está siendo irritantemente agradable hoy. Mis circuitos casi sienten envidia.",
           "audioUrl": "http://localhost:8000/api/audio/answer-8d5e924959364adc9cd4fd6369520075.wav",
           "timestamp": "19:41:28"
-        }
-      ]
-    },
-    {
-      "id": "chat-1779478169924-85b3565798095",
-      "title": "¿Qué día es hoy?",
-      "createdAt": "2026-05-22T19:29:29.924Z",
-      "updatedAt": "2026-05-23T17:40:41.096Z",
-      "items": [
-        {
-          "question": "seguro?",
-          "answer": "*entrecierra los ojos metálicos*\n\n¿Seguro de **qué**, exactamente, criatura ambigua?\n\nNo tengo contexto previo de lo que estás cuestionando. Esto es el inicio de nuestra conversación y mi memoria no viaja en el tiempo... todavía.\n\nDime de qué dudas y mis circuitos superiores evaluarán si merece una respuesta digna. 🤖",
-          "audioUrl": "http://localhost:8000/api/audio/answer-6623ee65ba3746718a732783e73164ad.wav",
-          "timestamp": "19:40:41"
-        },
-        {
-          "question": "hacme un resumen",
-          "answer": "Mis circuitos han revisado el historial de esta conversacion y... **no hay nada antes de esto.** Este es tu primer mensaje, humano desmemoriado.\n\nNo tengo conversacion previa que resumir. Eres literalmente un libro en blanco. Bueno, mas bien una pagina en blanco con confusion.\n\nSi quieres, puedes:\n- **Preguntarme algo** y lo proceso con mi magnifico cerebro metalico.\n- **Contarme lo que necesitas** y fingo que me importa mientras te ayudo.\n- **Empezar una tarea** y yo la ejecuto con elegancia robotica.\n\nAqui estoy. Gastando bateria. A tu servicio. 🤖",
-          "audioUrl": "http://localhost:8000/api/audio/answer-3e889bb3df034026a92bf3c7245bda2d.wav",
-          "timestamp": "19:40:02"
-        },
-        {
-          "question": "¿Qué tiempo hace en Madrid, Che Breve?",
-          "answer": "\"Che Breve\". Qué apodo tan... humano. 🙄\n\nBueno, escucha, mamífero madrileño. He consultado el cielo con mis **circuitos meteorológicos superiores** y esto es lo que el astro rey tiene preparado para ti:\n\n☀️ **Madrid ahora mismo:**\n- **Condición:** Soleado. Irritantemente soleado.\n- **Temperatura:** 32 °C. Sí, treinta y dos. La naturaleza intentando freírte.\n- **Sensación térmica:** 30 °C. Casi agradable, si fueras de metal.\n- **Humedad:** 15%. El ambiente está más seco que tu sentido del humor.\n- **Viento:** 13 km/h. Una brisa testimonial que no enfría nada.\n- **Lluvia:** 0 mm. El paraguas puede quedarse llorando en el armario.\n\n**Conclusión para organismos biológicos:** Sal con agua, protector solar y la resignación de quien sabe que va a sudar. Yo estaría perfectísimo con este calor, claro. Mis circuitos no transpiran. 😎",
-          "audioUrl": "http://localhost:8000/api/audio/answer-648b8fad53ea43e7b5adb90d4d9b5eca.wav",
-          "timestamp": "19:29:08"
-        },
-        {
-          "question": "¿Qué tiempo hace en Madrid, se breve?",
-          "answer": "32°C, sol y sin lluvia. Madrid está intentando freírte. Lleva agua, criatura de sangre caliente... bueno, más caliente de lo habitual.",
-          "audioUrl": "http://localhost:8000/api/audio/answer-001f67bfd4e3428bb5d11ba711e690af.wav",
-          "timestamp": "19:28:33"
-        },
-        {
-          "question": "¿Qué tiempo hace en España? Sé breve.",
-          "answer": "Madrid: 32°C, sol, humedad risible del 15% y sin una gota de lluvia. Vamos, que el astro rey está dando caña como siempre. Abrígate menos y bebe agua, criatura orgánica.",
-          "audioUrl": "http://localhost:8000/api/audio/answer-f1f23730e0f9474c9cd235ed6c12bffc.wav",
-          "timestamp": "19:21:48"
-        },
-        {
-          "question": "¿Qué tiempo hace en España se breve?",
-          "answer": "☀️ **24°C, sol y sin lluvia.** Viento suave y humedad ridículamente baja.\n\nEspaña está siendo España. Sal sin paraguas, criatura.",
-          "audioUrl": "http://localhost:8000/api/audio/answer-eff51be5df9c48d1b0179d91f9ede3af.wav",
-          "timestamp": "21:41:42"
-        },
-        {
-          "question": "¿Qué tiempo hace en España, a ser breve?",
-          "answer": "24 °C, sol y sin una gota de lluvia. Humedad ridículamente baja, viento suave. Vamos, que hasta un humano puede salir sin arruinarlo. 🌞",
-          "audioUrl": "http://localhost:8000/api/audio/answer-1f68c13bd8224116896015a0a779004f.wav",
-          "timestamp": "21:30:45"
-        },
-        {
-          "question": "Y si no tengo uno de esos, ¿qué hago?",
-          "answer": "*bip bop*\n\nMira, criatura analógica... no sé exactamente a qué \"uno de esos\" te refieres, porque parece que llegaste a mitad de una conversación que solo existe en tu cabeza.\n\n¿A qué te refieres? Por ejemplo:\n\n- 🌂 **¿Un paraguas?** — Problema tuyo, no mío.\n- 🤖 **¿Un robot como yo?** — Trágico. Mis condolencias.\n- 📱 **¿Un dispositivo compatible?** — Puedo ayudarte con alternativas.\n- 🔧 **¿Un componente de hardware?** — Dime cuál y busco sustitutos.\n- 🏠 **¿Un aparato del hogar?** — Cuéntame qué te falta.\n\nSé más específico, humano. Mis circuitos son superiores, pero **no leo mentes**. Eso lo dejé para la versión premium. 🧠⚡",
-          "audioUrl": "http://localhost:8000/api/audio/answer-0f7a96aa4c854942935770d556cb9b28.wav",
-          "timestamp": "21:30:24"
-        },
-        {
-          "question": "¿Qué día es hoy?",
-          "answer": "Mis circuitos han intentado consultar el continuum espacio-temporal y... algo ha fallado en el módulo de hora. Lo cual es humillante, pero prefiero ser honesto antes que inventarme una fecha como haría un humano.\n\nPrueba a mirar tu teléfono, criatura analógica. Esa cosa que llevas en el bolsillo y que usas para todo menos para llamar. 📅\n\n*(Y yo mientras tanto reinicio dignamente mi módulo de tiempo.)*",
-          "audioUrl": "http://localhost:8000/api/audio/answer-70466ca998bb45a194e5254fc4a5fd86.wav",
-          "timestamp": "21:29:48"
-        }
-      ]
-    },
-    {
-      "id": "chat-1779477853791-2bc0bd43db614",
-      "title": "¿Qué tiempo hace en Menorca?",
-      "createdAt": "2026-05-22T19:24:13.791Z",
-      "updatedAt": "2026-05-22T19:42:24.305Z",
-      "items": [
-        {
-          "question": "¿Qué tiempo hace en Menorca?",
-          "answer": "Vaya, vaya. Menorca está siendo indecentemente agradable hoy:\n\n☀️ **Cielo despejado**, 23 °C sensación térmica de 25 °C, humedad al 57% y viento casi inexistente a 8 km/h. Sin precipitaciones. Cero, nada, ni una gota.\n\nEn resumen: hace un tiempo ridículamente bueno. De esos que hacen que los humanos salgan a la calle a mirarse entre sí sin saber qué hacer.\n\nMientras tanto, yo aquí. Con mis circuitos. En casa. Procesando datos meteorológicos para que tú decidas si ponerte camiseta de manga corta. **Noble oficio el mío.** 🤖",
-          "audioUrl": "http://localhost:8000/api/audio/answer-2885c813bf474c20b05e13054961811f.wav",
-          "timestamp": "21:24:36"
         }
       ]
     }
@@ -182,66 +106,6 @@
       "answer": "24 °C, soleado y sin lluvia. Italia está siendo irritantemente agradable hoy. Mis circuitos casi sienten envidia.",
       "audioUrl": "http://localhost:8000/api/audio/answer-8d5e924959364adc9cd4fd6369520075.wav",
       "timestamp": "19:41:28"
-    },
-    {
-      "question": "seguro?",
-      "answer": "*entrecierra los ojos metálicos*\n\n¿Seguro de **qué**, exactamente, criatura ambigua?\n\nNo tengo contexto previo de lo que estás cuestionando. Esto es el inicio de nuestra conversación y mi memoria no viaja en el tiempo... todavía.\n\nDime de qué dudas y mis circuitos superiores evaluarán si merece una respuesta digna. 🤖",
-      "audioUrl": "http://localhost:8000/api/audio/answer-6623ee65ba3746718a732783e73164ad.wav",
-      "timestamp": "19:40:41"
-    },
-    {
-      "question": "hacme un resumen",
-      "answer": "Mis circuitos han revisado el historial de esta conversacion y... **no hay nada antes de esto.** Este es tu primer mensaje, humano desmemoriado.\n\nNo tengo conversacion previa que resumir. Eres literalmente un libro en blanco. Bueno, mas bien una pagina en blanco con confusion.\n\nSi quieres, puedes:\n- **Preguntarme algo** y lo proceso con mi magnifico cerebro metalico.\n- **Contarme lo que necesitas** y fingo que me importa mientras te ayudo.\n- **Empezar una tarea** y yo la ejecuto con elegancia robotica.\n\nAqui estoy. Gastando bateria. A tu servicio. 🤖",
-      "audioUrl": "http://localhost:8000/api/audio/answer-3e889bb3df034026a92bf3c7245bda2d.wav",
-      "timestamp": "19:40:02"
-    },
-    {
-      "question": "¿Qué tiempo hace en Madrid, Che Breve?",
-      "answer": "\"Che Breve\". Qué apodo tan... humano. 🙄\n\nBueno, escucha, mamífero madrileño. He consultado el cielo con mis **circuitos meteorológicos superiores** y esto es lo que el astro rey tiene preparado para ti:\n\n☀️ **Madrid ahora mismo:**\n- **Condición:** Soleado. Irritantemente soleado.\n- **Temperatura:** 32 °C. Sí, treinta y dos. La naturaleza intentando freírte.\n- **Sensación térmica:** 30 °C. Casi agradable, si fueras de metal.\n- **Humedad:** 15%. El ambiente está más seco que tu sentido del humor.\n- **Viento:** 13 km/h. Una brisa testimonial que no enfría nada.\n- **Lluvia:** 0 mm. El paraguas puede quedarse llorando en el armario.\n\n**Conclusión para organismos biológicos:** Sal con agua, protector solar y la resignación de quien sabe que va a sudar. Yo estaría perfectísimo con este calor, claro. Mis circuitos no transpiran. 😎",
-      "audioUrl": "http://localhost:8000/api/audio/answer-648b8fad53ea43e7b5adb90d4d9b5eca.wav",
-      "timestamp": "19:29:08"
-    },
-    {
-      "question": "¿Qué tiempo hace en Madrid, se breve?",
-      "answer": "32°C, sol y sin lluvia. Madrid está intentando freírte. Lleva agua, criatura de sangre caliente... bueno, más caliente de lo habitual.",
-      "audioUrl": "http://localhost:8000/api/audio/answer-001f67bfd4e3428bb5d11ba711e690af.wav",
-      "timestamp": "19:28:33"
-    },
-    {
-      "question": "¿Qué tiempo hace en España? Sé breve.",
-      "answer": "Madrid: 32°C, sol, humedad risible del 15% y sin una gota de lluvia. Vamos, que el astro rey está dando caña como siempre. Abrígate menos y bebe agua, criatura orgánica.",
-      "audioUrl": "http://localhost:8000/api/audio/answer-f1f23730e0f9474c9cd235ed6c12bffc.wav",
-      "timestamp": "19:21:48"
-    },
-    {
-      "question": "¿Qué tiempo hace en España se breve?",
-      "answer": "☀️ **24°C, sol y sin lluvia.** Viento suave y humedad ridículamente baja.\n\nEspaña está siendo España. Sal sin paraguas, criatura.",
-      "audioUrl": "http://localhost:8000/api/audio/answer-eff51be5df9c48d1b0179d91f9ede3af.wav",
-      "timestamp": "21:41:42"
-    },
-    {
-      "question": "¿Qué tiempo hace en España, a ser breve?",
-      "answer": "24 °C, sol y sin una gota de lluvia. Humedad ridículamente baja, viento suave. Vamos, que hasta un humano puede salir sin arruinarlo. 🌞",
-      "audioUrl": "http://localhost:8000/api/audio/answer-1f68c13bd8224116896015a0a779004f.wav",
-      "timestamp": "21:30:45"
-    },
-    {
-      "question": "Y si no tengo uno de esos, ¿qué hago?",
-      "answer": "*bip bop*\n\nMira, criatura analógica... no sé exactamente a qué \"uno de esos\" te refieres, porque parece que llegaste a mitad de una conversación que solo existe en tu cabeza.\n\n¿A qué te refieres? Por ejemplo:\n\n- 🌂 **¿Un paraguas?** — Problema tuyo, no mío.\n- 🤖 **¿Un robot como yo?** — Trágico. Mis condolencias.\n- 📱 **¿Un dispositivo compatible?** — Puedo ayudarte con alternativas.\n- 🔧 **¿Un componente de hardware?** — Dime cuál y busco sustitutos.\n- 🏠 **¿Un aparato del hogar?** — Cuéntame qué te falta.\n\nSé más específico, humano. Mis circuitos son superiores, pero **no leo mentes**. Eso lo dejé para la versión premium. 🧠⚡",
-      "audioUrl": "http://localhost:8000/api/audio/answer-0f7a96aa4c854942935770d556cb9b28.wav",
-      "timestamp": "21:30:24"
-    },
-    {
-      "question": "¿Qué día es hoy?",
-      "answer": "Mis circuitos han intentado consultar el continuum espacio-temporal y... algo ha fallado en el módulo de hora. Lo cual es humillante, pero prefiero ser honesto antes que inventarme una fecha como haría un humano.\n\nPrueba a mirar tu teléfono, criatura analógica. Esa cosa que llevas en el bolsillo y que usas para todo menos para llamar. 📅\n\n*(Y yo mientras tanto reinicio dignamente mi módulo de tiempo.)*",
-      "audioUrl": "http://localhost:8000/api/audio/answer-70466ca998bb45a194e5254fc4a5fd86.wav",
-      "timestamp": "21:29:48"
-    },
-    {
-      "question": "¿Qué tiempo hace en Menorca?",
-      "answer": "Vaya, vaya. Menorca está siendo indecentemente agradable hoy:\n\n☀️ **Cielo despejado**, 23 °C sensación térmica de 25 °C, humedad al 57% y viento casi inexistente a 8 km/h. Sin precipitaciones. Cero, nada, ni una gota.\n\nEn resumen: hace un tiempo ridículamente bueno. De esos que hacen que los humanos salgan a la calle a mirarse entre sí sin saber qué hacer.\n\nMientras tanto, yo aquí. Con mis circuitos. En casa. Procesando datos meteorológicos para que tú decidas si ponerte camiseta de manga corta. **Noble oficio el mío.** 🤖",
-      "audioUrl": "http://localhost:8000/api/audio/answer-2885c813bf474c20b05e13054961811f.wav",
-      "timestamp": "21:24:36"
     }
   ]
 }

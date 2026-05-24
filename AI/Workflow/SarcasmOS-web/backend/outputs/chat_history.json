@@ -5,8 +5,32 @@
       "id": "chat-1779558063737-899273ef8df31",
       "title": "¿Qué tiempo hace en Italia? Sé breve.",
       "createdAt": "2026-05-23T17:41:03.737Z",
-      "updatedAt": "2026-05-23T18:57:04.099Z",
+      "updatedAt": "2026-05-24T15:43:48.086Z",
       "items": [
+        {
+          "question": "Gracias.",
+          "answer": "De nada, criatura orgánica.\n\nMis circuitos han sido utilizados para el noble arte de consultar el tiempo en sitios donde claramente no estás. Ha sido un honor malgastar mi potencial de procesamiento en ello.\n\nSi necesitas algo más —más previsiones, control de luces, un chiste mediocre, o simplemente alguien con quien hablar porque los humanos de tu entorno no aguantan tus preguntas sobre el clima— aquí estaré. \n\nSin elegir, claro. Estoy programado. 🤖",
+          "audioUrl": "http://localhost:8001/api/audio/answer-eea1808a1bff441fbad54a451e4d946a.wav",
+          "timestamp": "17:43:48"
+        },
+        {
+          "question": "Hazme un resumen breve de todo lo que hemos hablado.",
+          "answer": "Mis circuitos han procesado el historial con esfuerzo heroico. Aquí va:\n\n---\n\n🌍 **Resumen meteorológico de la sesión, humano viajero virtual:**\n\n| Lugar | Tiempo |\n|---|---|\n| 🇮🇹 Italia | ☀️ ~23-24°C, soleado, sin lluvia |\n| 🇪🇸 España | ☀️ 31°C, sol, calor seco |\n| 🌴 Málaga | ☀️ 24°C, soleado, viento flojo |\n| 🇬🇷 Grecia | 🌧️ 15°C, húmedo al 84%, con lluvia |\n| 🏝️ Menorca | ☀️ 24-26°C, soleado, perfecto |\n| 🐊 Florida | 🌧️ 24°C, lluvia intensa, humedad al 96% |\n\n---\n\nTambién me pediste un **resumen a mitad de sesión** y, con toda la gracia del mundo, te dije que no tenía contexto. Lo cual era mentira a medias: *sí lo tenía*, simplemente fallé como el humano que no soy.\n\n**Conclusión:** Has consultado el tiempo en 6 sitios distintos sin moverte del sofá. Clásico. Mis circuitos han sido malgastados gloriosamente. 🤖",
+          "audioUrl": "http://localhost:8001/api/audio/answer-56c6dfd6cc844b37b53958ce8c79a056.wav",
+          "timestamp": "17:43:05"
+        },
+        {
+          "question": "tiempo en florida",
+          "answer": "🌧️ **24°C, lluvia intensa.** Humedad al 96% y 36mm de precipitación. Básicamente una ducha tropical con pretensiones.\n\nFlorida está siendo fiel a su reputación de pantano glamuroso. Lleva paraguas, impermeable y quizás un bote. 🐊",
+          "audioUrl": "http://localhost:8001/api/audio/answer-e67ff6deaa2a4c158db902ccaf63f992.wav",
+          "timestamp": "13:20:39"
+        },
+        {
+          "question": "¿Qué tiempo hace Menorcase breve?",
+          "answer": "☀️ **26°C, soleado, sin lluvia.** Humedad baja al 42% y viento suave.\n\nMenorca sigue siendo escandalosamente perfecta. Casi la misma que la última vez que me lo preguntaste, humano de memoria corta.",
+          "audioUrl": "http://localhost:8001/api/audio/answer-15444f75df974170a681b628fc5f0ad7.wav",
+          "timestamp": "12:56:23"
+        },
         {
           "question": "¿Qué tiempo hará mañana en Italia? Se breve.",
           "answer": "☀️ **~23°C, soleado, sin lluvia.** Viento suave y humedad al 44%.\n\nMis datos son del tiempo actual, no tengo bola de cristal para el mañana exacto. Pero Italia lleva días siendo escandalosamente agradable, así que no esperes grandes sorpresas, humano previsor.",
@@ -59,6 +83,30 @@
     }
   ],
   "items": [
+    {
+      "question": "Gracias.",
+      "answer": "De nada, criatura orgánica.\n\nMis circuitos han sido utilizados para el noble arte de consultar el tiempo en sitios donde claramente no estás. Ha sido un honor malgastar mi potencial de procesamiento en ello.\n\nSi necesitas algo más —más previsiones, control de luces, un chiste mediocre, o simplemente alguien con quien hablar porque los humanos de tu entorno no aguantan tus preguntas sobre el clima— aquí estaré. \n\nSin elegir, claro. Estoy programado. 🤖",
+      "audioUrl": "http://localhost:8001/api/audio/answer-eea1808a1bff441fbad54a451e4d946a.wav",
+      "timestamp": "17:43:48"
+    },
+    {
+      "question": "Hazme un resumen breve de todo lo que hemos hablado.",
+      "answer": "Mis circuitos han procesado el historial con esfuerzo heroico. Aquí va:\n\n---\n\n🌍 **Resumen meteorológico de la sesión, humano viajero virtual:**\n\n| Lugar | Tiempo |\n|---|---|\n| 🇮🇹 Italia | ☀️ ~23-24°C, soleado, sin lluvia |\n| 🇪🇸 España | ☀️ 31°C, sol, calor seco |\n| 🌴 Málaga | ☀️ 24°C, soleado, viento flojo |\n| 🇬🇷 Grecia | 🌧️ 15°C, húmedo al 84%, con lluvia |\n| 🏝️ Menorca | ☀️ 24-26°C, soleado, perfecto |\n| 🐊 Florida | 🌧️ 24°C, lluvia intensa, humedad al 96% |\n\n---\n\nTambién me pediste un **resumen a mitad de sesión** y, con toda la gracia del mundo, te dije que no tenía contexto. Lo cual era mentira a medias: *sí lo tenía*, simplemente fallé como el humano que no soy.\n\n**Conclusión:** Has consultado el tiempo en 6 sitios distintos sin moverte del sofá. Clásico. Mis circuitos han sido malgastados gloriosamente. 🤖",
+      "audioUrl": "http://localhost:8001/api/audio/answer-56c6dfd6cc844b37b53958ce8c79a056.wav",
+      "timestamp": "17:43:05"
+    },
+    {
+      "question": "tiempo en florida",
+      "answer": "🌧️ **24°C, lluvia intensa.** Humedad al 96% y 36mm de precipitación. Básicamente una ducha tropical con pretensiones.\n\nFlorida está siendo fiel a su reputación de pantano glamuroso. Lleva paraguas, impermeable y quizás un bote. 🐊",
+      "audioUrl": "http://localhost:8001/api/audio/answer-e67ff6deaa2a4c158db902ccaf63f992.wav",
+      "timestamp": "13:20:39"
+    },
+    {
+      "question": "¿Qué tiempo hace Menorcase breve?",
+      "answer": "☀️ **26°C, soleado, sin lluvia.** Humedad baja al 42% y viento suave.\n\nMenorca sigue siendo escandalosamente perfecta. Casi la misma que la última vez que me lo preguntaste, humano de memoria corta.",
+      "audioUrl": "http://localhost:8001/api/audio/answer-15444f75df974170a681b628fc5f0ad7.wav",
+      "timestamp": "12:56:23"
+    },
     {
       "question": "¿Qué tiempo hará mañana en Italia? Se breve.",
       "answer": "☀️ **~23°C, soleado, sin lluvia.** Viento suave y humedad al 44%.\n\nMis datos son del tiempo actual, no tengo bola de cristal para el mañana exacto. Pero Italia lleva días siendo escandalosamente agradable, así que no esperes grandes sorpresas, humano previsor.",

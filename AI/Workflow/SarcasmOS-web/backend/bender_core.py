@@ -197,7 +197,8 @@ class BenderConfig:
         env_candidates = [
             base_dir / ".env",
             base_dir.parent / ".env",
-            base_dir.parent / "AI" / "Workflow" / ".env",
+            base_dir.parent.parent / ".env",
+            base_dir.parents[3] / ".env",
         ]
         for env_path in env_candidates:
             load_dotenv(env_path)

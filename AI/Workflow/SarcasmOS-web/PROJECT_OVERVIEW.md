@@ -4,23 +4,23 @@ This document explains how the SarcasmOS web app works end-to-end: UI views, ani
 
 ## High-level Architecture
 
-- Frontend: static HTML/CSS/JS served from `AI/Workflow/SarcasmOS-web`.
+- Frontend: static HTML/CSS/JS in this folder.
 - Backend: FastAPI server in `backend` exposing REST endpoints.
 - Storage: localStorage in the browser + JSON file persistence on the server.
 - Audio: uploads are stored on the server and generated TTS audio is served back to the client.
 
 ## Running the Project
 
-- Entry point: `start.bat` in the repo root.
-- It creates/uses `.venv`, installs backend requirements, and starts:
-  - Backend: `http://localhost:8000`
+- Entry point: `start-all.bat` or `start-all.sh` in this folder.
+- It creates/uses the repo `.venv`, installs backend requirements, and starts:
+  - Backend: `http://localhost:8001`
   - Frontend: `http://localhost:5173`
 
 ## Environment and Secrets
 
 Backend reads environment variables from:
 - `backend/.env`
-- repo root `.env`
+- `.env` in this folder
 - `AI/Workflow/.env`
 
 Required:
@@ -83,9 +83,9 @@ Audio conversion:
 ## Frontend: Views
 
 Files:
-- `AI/Workflow/SarcasmOS-web/index.html`
-- `AI/Workflow/SarcasmOS-web/style.css`
-- `AI/Workflow/SarcasmOS-web/app.js`
+- `index.html`
+- `style.css`
+- `app.js`
 
 Views:
 1. Main console view
@@ -157,8 +157,8 @@ Mouth movement:
   - `bender_core.py`: pipeline and tools
   - `uploads/`: incoming audio
   - `outputs/`: generated audio + history JSON
-- `AI/Workflow/SarcasmOS-web/`
-  - `index.html`, `style.css`, `app.js`
+- `index.html`, `style.css`, `app.js`
+- Start scripts: `start-web.*`, `start-backend.*`, `start-all.*`
 
 ## Known Pitfalls
 
@@ -169,7 +169,7 @@ Mouth movement:
 ## How to Reset / Start Fresh
 
 1. Ensure `.env` has required tokens and voice ID.
-2. Run `start.bat`.
+2. Run `start-all.bat`.
 3. Open `http://localhost:5173`.
 4. If audio is silent, check browser console and confirm backend logs.
 

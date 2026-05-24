@@ -188,6 +188,8 @@ function getAudioSyncState(audioEl) {
     data: new Uint8Array(analyser.fftSize),
     rafId: null,
     smoothed: 0,
+    isAudible: false,
+    lastVoiceAt: 0,
   };
   audioSyncMap.set(audioEl, state);
   return state;
@@ -215,19 +217,25 @@ function enableAudioSync() {
 
 function startMouthSync(audioEl) {
   if (!svgMouthGroup) {
-    return;
+    return false;
   }
   const state = getAudioSyncState(audioEl);
   if (!state || state.rafId) {
-    return;
+    return Boolean(state);
   }
   if (state.context.state === "suspended") {
     state.context.resume().catch(() => {});
   }
-  const minScale = 0.72;
-  const maxScale = 1.05;
-  const silenceThreshold = 0.025;
+  setSpeaking(false);
+  const voiceStartThreshold = 0.028;
+  const voiceStopThreshold = 0.014;
+  const pauseHoldMs = 180;
   const tick = () => {
+    if (audioEl.paused || audioEl.ended) {
+      stopMouthSync(audioEl);
+      setSpeaking(false);
+      return;
+    }
     state.analyser.getByteTimeDomainData(state.data);
     let sum = 0;
     for (let i = 0; i < state.data.length; i += 1) {
@@ -235,14 +243,27 @@ function startMouthSync(audioEl) {
       sum += v * v;
     }
     const rms = Math.sqrt(sum / state.data.length);
-    state.smoothed = state.smoothed * 0.85 + rms * 0.15;
-    const level = Math.max(0, state.smoothed - silenceThreshold) / (0.25 - silenceThreshold);
-    const clamped = Math.min(Math.max(level, 0), 1);
-    const scale = clamped === 0 ? 1 : minScale + (maxScale - minScale) * clamped;
-    svgMouthGroup.style.transform = `scaleY(${scale.toFixed(3)})`;
+    const smoothing = rms > state.smoothed ? 0.35 : 0.82;
+    state.smoothed = state.smoothed * smoothing + rms * (1 - smoothing);
+
+    const now = performance.now();
+    const hasVoice = rms >= voiceStartThreshold || state.smoothed >= voiceStartThreshold;
+    const isSilence = rms <= voiceStopThreshold && state.smoothed <= voiceStopThreshold;
+    if (hasVoice) {
+      state.lastVoiceAt = now;
+    }
+    const isAudible = hasVoice || (!isSilence && state.isAudible) || now - state.lastVoiceAt < pauseHoldMs;
+    if (state.isAudible !== isAudible) {
+      state.isAudible = isAudible;
+      setSpeaking(isAudible);
+    }
+    if (!isAudible) {
+      svgMouthGroup.style.transform = "scaleY(1)";
+    }
     state.rafId = requestAnimationFrame(tick);
   };
   state.rafId = requestAnimationFrame(tick);
+  return true;
 }
 
 function stopMouthSync(audioEl) {
@@ -250,6 +271,9 @@ function stopMouthSync(audioEl) {
   if (state && state.rafId) {
     cancelAnimationFrame(state.rafId);
     state.rafId = null;
+    state.smoothed = 0;
+    state.isAudible = false;
+    state.lastVoiceAt = 0;
   }
   if (svgMouthGroup) {
     svgMouthGroup.style.transform = "scaleY(1)";
@@ -641,21 +665,26 @@ function updateResult(data) {
         voiceAudio.play().catch(() => {
           setRecordingState("Audio ready (click play)." );
         });
-        setSpeaking(true);
-        startMouthSync(voiceAudio);
+        if (!startMouthSync(voiceAudio)) {
+          setSpeaking(true);
+        }
       }
     } else if (activePlaybackTarget === "face") {
       pauseAllAudio(faceAudioPlayer);
       faceAudioPlayer.play().catch(() => {
         setRecordingState("Audio ready (click play)." );
       });
-      setSpeaking(true);
+      if (!startMouthSync(faceAudioPlayer)) {
+        setSpeaking(true);
+      }
     } else {
       pauseAllAudio(audioPlayer);
       audioPlayer.play().catch(() => {
         setRecordingState("Audio ready (click play)." );
       });
-      setSpeaking(true);
+      if (!startMouthSync(audioPlayer)) {
+        setSpeaking(true);
+      }
     }
   }
 }
@@ -741,8 +770,9 @@ function bindVoiceChatAudio() {
     player.crossOrigin = "anonymous";
     player.addEventListener("play", () => {
       pauseAllAudio(player);
-      setSpeaking(true);
-      startMouthSync(player);
+      if (!startMouthSync(player)) {
+        setSpeaking(true);
+      }
     });
     player.addEventListener("pause", () => {
       setSpeaking(false);
@@ -1237,8 +1267,9 @@ document.addEventListener("keydown", (event) => {
 
 for (const player of [audioPlayer, faceAudioPlayer]) {
   player.addEventListener("play", () => {
-    setSpeaking(true);
-    startMouthSync(player);
+    if (!startMouthSync(player)) {
+      setSpeaking(true);
+    }
   });
   player.addEventListener("pause", () => {
     setSpeaking(false);

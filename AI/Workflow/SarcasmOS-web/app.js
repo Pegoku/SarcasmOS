@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:8000";
+const API_BASE = "http://localhost:8001";
 
 const uploadInput = document.getElementById("uploadInput");
 const uploadSend = document.getElementById("uploadSend");
@@ -13,6 +13,8 @@ const audioPlayer = document.getElementById("audioPlayer");
 const errorOutput = document.getElementById("errorOutput");
 const statusBtn = document.getElementById("statusBtn");
 const statusOutput = document.getElementById("statusOutput");
+const apiHealthRefresh = document.getElementById("apiHealthRefresh");
+const apiHealthList = document.getElementById("apiHealthList");
 const mainView = document.getElementById("mainView");
 const faceView = document.getElementById("faceView");
 const voiceChatView = document.getElementById("voiceChatView");
@@ -36,6 +38,11 @@ const voiceChatStopBtn = document.getElementById("voiceChatStopBtn");
 const voiceChatTextInput = document.getElementById("voiceChatTextInput");
 const voiceChatTextSend = document.getElementById("voiceChatTextSend");
 const voiceChatRecordState = document.getElementById("voiceChatRecordState");
+const voiceChatNewChat = document.getElementById("voiceChatNewChat");
+const voiceChatSessions = document.getElementById("voiceChatSessions");
+const voiceChatFontSmall = document.getElementById("voiceChatFontSmall");
+const voiceChatFontLarge = document.getElementById("voiceChatFontLarge");
+const voiceChatFontSize = document.getElementById("voiceChatFontSize");
 const historyList = document.getElementById("historyList");
 const faceHistoryList = document.getElementById("faceHistoryList");
 const clearHistory = document.getElementById("clearHistory");
@@ -45,10 +52,14 @@ let svgPupils = [];
 let svgMouthGroup = null;
 
 const HISTORY_STORAGE_KEY = "sarcasmos.chatHistory";
+const CHAT_FONT_STORAGE_KEY = "sarcasmos.voiceChatFontScale";
+const DEFAULT_CHAT_ID = "default";
 let mediaRecorder = null;
 let audioChunks = [];
 let activePlaybackTarget = "main";
-const chatHistory = [];
+const chatSessions = [];
+let activeChatId = DEFAULT_CHAT_ID;
+let chatHistory = [];
 let pendingQuestion = "";
 let blinkTimer = null;
 let talkTimer = null;
@@ -56,6 +67,7 @@ let talkRaf = null;
 let thinkTimer = null;
 let thinkLongTimer = null;
 let isBusy = false;
+let voiceChatFontScale = 1;
 const audioSyncMap = new Map();
 let audioSyncEnabled = false;
 
@@ -298,6 +310,7 @@ function startThinkingLongTimer() {
   thinkLongTimer = setTimeout(() => {
     document.body.classList.add("thinking-long");
     faceView.classList.add("thinking-long");
+    voiceChatView.classList.add("thinking-long");
   }, 3800);
 }
 
@@ -308,6 +321,7 @@ function stopThinkingLongTimer() {
   }
   document.body.classList.remove("thinking-long");
   faceView.classList.remove("thinking-long");
+  voiceChatView.classList.remove("thinking-long");
 }
 
 function startThinkingLoop() {
@@ -369,6 +383,227 @@ function showError(message) {
   errorOutput.textContent = message || "";
 }
 
+const API_HEALTH_CHECKS = [
+  {
+    name: "Backend",
+    path: "/api/status",
+    method: "GET",
+    description: "Main backend reachability",
+  },
+  {
+    name: "Robot status",
+    path: "/api/status",
+    method: "GET",
+    description: "Bender runtime status",
+  },
+  {
+    name: "Chat history",
+    path: "/api/history",
+    method: "GET",
+    description: "Saved conversations",
+  },
+  {
+    name: "API schema",
+    path: "/openapi.json",
+    method: "GET",
+    description: "Backend route registry",
+  },
+  {
+    name: "AI services",
+    path: "/api/services/status",
+    method: "GET",
+    description: "STT, LLM, and TTS configuration",
+    expandServices: true,
+  },
+];
+
+function renderApiHealth(items, isChecking = false) {
+  if (!apiHealthList) {
+    return;
+  }
+  apiHealthList.innerHTML = "";
+  const checks = items.length ? items : API_HEALTH_CHECKS.map((item) => ({
+    ...item,
+    status: isChecking ? "checking" : "unknown",
+    detail: isChecking ? "Checking..." : "Not checked yet",
+  }));
+
+  for (const item of checks) {
+    const row = document.createElement("div");
+    row.className = `api-health-item ${item.status}`;
+
+    const text = document.createElement("div");
+    const title = document.createElement("p");
+    title.className = "api-health-title";
+    title.textContent = item.name;
+    const meta = document.createElement("p");
+    meta.className = "api-health-meta";
+    meta.textContent = `${item.method} ${item.path} - ${item.description}`;
+    const detail = document.createElement("p");
+    detail.className = "api-health-detail";
+    detail.textContent = item.detail;
+    text.append(title, meta, detail);
+
+    const badge = document.createElement("span");
+    badge.className = "api-health-badge";
+    badge.textContent = item.status === "ok" ? "OK" : item.status === "checking" ? "..." : "FAIL";
+
+    row.append(text, badge);
+    apiHealthList.append(row);
+  }
+}
+
+async function checkApiHealth() {
+  if (!apiHealthRefresh) {
+    return;
+  }
+  apiHealthRefresh.disabled = true;
+  renderApiHealth([], true);
+  const results = [];
+  for (const check of API_HEALTH_CHECKS) {
+    const started = performance.now();
+    try {
+      const response = await fetch(`${API_BASE}${check.path}`, {
+        method: check.method,
+        cache: "no-store",
+      });
+      const elapsed = Math.round(performance.now() - started);
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        throw new Error(`${response.status} ${response.statusText}${body ? ` - ${body.slice(0, 120)}` : ""}`);
+      }
+      const data = await response.json().catch(() => null);
+      if (check.expandServices && data && data.services) {
+        for (const key of ["stt", "llm", "tts"]) {
+          const service = data.services[key] || {};
+          results.push({
+            name: service.name || key.toUpperCase(),
+            path: check.path,
+            method: check.method,
+            description: service.model ? `Model: ${service.model}` : `${key.toUpperCase()} service`,
+            status: service.ok ? "ok" : "fail",
+            detail: service.ok
+              ? `${service.detail || "Configured"} - ${service.base_url || "No base URL shown"}`
+              : service.detail || data.error || "Service is not configured correctly",
+          });
+        }
+        continue;
+      }
+      results.push({
+        ...check,
+        status: "ok",
+        detail: `Responding in ${elapsed} ms`,
+      });
+    } catch (error) {
+      results.push({
+        ...check,
+        status: "fail",
+        detail: error.message || "Failed to fetch",
+      });
+    }
+  }
+  renderApiHealth(results);
+  apiHealthRefresh.disabled = false;
+}
+
+function applyVoiceChatFontScale() {
+  const scale = Math.min(Math.max(voiceChatFontScale, 0.9), 1.45);
+  voiceChatFontScale = scale;
+  const size = 1.08 * scale;
+  voiceChatList.style.setProperty("--voice-chat-font-size", `${size.toFixed(2)}rem`);
+  if (voiceChatFontSize) {
+    voiceChatFontSize.textContent = `${Math.round(scale * 100)}%`;
+  }
+  try {
+    localStorage.setItem(CHAT_FONT_STORAGE_KEY, String(scale));
+  } catch (error) {
+    console.warn("Failed to save chat font size.", error);
+  }
+}
+
+function loadVoiceChatFontScale() {
+  try {
+    const raw = localStorage.getItem(CHAT_FONT_STORAGE_KEY);
+    if (raw) {
+      const parsed = Number(raw);
+      if (!Number.isNaN(parsed)) {
+        voiceChatFontScale = parsed;
+      }
+    }
+  } catch (error) {
+    console.warn("Failed to load chat font size.", error);
+  }
+  applyVoiceChatFontScale();
+}
+
+function changeVoiceChatFontScale(delta) {
+  voiceChatFontScale += delta;
+  applyVoiceChatFontScale();
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function createChat(title = "New chat", items = []) {
+  const now = new Date().toISOString();
+  return {
+    id: `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    title,
+    createdAt: now,
+    updatedAt: now,
+    items,
+  };
+}
+
+function getActiveChat() {
+  let chat = chatSessions.find((session) => session.id === activeChatId);
+  if (!chat) {
+    chat = chatSessions[0];
+  }
+  if (!chat) {
+    chat = createChat("Chat principal");
+    chat.id = DEFAULT_CHAT_ID;
+    chatSessions.push(chat);
+  }
+  activeChatId = chat.id;
+  chatHistory = chat.items;
+  return chat;
+}
+
+function syncActiveChat() {
+  const chat = getActiveChat();
+  chat.items = chatHistory;
+  chat.updatedAt = new Date().toISOString();
+  if (!chat.title || chat.title === "New chat") {
+    const firstQuestion = chat.items[0]?.question || chat.items[chat.items.length - 1]?.question || "";
+    chat.title = firstQuestion ? firstQuestion.slice(0, 42) : "New chat";
+  }
+}
+
+function getAllHistoryItems() {
+  return chatSessions.flatMap((chat) => Array.isArray(chat.items) ? chat.items : []);
+}
+
+function getActiveChatContext() {
+  return [...chatHistory].reverse().map((entry) => ({
+    question: entry.question || "",
+    answer: entry.answer || "",
+    timestamp: entry.timestamp || "",
+  }));
+}
+
+function renderAllHistoryViews() {
+  getActiveChat();
+  renderHistory();
+  renderChatSessions();
+}
+
 function updateResult(data) {
   if (data.transcript !== undefined) {
     transcriptOutput.textContent = data.transcript || "(empty transcript)";
@@ -388,7 +623,8 @@ function updateResult(data) {
         timestamp: new Date().toLocaleTimeString(),
       };
       chatHistory.unshift(entry);
-      renderHistory();
+      syncActiveChat();
+      renderAllHistoryViews();
       persistHistory();
     }
     pendingQuestion = "";
@@ -429,11 +665,11 @@ function renderHistory() {
     return `
       <div class="history-item" data-history-index="${index}">
         <div class="history-meta">
-          <div class="label">${entry.timestamp}</div>
+          <div class="label">${escapeHtml(entry.timestamp)}</div>
           <button class="history-delete" type="button" aria-label="Delete this chat">Delete</button>
         </div>
         <button class="history-open" type="button">
-          <p>${entry.question}</p>
+          <p>${escapeHtml(entry.question)}</p>
         </button>
       </div>
     `;
@@ -445,23 +681,50 @@ function renderHistory() {
   bindHistoryClicks();
 }
 
+function renderChatSessions() {
+  if (!voiceChatSessions) {
+    return;
+  }
+  const html = chatSessions
+    .map((chat) => {
+      const count = Array.isArray(chat.items) ? chat.items.length : 0;
+      const activeClass = chat.id === activeChatId ? " active" : "";
+      return `
+        <div class="voice-chat-session" data-chat-id="${escapeHtml(chat.id)}">
+          <button class="voice-chat-session-open${activeClass}" type="button">
+            <span class="voice-chat-session-title">${escapeHtml(chat.title || "New chat")}</span>
+            <span class="voice-chat-session-meta">${count} messages</span>
+          </button>
+          <button class="voice-chat-session-delete" type="button" aria-label="Delete chat">Delete</button>
+        </div>
+      `;
+    })
+    .join("");
+  voiceChatSessions.innerHTML = html;
+  bindChatSessionClicks();
+}
+
 function renderVoiceChat() {
   const items = [...chatHistory].reverse();
   const html = items
-    .map((entry) => {
+    .map((entry, reverseIndex) => {
+      const index = chatHistory.length - 1 - reverseIndex;
       const question = entry.question || "";
       const answer = entry.answer || "";
       const audio = entry.audioUrl
-        ? `<audio class="voice-chat-audio" controls src="${entry.audioUrl}"></audio>`
+        ? `<audio class="voice-chat-audio" controls src="${escapeHtml(entry.audioUrl)}"></audio>`
         : "";
       return `
         <div class="voice-chat-message user">
           <div class="label">You</div>
-          <p>${question}</p>
+          <p>${escapeHtml(question)}</p>
         </div>
-        <div class="voice-chat-message assistant">
-          <div class="label">Bender</div>
-          <p>${answer}</p>
+        <div class="voice-chat-message assistant" data-history-index="${index}">
+          <div class="voice-chat-message-top">
+            <div class="label">Bender</div>
+            <button class="voice-chat-message-delete" type="button">Delete</button>
+          </div>
+          <p>${escapeHtml(answer)}</p>
           ${audio}
         </div>
       `;
@@ -469,6 +732,7 @@ function renderVoiceChat() {
     .join("");
   voiceChatList.innerHTML = html;
   bindVoiceChatAudio();
+  bindVoiceChatMessageDeletes();
   voiceChatList.scrollTop = voiceChatList.scrollHeight;
 }
 
@@ -487,6 +751,37 @@ function bindVoiceChatAudio() {
     player.addEventListener("ended", () => {
       setSpeaking(false);
       stopMouthSync(player);
+    });
+  }
+}
+
+function bindVoiceChatMessageDeletes() {
+  for (const button of voiceChatList.querySelectorAll(".voice-chat-message-delete")) {
+    button.addEventListener("click", async () => {
+      const item = button.closest(".voice-chat-message");
+      const index = Number(item?.dataset.historyIndex);
+      if (Number.isNaN(index)) {
+        return;
+      }
+      await deleteHistoryEntry(index);
+    });
+  }
+}
+
+function bindChatSessionClicks() {
+  for (const item of voiceChatSessions.querySelectorAll(".voice-chat-session")) {
+    const chatId = item.dataset.chatId;
+    const openButton = item.querySelector(".voice-chat-session-open");
+    const deleteButton = item.querySelector(".voice-chat-session-delete");
+    openButton?.addEventListener("click", () => {
+      activeChatId = chatId;
+      getActiveChat();
+      renderAllHistoryViews();
+      persistHistory();
+    });
+    deleteButton?.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await deleteChatSession(chatId);
     });
   }
 }
@@ -519,17 +814,108 @@ function bindHistoryClicks() {
         if (Number.isNaN(index)) {
           return;
         }
-        chatHistory.splice(index, 1);
-        renderHistory();
-        await persistHistory();
+        await deleteHistoryEntry(index);
       });
     }
   }
 }
 
-async function persistHistory() {
+function getAudioFilename(audioUrl) {
+  if (!audioUrl) {
+    return "";
+  }
   try {
-    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(chatHistory));
+    const url = new URL(audioUrl, API_BASE);
+    const filename = url.pathname.split("/").filter(Boolean).pop() || "";
+    return decodeURIComponent(filename);
+  } catch (error) {
+    return "";
+  }
+}
+
+function isAudioStillReferenced(filename) {
+  return getAllHistoryItems().some((entry) => getAudioFilename(entry.audioUrl) === filename);
+}
+
+async function deleteBackendAudio(filename) {
+  if (!filename) {
+    return;
+  }
+  try {
+    const response = await fetch(`${API_BASE}/api/audio/${encodeURIComponent(filename)}`, {
+      method: "DELETE",
+    });
+    if (!response.ok && response.status !== 404) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || "Audio delete failed");
+    }
+  } catch (error) {
+    console.warn("Failed to delete backend audio.", error);
+  }
+}
+
+async function deleteHistoryEntry(index) {
+  const entry = chatHistory[index];
+  if (!entry) {
+    return;
+  }
+  const filename = getAudioFilename(entry.audioUrl);
+  chatHistory.splice(index, 1);
+  syncActiveChat();
+  renderAllHistoryViews();
+
+  if (filename && !isAudioStillReferenced(filename)) {
+    await deleteBackendAudio(filename);
+  }
+  await persistHistory();
+}
+
+async function deleteChatSession(chatId) {
+  const index = chatSessions.findIndex((chat) => chat.id === chatId);
+  if (index === -1) {
+    return;
+  }
+  const [removed] = chatSessions.splice(index, 1);
+  const filenames = Array.from(
+    new Set((removed.items || []).map((entry) => getAudioFilename(entry.audioUrl)).filter(Boolean))
+  );
+
+  if (chatSessions.length === 0) {
+    const chat = createChat("New chat");
+    activeChatId = chat.id;
+    chatSessions.push(chat);
+  } else if (activeChatId === chatId) {
+    activeChatId = chatSessions[Math.max(0, index - 1)]?.id || chatSessions[0].id;
+  }
+
+  getActiveChat();
+  renderAllHistoryViews();
+  for (const filename of filenames) {
+    if (!isAudioStillReferenced(filename)) {
+      await deleteBackendAudio(filename);
+    }
+  }
+  await persistHistory();
+}
+
+async function createNewVoiceChat() {
+  const chat = createChat("New chat");
+  chatSessions.unshift(chat);
+  activeChatId = chat.id;
+  getActiveChat();
+  renderAllHistoryViews();
+  await persistHistory();
+}
+
+async function persistHistory() {
+  syncActiveChat();
+  const payload = {
+    activeChatId,
+    chats: chatSessions,
+    items: getAllHistoryItems(),
+  };
+  try {
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(payload));
   } catch (error) {
     console.warn("Failed to save chat history locally.", error);
   }
@@ -537,7 +923,7 @@ async function persistHistory() {
     await fetch(`${API_BASE}/api/history`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: chatHistory }),
+      body: JSON.stringify(payload),
     });
   } catch (error) {
     console.warn("Failed to save chat history remotely.", error);
@@ -546,14 +932,38 @@ async function persistHistory() {
 
 async function loadHistory() {
   let loaded = false;
+  const applyHistoryData = (data) => {
+    chatSessions.length = 0;
+    if (data && Array.isArray(data.chats) && data.chats.length > 0) {
+      for (const chat of data.chats) {
+        chatSessions.push({
+          id: chat.id || `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          title: chat.title || "New chat",
+          createdAt: chat.createdAt || "",
+          updatedAt: chat.updatedAt || "",
+          items: Array.isArray(chat.items) ? chat.items : [],
+        });
+      }
+      activeChatId = data.activeChatId || chatSessions[0].id;
+      getActiveChat();
+      return true;
+    }
+    if (data && Array.isArray(data.items)) {
+      const chat = createChat("Chat principal", data.items);
+      chat.id = DEFAULT_CHAT_ID;
+      chatSessions.push(chat);
+      activeChatId = chat.id;
+      getActiveChat();
+      return true;
+    }
+    return false;
+  };
+
   try {
     const response = await fetch(`${API_BASE}/api/history`);
     if (response.ok) {
       const data = await response.json();
-      if (Array.isArray(data.items)) {
-        chatHistory.splice(0, chatHistory.length, ...data.items);
-        loaded = true;
-      }
+      loaded = applyHistoryData(data);
     }
   } catch (error) {
     console.warn("Failed to load chat history remotely.", error);
@@ -563,21 +973,28 @@ async function loadHistory() {
     try {
       const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
       if (!raw) {
-        return;
+        throw new Error("No local history.");
       }
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        chatHistory.splice(0, chatHistory.length, ...parsed);
-      }
+      loaded = applyHistoryData(Array.isArray(parsed) ? { items: parsed } : parsed);
     } catch (error) {
       console.warn("Failed to load chat history locally.", error);
     }
+  }
+
+  if (chatSessions.length === 0) {
+    const chat = createChat("New chat");
+    activeChatId = chat.id;
+    chatSessions.push(chat);
+    getActiveChat();
   }
 }
 
 async function sendAudioBlob(blob, filename) {
   const formData = new FormData();
   formData.append("audio", blob, filename);
+  formData.append("context", JSON.stringify(getActiveChatContext()));
+  formData.append("chatId", activeChatId);
   setLoading(true, "Sending audio...", "audio");
   showError("");
 
@@ -606,7 +1023,7 @@ async function sendTextMessage(message) {
     const response = await fetch(`${API_BASE}/api/chat/text`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, context: getActiveChatContext(), chatId: activeChatId }),
     });
     const data = await response.json();
     if (!response.ok) {
@@ -748,18 +1165,37 @@ voiceChatTextSend.addEventListener("click", () => {
 });
 
 statusBtn.addEventListener("click", refreshStatus);
+apiHealthRefresh.addEventListener("click", checkApiHealth);
 
 clearHistory.addEventListener("click", async () => {
+  const filenames = Array.from(new Set(chatHistory.map((entry) => getAudioFilename(entry.audioUrl)).filter(Boolean)));
   chatHistory.length = 0;
-  renderHistory();
+  syncActiveChat();
+  renderAllHistoryViews();
+  for (const filename of filenames) {
+    if (!isAudioStillReferenced(filename)) {
+      await deleteBackendAudio(filename);
+    }
+  }
   await persistHistory();
 });
 
 clearFaceHistory.addEventListener("click", async () => {
+  const filenames = Array.from(new Set(chatHistory.map((entry) => getAudioFilename(entry.audioUrl)).filter(Boolean)));
   chatHistory.length = 0;
-  renderHistory();
+  syncActiveChat();
+  renderAllHistoryViews();
+  for (const filename of filenames) {
+    if (!isAudioStillReferenced(filename)) {
+      await deleteBackendAudio(filename);
+    }
+  }
   await persistHistory();
 });
+
+voiceChatNewChat.addEventListener("click", createNewVoiceChat);
+voiceChatFontSmall.addEventListener("click", () => changeVoiceChatFontScale(-0.1));
+voiceChatFontLarge.addEventListener("click", () => changeVoiceChatFontScale(0.1));
 
 openFaceView.addEventListener("click", () => {
   mainView.classList.add("hidden");
@@ -778,7 +1214,7 @@ openVoiceChatView.addEventListener("click", () => {
   document.body.classList.add("face-open");
   setLookDirection("look-center");
   startBlinkLoop();
-  renderVoiceChat();
+  renderAllHistoryViews();
 });
 
 closeFaceView.addEventListener("click", closeFacePanel);
@@ -882,7 +1318,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   initSvgRefs();
   setLookDirection("look-center");
-  loadHistory().then(() => renderHistory());
+  loadVoiceChatFontScale();
+  loadHistory().then(() => renderAllHistoryViews());
+  checkApiHealth();
 });
 
 document.addEventListener("pointerdown", enableAudioSync, { once: true });

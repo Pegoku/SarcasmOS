@@ -23,8 +23,8 @@ if not exist "%BACKEND_ENV%" (
   echo Created backend\.env from backend\.env.example. Add your API keys before using chat/TTS.
 )
 
-echo Starting backend on http://localhost:8000
-start "SarcasmOS Backend" cmd /k ""%PYTHON_BIN%" -m uvicorn backend.app:app --reload --host 0.0.0.0 --port 8000"
+echo Starting backend on http://localhost:8001
+start "SarcasmOS Backend" cmd /k ""%PYTHON_BIN%" -m uvicorn backend.app:app --host 0.0.0.0 --port 8001"
 
 echo Starting frontend on http://localhost:5173
 echo Open http://localhost:5173 in your browser. Press Ctrl+C to stop this window.

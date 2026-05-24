@@ -489,6 +489,53 @@ def robot_status() -> dict:
     }
 
 
+def service_status() -> dict:
+    try:
+        config = BenderConfig.from_env()
+    except Exception as error:
+        return {
+            "ok": False,
+            "error": str(error),
+            "services": {
+                "stt": {"ok": False, "detail": "Configuration failed before STT could be checked."},
+                "llm": {"ok": False, "detail": "Configuration failed before LLM could be checked."},
+                "tts": {"ok": False, "detail": "Configuration failed before TTS could be checked."},
+            },
+        }
+
+    stt_ok = bool(config.replicate_token and config.replicate_base_url and config.stt_model)
+    llm_ok = bool(config.openrouter_token and config.openrouter_base_url and config.llm_model)
+    tts_ok = bool(config.replicate_token and config.replicate_base_url and config.tts_model and config.voice_id)
+
+    return {
+        "ok": stt_ok and llm_ok and tts_ok,
+        "services": {
+            "stt": {
+                "ok": stt_ok,
+                "name": "STT",
+                "model": config.stt_model,
+                "base_url": config.replicate_base_url,
+                "detail": "Configured" if stt_ok else "Missing Replicate/Hack Club token, base URL, or STT model.",
+            },
+            "llm": {
+                "ok": llm_ok,
+                "name": "LLM",
+                "model": config.llm_model,
+                "base_url": config.openrouter_base_url,
+                "detail": "Configured" if llm_ok else "Missing OpenRouter/Hack Club token, base URL, or LLM model.",
+            },
+            "tts": {
+                "ok": tts_ok,
+                "name": "TTS",
+                "model": config.tts_model,
+                "base_url": config.replicate_base_url,
+                "voice_id": config.voice_id,
+                "detail": "Configured" if tts_ok else "Missing Replicate/Hack Club token, base URL, TTS model, or voice ID.",
+            },
+        },
+    }
+
+
 def run_tool_call(name: str, arguments: dict) -> object:
     render_face("tool", name)
 
@@ -539,9 +586,58 @@ def chat_completion(api_token: str, base_url: str, payload: dict) -> dict:
     return response.json()
 
 
-def generate_answer(api_token: str, base_url: str, model: str, transcript: str, sysprompt: str) -> str:
+def context_messages_from_history(history: list[dict] | None) -> list[dict]:
+    if not history:
+        return []
+
+    lines = []
+    total_chars = 0
+    for item in history[-24:]:
+        if not isinstance(item, dict):
+            continue
+        question = str(item.get("question", "")).strip()
+        answer = str(item.get("answer", "")).strip()
+        if not question and not answer:
+            continue
+        entry = []
+        if question:
+            entry.append(f"Usuario: {question}")
+        if answer:
+            entry.append(f"Bender: {answer}")
+        content = "\n".join(entry)
+        if len(content) > 2800:
+            content = f"{content[:2800]}..."
+        total_chars += len(content)
+        if total_chars > 18000:
+            break
+        lines.append(content)
+
+    if not lines:
+        return []
+    memory = (
+        "HISTORIAL REAL DEL CHAT ACTUAL, antes del ultimo mensaje del usuario:\n\n"
+        + "\n\n---\n\n".join(lines)
+        + "\n\nUsa este historial como memoria real de esta conversacion. "
+        + "Si el usuario pide un resumen, resume estos mensajes previos."
+    )
+    return [{"role": "system", "content": memory}]
+
+
+def generate_answer(
+    api_token: str,
+    base_url: str,
+    model: str,
+    transcript: str,
+    sysprompt: str,
+    context: list[dict] | None = None,
+) -> str:
     tool_prompt = (
         sysprompt
+        + "\n\nCONVERSATION MEMORY:\n"
+        + "- Previous messages from the current chat may be provided before the latest user message.\n"
+        + "- Treat that context as memory for this chat only.\n"
+        + "- If the user asks for a summary, what they asked before, or references earlier turns, use that chat context.\n"
+        + "- Do not claim to remember messages that are not present in the provided context.\n"
         + "\n\nTOOLS AVAILABLE:\n"
         + "- Use get_weather for real weather instead of guessing.\n"
         + "- Use get_time for current time/date instead of guessing.\n"
@@ -552,8 +648,9 @@ def generate_answer(api_token: str, base_url: str, model: str, transcript: str, 
     )
     messages = [
         {"role": "system", "content": tool_prompt},
-        {"role": "user", "content": transcript},
     ]
+    messages.extend(context_messages_from_history(context))
+    messages.append({"role": "user", "content": transcript})
     final_expression = "speaking"
 
     for _ in range(MAX_TOOL_ROUNDS):
@@ -756,7 +853,7 @@ def transcribe_audio(audio_path: str, config: BenderConfig) -> str:
     return extract_transcript(output)
 
 
-def generate_text_answer(transcript: str, config: BenderConfig) -> str:
+def generate_text_answer(transcript: str, config: BenderConfig, context: list[dict] | None = None) -> str:
     render_face("thinking", "generating answer")
     answer = generate_answer(
         config.openrouter_token,
@@ -764,6 +861,7 @@ def generate_text_answer(transcript: str, config: BenderConfig) -> str:
         config.llm_model,
         transcript,
         config.sysprompt,
+        context,
     )
     if len(answer) > 10000:
         raise RuntimeError("LLM answer is longer than the 10,000 character TTS limit.")
@@ -811,8 +909,9 @@ def synthesize_speech(text: str, config: BenderConfig) -> Path:
 
 def process_audio_file(audio_path: str, options: dict | None = None) -> dict:
     config = BenderConfig.from_env()
+    options = options or {}
     transcript = transcribe_audio(audio_path, config)
-    answer = generate_text_answer(transcript, config)
+    answer = generate_text_answer(transcript, config, options.get("context"))
     output_path = synthesize_speech(answer, config)
     return {
         "transcript": transcript,
@@ -823,7 +922,8 @@ def process_audio_file(audio_path: str, options: dict | None = None) -> dict:
 
 def process_text_message(message: str, options: dict | None = None) -> dict:
     config = BenderConfig.from_env()
-    answer = generate_text_answer(message, config)
+    options = options or {}
+    answer = generate_text_answer(message, config, options.get("context"))
     output_path = synthesize_speech(answer, config)
     return {
         "answer": answer,

@@ -5,9 +5,55 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SarcasmOS Console</title>
     <link rel="stylesheet" href="style.css" />
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
-    <main id="mainView" class="app view">
+    <section id="loginView" class="login-view" aria-label="Sign in">
+      <div class="login-shell">
+        <div id="loginBot" class="login-bot" aria-hidden="true">
+          <svg viewBox="0 0 780 360" role="img">
+            <defs>
+              <filter id="loginBotShadow" x="-20%" y="-20%" width="140%" height="150%">
+                <feDropShadow dx="12" dy="14" stdDeviation="8" flood-opacity="0.32" />
+              </filter>
+            </defs>
+            <g class="login-bot-face" filter="url(#loginBotShadow)">
+              <rect class="login-bot-visor-outer" x="210" y="22" width="390" height="172" rx="86" />
+              <rect class="login-bot-visor-ring" x="228" y="40" width="354" height="136" rx="68" />
+              <rect class="login-bot-visor-inner" x="244" y="56" width="322" height="104" rx="52" />
+              <g class="login-bot-eye-group login-bot-eye-left">
+                <path class="login-bot-eye-white" d="M250 108c0-50 39-78 92-78 62 0 99 32 99 78s-37 78-99 78c-53 0-92-28-92-78Z" />
+                <rect class="login-bot-pupil" x="346" y="96" width="24" height="24" transform="rotate(7 358 108)" />
+              </g>
+              <g class="login-bot-eye-group login-bot-eye-right">
+                <path class="login-bot-eye-white" d="M444 108c0-46 37-78 99-78 53 0 92 28 92 78s-39 78-92 78c-62 0-99-32-99-78Z" />
+                <rect class="login-bot-pupil" x="532" y="96" width="24" height="24" transform="rotate(-6 544 108)" />
+              </g>
+            </g>
+            <g class="login-bot-mouth" filter="url(#loginBotShadow)">
+              <rect class="login-bot-mouth-outer" x="313" y="223" width="198" height="116" rx="58" />
+              <rect class="login-bot-mouth-inner" x="329" y="239" width="166" height="84" rx="42" />
+              <path class="login-bot-mouth-line" d="M332 274c48 2 111 4 160 0" />
+              <path class="login-bot-mouth-line" d="M332 304c48 4 111 5 160 0" />
+              <path class="login-bot-tooth" d="M361 239v83M395 238v86M429 238v86M463 239v83" />
+            </g>
+          </svg>
+        </div>
+        <div class="login-panel">
+        <div class="login-copy">
+          <p class="eyebrow">SarcasmOS</p>
+          <h1>Sign in</h1>
+          <p class="subtitle">Use your Google account to unlock the console.</p>
+          <div id="googleLoginButton" class="google-login-button"></div>
+          <p id="loginError" class="error"></p>
+          <button id="loginSignOutBtn" class="ghost hidden" type="button">Sign out</button>
+          <p class="login-note">Google login requires GOOGLE_CLIENT_ID in backend/.env.</p>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <main id="mainView" class="app view hidden" aria-hidden="true">
       <header class="hero">
         <div class="hero-copy">
           <p class="eyebrow">SarcasmOS</p>
@@ -15,6 +61,14 @@
           <p class="subtitle">Talk to Bender by voice, upload audio, or type a message.</p>
         </div>
         <div class="status-card">
+          <div id="userBadge" class="user-badge hidden">
+            <img id="userAvatar" alt="" />
+            <div>
+              <p id="userName">Signed in</p>
+              <span id="userEmail"></span>
+            </div>
+            <button id="signOutBtn" class="ghost" type="button">Sign out</button>
+          </div>
           <div class="status-heading">
             <p class="status-label">Robot status</p>
             <span class="status-dot" aria-hidden="true"></span>
@@ -40,6 +94,17 @@
           </div>
           <button id="openVoiceChatView" class="accent">Open voice chat</button>
         </div>
+      </section>
+
+      <section id="adminPanel" class="panel admin-panel hidden" aria-label="Admin panel">
+        <div class="history-header">
+          <div>
+            <h2>Admin Panel</h2>
+            <p class="helper-text">Authorize users and manage admin access.</p>
+          </div>
+          <button id="adminRefresh" class="ghost" type="button">Refresh users</button>
+        </div>
+        <div id="adminUsersList" class="admin-users-list"></div>
       </section>
 
       <div class="console-grid">

@@ -71,4 +71,6 @@ Required environment variables go in `backend/.env`, copied from `backend/.env.e
 
 - `HACK_CLUB_AI_KEY` or `REPLICATE_API_TOKEN` / `OPENROUTER_API_TOKEN`
 - `MINIMAX_VOICE_ID`
+- `GOOGLE_CLIENT_ID` for Google Sign-In. Create a Web OAuth client in Google Cloud and add `http://localhost:5173` as an authorized JavaScript origin.
+- `ADMIN_EMAILS` comma-separated Google accounts that start as authorized admins.
 - Optional: `OPENROUTER_BASE_URL`, `REPLICATE_BASE_URL`, `HF_TOKEN`

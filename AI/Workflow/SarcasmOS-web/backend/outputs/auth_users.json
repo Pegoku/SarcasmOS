@@ -1,0 +1,22 @@
+{
+  "users": {
+    "sarcasmosmail@gmail.com": {
+      "email": "sarcasmosmail@gmail.com",
+      "name": "SarcasmOS penelargo",
+      "picture": "https://lh3.googleusercontent.com/a/ACg8ocIJ9PX16Ch2LD36fY8tZIFjcQwQf6lf3-rYrh0XxOCEwwIylYY=s96-c",
+      "authorized": true,
+      "isAdmin": true,
+      "createdAt": "2026-05-24T17:37:51+00:00",
+      "lastLoginAt": "2026-05-24T18:17:43+00:00"
+    },
+    "elpepox1348@gmail.com": {
+      "email": "elpepox1348@gmail.com",
+      "name": "pepe pepe",
+      "picture": "https://lh3.googleusercontent.com/a/ACg8ocKYMBHNRfTdgVYhS4TKjey-M6OFJKfdlM21L8PdpGzi8wxnrsbK=s96-c",
+      "authorized": true,
+      "isAdmin": true,
+      "createdAt": "2026-05-24T18:17:32+00:00",
+      "lastLoginAt": "2026-05-24T18:19:28+00:00"
+    }
+  }
+}

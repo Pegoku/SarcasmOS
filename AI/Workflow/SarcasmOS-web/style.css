@@ -126,6 +126,171 @@ audio {
   display: none !important;
 }
 
+.login-view {
+  min-height: calc(100vh - 104px);
+  display: grid;
+  place-items: center;
+  position: relative;
+  z-index: 1;
+  padding: 28px;
+  overflow: hidden;
+}
+
+.login-view::before {
+  content: "";
+  position: absolute;
+  width: min(900px, 90vw);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 42%, rgba(246, 196, 69, 0.18), transparent 28%),
+    radial-gradient(circle at 70% 22%, rgba(91, 154, 255, 0.18), transparent 34%),
+    radial-gradient(circle at 50% 72%, rgba(86, 174, 160, 0.1), transparent 24%);
+  filter: blur(30px);
+  opacity: 0.82;
+  transform: translateY(-24px);
+  pointer-events: none;
+}
+
+.login-shell {
+  width: min(460px, 100%);
+  display: grid;
+  justify-items: center;
+  position: relative;
+  z-index: 1;
+}
+
+.login-panel {
+  width: 100%;
+  display: block;
+  padding: 34px;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background:
+    linear-gradient(145deg, rgba(18, 25, 34, 0.9), rgba(5, 8, 12, 0.96)),
+    var(--panel);
+  box-shadow:
+    0 28px 80px rgba(0, 0, 0, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.login-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(115deg, transparent 0 32%, rgba(255, 255, 255, 0.055) 45%, transparent 58%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.026) 0 1px, transparent 1px 8px);
+  opacity: 0.24;
+  pointer-events: none;
+}
+
+.login-copy,
+.login-bot {
+  position: relative;
+  z-index: 1;
+}
+
+.login-copy {
+  max-width: none;
+  padding-right: 0;
+  text-align: left;
+}
+
+.login-panel h1 {
+  font-size: clamp(3.4rem, 12vw, 5.2rem);
+  line-height: 0.88;
+}
+
+.google-login-button {
+  min-height: 44px;
+  margin-top: 26px;
+}
+
+.login-note {
+  margin: 18px 0 0;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.login-bot {
+  display: grid;
+  place-items: center;
+  width: min(390px, 86vw);
+  height: 180px;
+  margin-bottom: 14px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+.login-bot svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  filter: drop-shadow(0 16px 10px rgba(0, 0, 0, 0.34));
+  animation: loginBotFloat 5.4s ease-in-out infinite;
+}
+
+.login-bot-visor-outer,
+.login-bot-mouth-outer {
+  fill: #05070a;
+}
+
+.login-bot-visor-ring {
+  fill: #f8fbff;
+}
+
+.login-bot-visor-inner {
+  fill: #05070a;
+}
+
+.login-bot-eye-white {
+  fill: #fbfbfa;
+}
+
+.login-bot-mouth-inner {
+  fill: #fbfbfa;
+}
+
+.login-bot-mouth-line,
+.login-bot-tooth {
+  fill: none;
+  stroke: #05070a;
+  stroke-width: 8;
+  stroke-linecap: round;
+}
+
+.login-bot-eye,
+.login-bot-eye-group {
+  transition: transform 0.22s ease;
+}
+
+.login-bot-pupil {
+  fill: #060a0f;
+}
+
+.login-bot-mouth rect {
+  fill: rgba(248, 252, 255, 0.94);
+  stroke: rgba(4, 8, 13, 0.92);
+  stroke-width: 7;
+}
+
+@keyframes loginBotFloat {
+  0%, 100% {
+    transform: translateY(0) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(1deg);
+  }
+}
+
 .app {
   width: min(1280px, 100%);
   margin: 0 auto;
@@ -226,6 +391,50 @@ h2 {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015)),
     rgba(5, 9, 14, 0.72);
+}
+
+.user-badge {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.user-badge img {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.user-badge p,
+.user-badge span {
+  display: block;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-badge p {
+  font-weight: 800;
+}
+
+.user-badge span {
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.76rem;
+}
+
+.user-badge button {
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 0.82rem;
 }
 
 .status-heading {
@@ -407,6 +616,64 @@ h2 {
   scrollbar-color: rgba(246, 196, 69, 0.55) rgba(255, 255, 255, 0.08);
   scrollbar-width: auto;
   scrollbar-gutter: stable;
+}
+
+.admin-users-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-user {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.admin-user img {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.admin-user p,
+.admin-user span {
+  display: block;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-user p {
+  font-weight: 800;
+}
+
+.admin-user span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+}
+
+.admin-user label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.admin-user input {
+  accent-color: var(--accent);
 }
 
 .api-health-list::-webkit-scrollbar {
@@ -1253,6 +1520,29 @@ body.face-open {
     padding: 24px 14px 48px;
   }
 
+  .login-view {
+    padding: 12px 0;
+  }
+
+  .login-panel {
+    padding: 24px;
+  }
+
+  .login-bot {
+    width: min(320px, 88vw);
+    height: 150px;
+    min-height: 0;
+    margin-bottom: 10px;
+  }
+
+  .login-bot svg {
+    width: 100%;
+  }
+
+  .login-panel h1 {
+    font-size: clamp(3rem, 16vw, 4.8rem);
+  }
+
   .hero {
     grid-template-columns: 1fr;
     padding: 22px;
@@ -1281,6 +1571,14 @@ body.face-open {
   .api-health-list {
     height: 300px;
     max-height: 38vh;
+  }
+
+  .admin-user {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+
+  .admin-user label {
+    grid-column: 1 / -1;
   }
 
   .face-view {
@@ -1361,6 +1659,15 @@ body.face-open {
 
   button,
   .file-input {
+    width: 100%;
+  }
+
+  .user-badge {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .user-badge button {
+    grid-column: 1 / -1;
     width: 100%;
   }
 

@@ -1,5 +1,20 @@
-const API_BASE = "http://localhost:8000";
+let API_BASE = "http://localhost:8000";
+let GOOGLE_CLIENT_ID = "";
+const API_BASE_CANDIDATES = ["http://localhost:8000", "http://localhost:8001"];
 
+const loginView = document.getElementById("loginView");
+const loginBot = document.getElementById("loginBot");
+const googleLoginButton = document.getElementById("googleLoginButton");
+const loginError = document.getElementById("loginError");
+const loginSignOutBtn = document.getElementById("loginSignOutBtn");
+const userBadge = document.getElementById("userBadge");
+const userAvatar = document.getElementById("userAvatar");
+const userName = document.getElementById("userName");
+const userEmail = document.getElementById("userEmail");
+const signOutBtn = document.getElementById("signOutBtn");
+const adminPanel = document.getElementById("adminPanel");
+const adminRefresh = document.getElementById("adminRefresh");
+const adminUsersList = document.getElementById("adminUsersList");
 const uploadInput = document.getElementById("uploadInput");
 const uploadSend = document.getElementById("uploadSend");
 const recordBtn = document.getElementById("recordBtn");
@@ -53,6 +68,7 @@ let svgMouthGroup = null;
 
 const HISTORY_STORAGE_KEY = "sarcasmos.chatHistory";
 const CHAT_FONT_STORAGE_KEY = "sarcasmos.voiceChatFontScale";
+const AUTH_STORAGE_KEY = "sarcasmos.googleUser";
 const DEFAULT_CHAT_ID = "default";
 let mediaRecorder = null;
 let audioChunks = [];
@@ -70,6 +86,7 @@ let isBusy = false;
 let voiceChatFontScale = 1;
 const audioSyncMap = new Map();
 let audioSyncEnabled = false;
+let currentUser = null;
 
 audioPlayer.crossOrigin = "anonymous";
 faceAudioPlayer.crossOrigin = "anonymous";
@@ -407,6 +424,226 @@ function showError(message) {
   errorOutput.textContent = message || "";
 }
 
+function showLoginError(message) {
+  if (loginError) {
+    loginError.textContent = message || "";
+  }
+}
+
+function authHeaders() {
+  return currentUser?.token ? { Authorization: `Bearer ${currentUser.token}` } : {};
+}
+
+async function loadPublicConfig() {
+  const errors = [];
+  for (const baseUrl of API_BASE_CANDIDATES) {
+    try {
+      const response = await fetch(`${baseUrl}/api/config`, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`${response.status} ${response.statusText}`);
+      }
+      API_BASE = baseUrl;
+      const config = await response.json();
+      GOOGLE_CLIENT_ID = String(config.googleClientId || "").trim();
+      return config;
+    } catch (error) {
+      errors.push(`${baseUrl}: ${error.message || "unreachable"}`);
+    }
+  }
+  throw new Error(`Backend config unavailable. ${errors.join(" | ")}`);
+}
+
+function saveUserSession(user) {
+  currentUser = user;
+  try {
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+  } catch (error) {
+    console.warn("Failed to save auth session.", error);
+  }
+  renderAuthState();
+}
+
+function loadUserSession() {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const user = JSON.parse(raw);
+    if (!user || !user.email || !user.token) {
+      return null;
+    }
+    return user;
+  } catch (error) {
+    console.warn("Failed to load auth session.", error);
+    return null;
+  }
+}
+
+function clearUserSession() {
+  const token = currentUser?.token;
+  currentUser = null;
+  try {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch (error) {
+    console.warn("Failed to clear auth session.", error);
+  }
+  renderAuthState();
+  if (token) {
+    fetch(`${API_BASE}/api/auth/logout`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => {});
+  }
+}
+
+function renderAuthState() {
+  const isSignedIn = Boolean(currentUser?.email && currentUser?.token);
+  const isAuthorized = Boolean(currentUser?.authorized);
+  const canUseApp = isSignedIn && isAuthorized;
+  if (!canUseApp) {
+    closeFacePanel();
+    closeVoiceChatPanel();
+  }
+  loginView?.classList.toggle("hidden", canUseApp);
+  mainView?.classList.toggle("hidden", !canUseApp);
+  mainView?.setAttribute("aria-hidden", canUseApp ? "false" : "true");
+  adminPanel?.classList.toggle("hidden", !currentUser?.isAdmin);
+  loginSignOutBtn?.classList.toggle("hidden", !isSignedIn);
+  googleLoginButton?.classList.toggle("hidden", isSignedIn);
+
+  if (userBadge) {
+    userBadge.classList.toggle("hidden", !canUseApp);
+  }
+  if (userName) {
+    userName.textContent = currentUser?.name || "Signed in";
+  }
+  if (userEmail) {
+    const role = currentUser?.isAdmin ? "admin" : currentUser?.authorized ? "authorized" : "pending";
+    userEmail.textContent = currentUser?.email ? `${currentUser.email} - ${role}` : "";
+  }
+  if (userAvatar) {
+    userAvatar.src = currentUser?.picture || "";
+    userAvatar.classList.toggle("hidden", !currentUser?.picture);
+  }
+}
+
+function handleGoogleCredential(response) {
+  loginWithGoogle(response.credential || "");
+}
+
+async function loginWithGoogle(credential) {
+  showLoginError("");
+  try {
+    const response = await fetch(`${API_BASE}/api/auth/google`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ credential }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Google sign-in failed.");
+    }
+    saveUserSession({ ...data.user, token: data.token });
+    if (!data.user.authorized) {
+      showLoginError("Your Google account is signed in, but an admin must authorize access.");
+    }
+    if (data.user.isAdmin) {
+      loadAdminUsers();
+    }
+  } catch (error) {
+    showLoginError(error.message || "Google sign-in failed.");
+  }
+}
+
+function renderGoogleButton() {
+  if (!googleLoginButton) {
+    return;
+  }
+  googleLoginButton.innerHTML = "";
+  if (!GOOGLE_CLIENT_ID) {
+    showLoginError("Set GOOGLE_CLIENT_ID in backend/.env to enable Google sign-in.");
+    return;
+  }
+  if (!window.google?.accounts?.id) {
+    setTimeout(renderGoogleButton, 250);
+    return;
+  }
+  window.google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: handleGoogleCredential,
+  });
+  window.google.accounts.id.renderButton(googleLoginButton, {
+    theme: "filled_black",
+    size: "large",
+    type: "standard",
+    shape: "pill",
+    text: "signin_with",
+    logo_alignment: "left",
+    width: 280,
+  });
+}
+
+function initLoginBotLook() {
+  if (!loginBot) {
+    return;
+  }
+  let eyes = Array.from(loginBot.querySelectorAll(".login-bot-eye-group"));
+  if (!eyes.length) {
+    eyes = Array.from(loginBot.querySelectorAll(".login-bot-eye"));
+  }
+  if (!eyes.length) {
+    return;
+  }
+  const setEyes = (x, y) => {
+    for (const eye of eyes) {
+      eye.style.transform = `translate(${x}px, ${y}px)`;
+    }
+  };
+  document.addEventListener("pointermove", (event) => {
+    if (loginView?.classList.contains("hidden")) {
+      return;
+    }
+    const rect = loginBot.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const dx = Math.max(-1, Math.min(1, (event.clientX - centerX) / (window.innerWidth * 0.32)));
+    const dy = Math.max(-1, Math.min(1, (event.clientY - centerY) / (window.innerHeight * 0.28)));
+    setEyes(Math.round(dx * 16), Math.round(dy * 12));
+  });
+  document.addEventListener("pointerleave", () => setEyes(0, 0));
+}
+
+async function initAuth() {
+  currentUser = loadUserSession();
+  try {
+    await loadPublicConfig();
+  } catch (error) {
+    showLoginError(error.message || "Could not load login configuration.");
+    renderAuthState();
+    return;
+  }
+  if (currentUser?.token) {
+    try {
+      const response = await fetch(`${API_BASE}/api/auth/me`, { headers: authHeaders() });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Session expired.");
+      }
+      saveUserSession({ ...data.user, token: currentUser.token });
+    } catch (error) {
+      currentUser = null;
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      showLoginError("Session expired. Sign in again.");
+    }
+  }
+  renderAuthState();
+  renderGoogleButton();
+  if (currentUser?.isAdmin) {
+    loadAdminUsers();
+  }
+}
+
 const API_HEALTH_CHECKS = [
   {
     name: "Backend",
@@ -431,6 +668,12 @@ const API_HEALTH_CHECKS = [
     path: "/openapi.json",
     method: "GET",
     description: "Backend route registry",
+  },
+  {
+    name: "Public config",
+    path: "/api/config",
+    method: "GET",
+    description: "Google Sign-In configuration",
   },
   {
     name: "AI services",
@@ -528,6 +771,85 @@ async function checkApiHealth() {
   }
   renderApiHealth(results);
   apiHealthRefresh.disabled = false;
+}
+
+async function loadAdminUsers() {
+  if (!adminUsersList || !currentUser?.isAdmin) {
+    return;
+  }
+  adminUsersList.innerHTML = `<p class="helper-text">Loading users...</p>`;
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/users`, { headers: authHeaders() });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to load users.");
+    }
+    renderAdminUsers(data.users || []);
+  } catch (error) {
+    adminUsersList.innerHTML = `<p class="error">${escapeHtml(error.message || "Failed to load users.")}</p>`;
+  }
+}
+
+function renderAdminUsers(users) {
+  if (!adminUsersList) {
+    return;
+  }
+  if (!users.length) {
+    adminUsersList.innerHTML = `<p class="helper-text">No users have signed in yet.</p>`;
+    return;
+  }
+  adminUsersList.innerHTML = users
+    .sort((a, b) => String(a.email).localeCompare(String(b.email)))
+    .map((user) => `
+      <div class="admin-user" data-email="${escapeHtml(user.email)}">
+        <img src="${escapeHtml(user.picture || "")}" alt="" class="${user.picture ? "" : "hidden"}" />
+        <div>
+          <p>${escapeHtml(user.name || user.email)}</p>
+          <span>${escapeHtml(user.email)}</span>
+        </div>
+        <label>
+          <input class="admin-user-authorized" type="checkbox" ${user.authorized ? "checked" : ""} />
+          Authorized
+        </label>
+        <label>
+          <input class="admin-user-admin" type="checkbox" ${user.isAdmin ? "checked" : ""} />
+          Admin
+        </label>
+      </div>
+    `)
+    .join("");
+  bindAdminUserControls();
+}
+
+function bindAdminUserControls() {
+  for (const row of adminUsersList.querySelectorAll(".admin-user")) {
+    const email = row.dataset.email;
+    const authorized = row.querySelector(".admin-user-authorized");
+    const isAdmin = row.querySelector(".admin-user-admin");
+    authorized?.addEventListener("change", () => updateAdminUser(email, { authorized: authorized.checked }));
+    isAdmin?.addEventListener("change", () => updateAdminUser(email, { isAdmin: isAdmin.checked }));
+  }
+}
+
+async function updateAdminUser(email, patch) {
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/users/${encodeURIComponent(email)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(patch),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to update user.");
+    }
+    if (data.user?.email === currentUser?.email) {
+      saveUserSession({ ...data.user, token: currentUser.token });
+    }
+    await loadAdminUsers();
+  } catch (error) {
+    showError(error.message || "Failed to update user.");
+    await loadAdminUsers();
+  }
 }
 
 function applyVoiceChatFontScale() {
@@ -1196,6 +1518,9 @@ voiceChatTextSend.addEventListener("click", () => {
 
 statusBtn.addEventListener("click", refreshStatus);
 apiHealthRefresh.addEventListener("click", checkApiHealth);
+signOutBtn.addEventListener("click", clearUserSession);
+loginSignOutBtn.addEventListener("click", clearUserSession);
+adminRefresh.addEventListener("click", loadAdminUsers);
 
 clearHistory.addEventListener("click", async () => {
   const filenames = Array.from(new Set(chatHistory.map((entry) => getAudioFilename(entry.audioUrl)).filter(Boolean)));
@@ -1338,7 +1663,7 @@ function closeVoiceChatPanel() {
   mainView.classList.remove("hidden");
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   const faceSvg = faceView.querySelector(".face-svg");
   const voiceFaceHead = document.getElementById("voiceChatFace");
   if (faceSvg && voiceFaceHead) {
@@ -1349,6 +1674,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   initSvgRefs();
   setLookDirection("look-center");
+  initLoginBotLook();
+  await initAuth();
   loadVoiceChatFontScale();
   loadHistory().then(() => renderAllHistoryViews());
   checkApiHealth();

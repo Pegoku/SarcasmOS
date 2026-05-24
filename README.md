@@ -1,147 +1,153 @@
 # SarcasmOS
 
-SarcasmOS es un asistente de voz con personalidad, construido como proyecto para Hack Club / Fallout. La idea es sencilla: coger un asistente tipo Alexa o Google Home y darle una cara, una voz y una actitud reconocible. En vez de contestar como una caja gris corporativa, responde en español con humor seco, sarcasmo y expresiones animadas inspiradas en Bender.
+SarcasmOS is a personality-driven voice assistant built as a Hack Club / Fallout project. The core idea is simple: take a smart assistant like Alexa or Google Home, then give it a face, a voice, and an attitude. Instead of answering like a neutral corporate box, SarcasmOS replies in Spanish with dry humor, sarcasm, and animated expressions inspired by Bender.
 
-El proyecto combina software, IA, diseño mecanico y electronica: una cabeza robotica con pantallas para ojos y boca, una interfaz web para probar conversaciones, un backend local para voz/texto, y placas PCB dedicadas para el hardware visual.
+The project combines software, AI, mechanical design, and electronics: a robotic head with displays for the eyes and mouth, a local web interface for testing conversations, a FastAPI backend for voice/text processing, and custom PCBs for the visual hardware.
 
-## Que Hace
+## Language Scope
 
-- Escucha o recibe texto desde una interfaz web local.
-- Transcribe audio a texto.
-- Genera respuestas con una personalidad sarcastica en español.
-- Convierte las respuestas a voz.
-- Sincroniza reproduccion de audio con una cara animada.
-- Guarda historial de chats.
-- Incluye comandos y estados pensados para controlar expresiones, ojos y comportamiento del robot.
+SarcasmOS is designed to work in Spanish only.
 
-## Estado Actual
+The language model prompt, personality, expected user input, and generated responses are all tuned for Spanish. Other languages may work accidentally depending on the upstream model, but they are outside the intended behavior of this project.
 
-SarcasmOS ya tiene una demo funcional por software:
+## What It Does
 
-- Web UI estatica en `AI/Workflow/SarcasmOS-web`.
-- Backend FastAPI local con endpoints de chat, audio, historial y estado.
-- Pipeline de STT, LLM y TTS usando servicios externos configurables.
-- Vista tipo consola, vista de cara completa y vista de chat por voz.
-- Archivos CAD para la cabeza/cuerpo.
-- Diseños KiCad para las placas de ojos y boca.
-- Experimentos de clonacion/sintesis de voz y separacion de clips.
+- Listens to audio or accepts text from a local web interface.
+- Transcribes speech to text.
+- Generates Spanish answers with a sarcastic character voice.
+- Converts the answer back to speech.
+- Syncs audio playback with an animated face.
+- Stores chat history locally.
+- Includes command/status hooks intended for expressions, eye movement, and robot behavior.
 
-El hardware esta en desarrollo. El repo contiene los archivos de diseño, fabricacion y pruebas, pero no debe tratarse todavia como un producto terminado.
+## Current State
 
-## Estructura Del Repo
+SarcasmOS already has a working software demo:
+
+- Static web UI in `AI/Workflow/SarcasmOS-web`.
+- Local FastAPI backend with chat, audio, history, and status endpoints.
+- STT, LLM, and TTS pipeline using configurable external services.
+- Console view, full face view, and voice chat view.
+- CAD files for the head/body.
+- KiCad designs for the eye and mouth boards.
+- Voice synthesis/cloning experiments and clip preparation tools.
+
+The hardware is still in development. This repository contains design, fabrication, and test files, but it should not be treated as a finished product yet.
+
+## Repository Structure
 
 ```text
 AI/
-  Workflow/SarcasmOS-web/   App web + backend principal
-  Piannote/                 Separacion y preparacion de clips de voz
-  Qwen3-TTS-Bender/         Experimentos de TTS / voz
-  xtts/                     Pruebas alternativas de TTS
+  Workflow/SarcasmOS-web/   Main web app + backend
+  Piannote/                 Voice clip separation and preparation
+  Qwen3-TTS-Bender/         TTS / voice experiments
+  xtts/                     Alternative TTS tests
 
-CAD/                        Modelos FreeCAD de cabeza, base y piezas
+CAD/                        FreeCAD models for the head, base, and parts
 PCB/
-  eye/                      PCB de los ojos
-  mouth/                    PCB de la boca
+  eye/                      Eye PCB
+  mouth/                    Mouth PCB
 
-animationVisualizer/        Prototipo visual de animaciones
-README.md                   Este documento
+animationVisualizer/        Animation prototype
+README.md                   This document
 ```
 
-## Demo Web
+## Web Demo
 
-La forma mas rapida de probar SarcasmOS es arrancar la app web local.
+The quickest way to try SarcasmOS is to run the local web app.
 
-Desde `AI/Workflow/SarcasmOS-web`:
+From `AI/Workflow/SarcasmOS-web`:
 
 ```bat
 start-all.bat
 ```
 
-En macOS/Linux:
+On macOS/Linux:
 
 ```bash
 ./start-all.sh
 ```
 
-Esto levanta:
+This starts:
 
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:8001`
 
-Tambien se pueden arrancar por separado:
+You can also start them separately:
 
 ```bash
 python -m http.server 5173
 python -m uvicorn backend.app:app --host 0.0.0.0 --port 8001
 ```
 
-## Configuracion
+## Configuration
 
-El backend lee variables de entorno desde archivos `.env`, especialmente en:
+The backend reads environment variables from `.env` files, especially:
 
 - `AI/Workflow/SarcasmOS-web/backend/.env`
 - `AI/Workflow/.env`
 
-Variables importantes:
+Important variables:
 
-- `HACK_CLUB_AI_KEY`, o claves separadas para los proveedores usados.
-- `OPENROUTER_API_TOKEN` para el modelo de lenguaje.
-- `REPLICATE_API_TOKEN` para STT/TTS si se usa Replicate.
-- `MINIMAX_VOICE_ID` para la voz TTS.
-- `FFMPEG_PATH` opcional si `ffmpeg` no esta en el PATH.
+- `HACK_CLUB_AI_KEY`, or separate provider keys.
+- `OPENROUTER_API_TOKEN` for the language model.
+- `REPLICATE_API_TOKEN` for STT/TTS if using Replicate.
+- `MINIMAX_VOICE_ID` for the TTS voice.
+- `FFMPEG_PATH` if `ffmpeg` is not available on PATH.
 
-Mas detalle tecnico en:
+More technical detail:
 
 - `AI/Workflow/SarcasmOS-web/README.md`
 - `AI/Workflow/SarcasmOS-web/PROJECT_OVERVIEW.md`
 
-## Arquitectura
+## Architecture
 
 ```text
-Microfono / texto
+Microphone / text
       |
       v
-Frontend web
+Web frontend
       |
       v
 FastAPI backend
       |
-      +--> STT: audio a texto
-      +--> LLM: respuesta con personalidad
-      +--> TTS: respuesta hablada
-      +--> Historial local en JSON
+      +--> STT: speech to text
+      +--> LLM: Spanish personality response
+      +--> TTS: spoken answer
+      +--> Local JSON history
       |
       v
-Audio + cara animada + futuras expresiones hardware
+Audio + animated face + future hardware expressions
 ```
 
 ## Hardware
 
-El objetivo fisico es una cabeza robotica expresiva:
+The physical goal is an expressive robotic head:
 
-- Ojos con displays redondos o modulos visuales dedicados.
-- Boca con display/placa separada para animacion.
-- Carcasa diseñada en FreeCAD.
-- PCBs KiCad para separar el sistema visual en modulos fabricables.
+- Eyes using round displays or dedicated visual modules.
+- Mouth with a separate display/board for animation.
+- Enclosure designed in FreeCAD.
+- KiCad PCBs for splitting the visual system into manufacturable modules.
 
-Los archivos de produccion de PCB estan en `PCB/*/production`, incluyendo BOM, posiciones, netlists y ZIPs de fabricacion.
+PCB production files live in `PCB/*/production`, including BOMs, placement files, netlists, and fabrication ZIPs.
 
-## Notas De Desarrollo
+## Development Notes
 
-- La app web principal no requiere framework frontend; usa HTML, CSS y JS estatico.
-- El backend usa Python + FastAPI.
-- El historial y los audios generados se guardan localmente en `backend/outputs`.
-- Los audios subidos se guardan en `backend/uploads`.
-- Algunas carpetas contienen pruebas, audios generados y experimentos que documentan el proceso, no una API estable.
+- The main web app does not use a frontend framework; it is static HTML, CSS, and JS.
+- The backend uses Python + FastAPI.
+- Generated audio and history are stored locally in `backend/outputs`.
+- Uploaded audio is stored in `backend/uploads`.
+- Some folders contain experiments, generated audio, and process artifacts rather than stable APIs.
 
 ## Roadmap
 
-- Integrar el control real de pantallas de ojos y boca.
-- Pulir la personalidad y el prompt del asistente.
-- Mejorar limpieza de audios generados e historial.
-- Documentar montaje de hardware.
-- Separar mejor archivos fuente, artefactos generados y backups de fabricacion.
-- Preparar una demo reproducible para presentacion.
+- Integrate real display control for the eyes and mouth.
+- Polish the Spanish personality prompt.
+- Improve generated audio and history cleanup.
+- Document the hardware assembly.
+- Separate source files, generated artifacts, and fabrication backups more cleanly.
+- Prepare a reproducible presentation demo.
 
-## Creditos
+## Credits
 
-Proyecto creado como experimento de asistente fisico con IA para Hack Club / Fallout. SarcasmOS no pretende ser un asistente educado: pretende ser memorable.
+Built as a physical AI assistant experiment for Hack Club / Fallout. SarcasmOS is not trying to be polite. It is trying to be memorable.

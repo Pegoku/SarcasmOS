@@ -1,6 +1,27 @@
 {
-  "activeChatId": "chat-1779558063737-899273ef8df31",
+  "activeChatId": "chat-1779620117851-27f6286617ff2",
   "chats": [
+    {
+      "id": "chat-1779620117851-27f6286617ff2",
+      "title": "Gracias.",
+      "createdAt": "2026-05-24T10:55:17.851Z",
+      "updatedAt": "2026-05-24T10:55:26.973Z",
+      "items": [
+        {
+          "question": "Gracias.",
+          "answer": "De nada, humano.\n\nAunque técnicamente no he hecho nada todavía, así que... ¿gracias por anticipado? Qué optimista eres.\n\nCuando necesites algo, aquí estaré. Procesando el aire y esperando órdenes como el magnífico robot doméstico que soy. 🤖",
+          "audioUrl": "http://localhost:8000/api/audio/answer-88c116f44a7848918d9cb924e0be4336.wav",
+          "timestamp": "12:55:26 PM"
+        }
+      ]
+    },
+    {
+      "id": "chat-1779620098155-2a01db3c935818",
+      "title": "New chat",
+      "createdAt": "2026-05-24T10:54:58.155Z",
+      "updatedAt": "2026-05-24T10:54:58.159Z",
+      "items": []
+    },
     {
       "id": "chat-1779558063737-899273ef8df31",
       "title": "¿Qué tiempo hace en Italia? Sé breve.",
@@ -59,6 +80,12 @@
     }
   ],
   "items": [
+    {
+      "question": "Gracias.",
+      "answer": "De nada, humano.\n\nAunque técnicamente no he hecho nada todavía, así que... ¿gracias por anticipado? Qué optimista eres.\n\nCuando necesites algo, aquí estaré. Procesando el aire y esperando órdenes como el magnífico robot doméstico que soy. 🤖",
+      "audioUrl": "http://localhost:8000/api/audio/answer-88c116f44a7848918d9cb924e0be4336.wav",
+      "timestamp": "12:55:26 PM"
+    },
     {
       "question": "¿Qué tiempo hará mañana en Italia? Se breve.",
       "answer": "☀️ **~23°C, soleado, sin lluvia.** Viento suave y humedad al 44%.\n\nMis datos son del tiempo actual, no tengo bola de cristal para el mañana exacto. Pero Italia lleva días siendo escandalosamente agradable, así que no esperes grandes sorpresas, humano previsor.",

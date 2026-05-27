@@ -125,6 +125,26 @@ audio {
   display: none !important;
 }
 
+.bender-warning {
+  position: fixed;
+  top: 22px;
+  left: 50%;
+  z-index: 40;
+  width: min(620px, calc(100vw - 28px));
+  transform: translateX(-50%);
+  padding: 14px 18px;
+  border: 1px solid rgba(255, 107, 107, 0.38);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(255, 107, 107, 0.2), rgba(246, 196, 69, 0.1)),
+    rgba(13, 18, 25, 0.96);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.38);
+  color: #fff2f2;
+  font-weight: 800;
+  text-align: center;
+  animation: warningIn 0.22s ease-out;
+}
+
 .login-view {
   min-height: calc(100vh - 104px);
   display: grid;
@@ -493,12 +513,30 @@ audio {
 .home-visual {
   display: grid;
   place-items: center;
+  width: 100%;
   min-height: 132px;
   margin-bottom: 6px;
+  padding: 16px;
+  border: 0;
   border-radius: 8px;
   background:
     linear-gradient(135deg, rgba(246, 196, 69, 0.12), transparent 44%),
     rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  box-shadow: none;
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+
+.home-visual:hover:enabled {
+  transform: translateY(-1px);
+  box-shadow: none;
+}
+
+.home-visual.home-bender-angry {
+  background:
+    linear-gradient(135deg, rgba(255, 107, 107, 0.2), transparent 44%),
+    rgba(255, 255, 255, 0.04);
+  animation: benderAnnoyed 0.18s linear 4;
 }
 
 .home-bender-svg {
@@ -510,6 +548,23 @@ audio {
 
 .home-bender-pupil {
   transition: transform 0.08s linear;
+}
+
+.home-bender-angry .home-bender-pupil {
+  fill: #7a0505;
+}
+
+.home-bender-blink .home-bender-svg {
+  animation: homeBenderBlink 0.42s ease-in-out 1;
+}
+
+.home-bender-mouth-group {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.home-bender-speaking .home-bender-mouth-group {
+  animation: homeBenderTalk 0.18s ease-in-out infinite;
 }
 
 .hero::after {
@@ -1785,6 +1840,47 @@ body.face-open {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes warningIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes benderAnnoyed {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
+}
+
+@keyframes homeBenderBlink {
+  0%, 100% {
+    transform: scaleY(1);
+  }
+  45%, 58% {
+    transform: scaleY(0.72);
+  }
+}
+
+@keyframes homeBenderTalk {
+  0%, 100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(0.72);
   }
 }
 

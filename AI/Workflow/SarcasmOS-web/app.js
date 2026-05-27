@@ -3,6 +3,8 @@ let GOOGLE_CLIENT_ID = "";
 
 const loginView = document.getElementById("loginView");
 const loginBot = document.getElementById("loginBot");
+const benderWarning = document.getElementById("benderWarning");
+const homeBenderButton = document.getElementById("homeBenderButton");
 const homeBenderSvg = document.querySelector(".home-bender-svg");
 const googleLoginButton = document.getElementById("googleLoginButton");
 const loginError = document.getElementById("loginError");
@@ -91,6 +93,11 @@ const HISTORY_STORAGE_VERSION = "v2";
 const AUDIO_REPLY_STORAGE_KEY = "sarcasmos.audioReplyEnabled";
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
 const GOOGLE_TOOLS_CHECK_INTERVAL_MS = 30000;
+const BENDER_WARNING_AUDIO = [
+  "/api/audio/easteregg-warning-1.wav",
+  "/api/audio/easteregg-warning-2.wav",
+  "/api/audio/easteregg-warning-3.wav",
+];
 const DEFAULT_CHAT_ID = "default";
 let mediaRecorder = null;
 let audioChunks = [];
@@ -111,6 +118,10 @@ let googleToolsState = null;
 let googleToolsMonitor = null;
 let currentQuota = null;
 let adminConsoleOverride = false;
+let homeBenderAnnoyance = 0;
+let benderWarningTimer = null;
+let homeBenderMoodTimer = null;
+let benderWarningAudio = null;
 const audioSyncMap = new Map();
 let audioSyncEnabled = false;
 let currentUser = null;
@@ -451,6 +462,85 @@ function showError(message) {
   errorOutput.textContent = message || "";
 }
 
+function showBenderWarning(message) {
+  if (!benderWarning) {
+    return;
+  }
+  window.clearTimeout(benderWarningTimer);
+  benderWarning.textContent = message;
+  benderWarning.classList.remove("hidden");
+  benderWarningTimer = window.setTimeout(() => {
+    benderWarning.classList.add("hidden");
+    benderWarning.textContent = "";
+  }, 10000);
+}
+
+function animateHomeBenderAnger() {
+  if (!homeBenderButton) {
+    return;
+  }
+  window.clearTimeout(homeBenderMoodTimer);
+  homeBenderButton.classList.remove("home-bender-angry", "home-bender-blink");
+  void homeBenderButton.offsetWidth;
+  homeBenderButton.classList.add("home-bender-angry", "home-bender-blink");
+  homeBenderMoodTimer = window.setTimeout(() => {
+    homeBenderButton.classList.remove("home-bender-angry", "home-bender-blink");
+  }, 1400);
+}
+
+function playBenderWarningAudio(index) {
+  const src = BENDER_WARNING_AUDIO[index];
+  if (!src) {
+    return;
+  }
+  try {
+    if (benderWarningAudio) {
+      benderWarningAudio.pause();
+      benderWarningAudio.currentTime = 0;
+    }
+    benderWarningAudio = new Audio(`${API_BASE}${src}`);
+    homeBenderButton?.classList.add("home-bender-speaking");
+    const stopSpeaking = () => {
+      homeBenderButton?.classList.remove("home-bender-speaking");
+    };
+    benderWarningAudio.addEventListener("ended", stopSpeaking, { once: true });
+    benderWarningAudio.addEventListener("pause", () => {
+      if (benderWarningAudio?.ended || benderWarningAudio?.currentTime === 0) {
+        stopSpeaking();
+      }
+    });
+    benderWarningAudio.play().catch((error) => {
+      stopSpeaking();
+      console.warn("Bender warning audio playback failed.", error);
+    });
+  } catch (error) {
+    homeBenderButton?.classList.remove("home-bender-speaking");
+    console.warn("Bender warning audio setup failed.", error);
+  }
+}
+
+function annoyHomeBender() {
+  if (!currentUser?.token) {
+    return;
+  }
+  homeBenderAnnoyance += 1;
+  animateHomeBenderAnger();
+  if (homeBenderAnnoyance === 1) {
+    showBenderWarning("Si vuelves hacerlo te hecho de la pagina");
+    playBenderWarningAudio(0);
+    return;
+  }
+  if (homeBenderAnnoyance === 2) {
+    showBenderWarning("Ultima vez que te lo digo, Para ya!");
+    playBenderWarningAudio(1);
+    return;
+  }
+  showBenderWarning("Tu mismo te lo has buscado");
+  playBenderWarningAudio(2);
+  clearUserSession();
+  homeBenderAnnoyance = 0;
+}
+
 function friendlyRequestError(response, data, fallback) {
   if (response?.status === 429) {
     return "Se te han acabado los mensajes hasta la proxima semana. Pide a un admin que te reactive 5 mensajes desde el panel si necesitas seguir ahora.";
@@ -554,8 +644,8 @@ function renderAuthState() {
   const isSignedIn = Boolean(currentUser?.email && currentUser?.token);
   const isAuthorized = Boolean(currentUser?.authorized);
   const isAdmin = Boolean(currentUser?.isAdmin);
-  const canUseApp = isSignedIn && isAuthorized && (!isAdmin || adminConsoleOverride);
-  const canUseAdmin = isSignedIn && isAuthorized && isAdmin && !adminConsoleOverride;
+  const canUseApp = isSignedIn && isAuthorized && (!isAdmin || !adminConsoleOverride);
+  const canUseAdmin = isSignedIn && isAuthorized && isAdmin && adminConsoleOverride;
   if (!canUseApp) {
     closeFacePanel();
     closeVoiceChatPanel();
@@ -2071,12 +2161,13 @@ apiHealthRefresh.addEventListener("click", checkApiHealth);
 signOutBtn.addEventListener("click", clearUserSession);
 loginSignOutBtn.addEventListener("click", clearUserSession);
 adminSignOutBtn.addEventListener("click", clearUserSession);
+homeBenderButton.addEventListener("click", annoyHomeBender);
 openSarcasmConsole.addEventListener("click", () => {
-  adminConsoleOverride = true;
+  adminConsoleOverride = false;
   renderAuthState();
 });
 openAdminConsole.addEventListener("click", () => {
-  adminConsoleOverride = false;
+  adminConsoleOverride = true;
   renderAuthState();
 });
 adminRefresh.addEventListener("click", loadAdminUsers);

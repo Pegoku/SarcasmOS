@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SarcasmOS Console</title>
+    <title>SarcasmOS Home</title>
     <link rel="stylesheet" href="style.css" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
@@ -42,7 +42,7 @@
         <div class="login-copy">
           <p class="eyebrow">SarcasmOS</p>
           <h1>Sign in</h1>
-          <p class="subtitle">Use your Google account to unlock the console.</p>
+          <p class="subtitle">Use your Google account to unlock SarcasmOS.</p>
           <div id="googleLoginButton" class="google-login-button"></div>
           <p id="loginError" class="error"></p>
           <button id="loginSignOutBtn" class="ghost hidden" type="button">Sign out</button>
@@ -52,21 +52,76 @@
       </div>
     </section>
 
-    <main id="mainView" class="app view hidden" aria-hidden="true">
-      <header class="hero">
+    <main id="mainView" class="app view console-home hidden" aria-hidden="true">
+      <nav class="console-nav" aria-label="SarcasmOS navigation">
+        <div>
+          <p class="console-brand">SarcasmOS</p>
+          <span>Home</span>
+        </div>
+        <div class="console-nav-actions">
+          <button id="openAdminConsole" class="ghost hidden" type="button">Admin</button>
+          <button id="signOutBtn" class="ghost" type="button">Sign out</button>
+        </div>
+      </nav>
+
+      <header class="hero console-hero">
         <div class="hero-copy">
           <p class="eyebrow">SarcasmOS</p>
-          <h1>SarcasmOS Console</h1>
-          <p class="subtitle">Talk to Bender by voice, upload audio, or type a message.</p>
+          <h1>Meet Bender at home.</h1>
+          <p class="subtitle">A sharper way to talk, ask, listen, and get things done without opening six different tabs like a tired accountant.</p>
+          <div class="hero-actions">
+            <button id="heroVoiceChatBtn" class="accent" type="button">Start voice chat</button>
+            <button id="heroFaceViewBtn" class="ghost" type="button">Open face view</button>
+          </div>
+          <div class="home-metrics" aria-label="SarcasmOS status">
+            <div>
+              <strong>Voice</strong>
+              <span>Ready</span>
+            </div>
+            <div>
+              <strong>Text</strong>
+              <span>Ready</span>
+            </div>
+            <div>
+              <strong>Calendar</strong>
+              <span>Optional</span>
+            </div>
+          </div>
         </div>
         <div class="status-card">
+          <div class="home-visual" aria-hidden="true">
+            <svg class="home-bender-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%" aria-hidden="true">
+              <defs>
+                <filter id="homeBenderShadow" x="-10%" y="-10%" width="120%" height="120%">
+                  <feDropShadow dx="3" dy="5" stdDeviation="3" flood-opacity="0.3"/>
+                </filter>
+              </defs>
+              <g>
+                <rect x="30" y="50" width="340" height="150" rx="75" fill="#FFFFFF" stroke="#000000" stroke-width="8" filter="url(#homeBenderShadow)" />
+                <rect x="42" y="62" width="316" height="126" rx="63" fill="#000000" />
+                <path d="M 60,125 C 60,90 85,75 120,75 C 160,75 190,95 190,125 C 190,160 160,175 120,175 C 80,175 60,155 60,125 Z" fill="#FFFFFF" />
+                <rect class="home-bender-pupil" x="110" y="110" width="22" height="22" fill="#000000" transform="rotate(8 121 121)" />
+                <path d="M 210,125 C 210,95 240,75 280,75 C 315,75 340,90 340,125 C 340,155 320,175 280,175 C 240,175 210,160 210,125 Z" fill="#FFFFFF" />
+                <rect class="home-bender-pupil" x="270" y="108" width="22" height="22" fill="#000000" transform="rotate(-5 281 119)" />
+                <g>
+                  <rect x="120" y="230" width="180" height="100" rx="45" fill="#FFFFFF" stroke="#000000" stroke-width="9" filter="url(#homeBenderShadow)" />
+                  <path d="M 125,263 Q 210,265 295,263" stroke="#000000" stroke-width="6" fill="none" />
+                  <path d="M 125,296 Q 210,300 295,296" stroke="#000000" stroke-width="6" fill="none" />
+                  <path d="M 153,237 V 323" stroke="#000000" stroke-width="5" />
+                  <path d="M 185,232 V 328" stroke="#000000" stroke-width="5" />
+                  <path d="M 217,231 V 329" stroke="#000000" stroke-width="5" />
+                  <path d="M 249,232 V 328" stroke="#000000" stroke-width="5" />
+                  <path d="M 279,239 V 321" stroke="#000000" stroke-width="5" />
+                </g>
+              </g>
+            </svg>
+          </div>
           <div id="userBadge" class="user-badge hidden">
             <img id="userAvatar" alt="" />
             <div>
               <p id="userName">Signed in</p>
               <span id="userEmail"></span>
             </div>
-            <button id="signOutBtn" class="ghost" type="button">Sign out</button>
           </div>
           <div class="status-heading">
             <p class="status-label">Robot status</p>
@@ -77,11 +132,11 @@
         </div>
       </header>
 
-      <section class="quick-actions" aria-label="Bender views">
+      <section class="quick-actions feature-strip" aria-label="Bender views">
         <div class="face-callout face-callout--top">
           <div>
-            <p class="label">Face view</p>
-            <p class="subtitle">Show the animated face while Bender speaks.</p>
+            <p class="label">Live face</p>
+            <p class="subtitle">Big screen mode for Bender.</p>
           </div>
           <button id="openFaceView" class="accent">Open face view</button>
         </div>
@@ -89,17 +144,13 @@
         <div class="face-callout face-callout--top">
           <div>
             <p class="label">Voice chat</p>
-            <p class="subtitle">Use saved chats with context and audio replies.</p>
+            <p class="subtitle">Conversation mode with memory.</p>
           </div>
           <button id="openVoiceChatView" class="accent">Open voice chat</button>
         </div>
       </section>
 
-      <section class="panel chat-settings-panel" aria-label="Chat settings">
-        <div class="panel-title-row">
-          <h2>Chat Settings</h2>
-          <span class="step-pill">Cost</span>
-        </div>
+      <section class="panel chat-settings-panel slim-panel" aria-label="Chat settings">
         <label class="toggle-row">
           <span>
             <span class="label">Audio reply</span>
@@ -109,18 +160,7 @@
         </label>
       </section>
 
-      <section id="adminPanel" class="panel admin-panel hidden" aria-label="Admin panel">
-        <div class="history-header">
-          <div>
-            <h2>Admin Panel</h2>
-            <p class="helper-text">Authorize users and manage admin access.</p>
-          </div>
-          <button id="adminRefresh" class="ghost" type="button">Refresh users</button>
-        </div>
-        <div id="adminUsersList" class="admin-users-list"></div>
-      </section>
-
-      <section id="googleToolsPanel" class="panel google-tools-panel" aria-label="Google tools">
+      <section id="googleToolsPanel" class="panel google-tools-panel slim-panel" aria-label="Google tools">
         <div class="history-header">
           <div>
             <h2>Google Tools</h2>
@@ -142,7 +182,12 @@
         <p id="googleToolsError" class="error"></p>
       </section>
 
-      <div class="console-grid">
+      <section class="section-heading">
+        <p class="eyebrow">Talk to Bender</p>
+        <h2>Send the next message</h2>
+      </section>
+
+      <div class="console-grid console-input-grid">
         <section class="panel input-panel">
           <div class="panel-title-row">
             <h2>Audio Input</h2>
@@ -195,6 +240,39 @@
         <p id="errorOutput" class="error"></p>
       </section>
 
+    </main>
+
+    <main id="adminView" class="app view hidden" aria-hidden="true">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">SarcasmOS</p>
+          <h1>Admin Console</h1>
+          <p class="subtitle">Manage users, inspect chat history, and check API health.</p>
+        </div>
+        <div class="status-card">
+          <div class="user-badge">
+            <img id="adminUserAvatar" alt="" />
+            <div>
+              <p id="adminUserName">Admin</p>
+              <span id="adminUserEmail"></span>
+            </div>
+            <button id="openSarcasmConsole" class="accent" type="button">SarcasmOS Home</button>
+            <button id="adminSignOutBtn" class="ghost" type="button">Sign out</button>
+          </div>
+        </div>
+      </header>
+
+      <section id="adminPanel" class="panel admin-panel" aria-label="Admin panel">
+        <div class="history-header">
+          <div>
+            <h2>Admin Panel</h2>
+            <p class="helper-text">Authorize users and manage admin access.</p>
+          </div>
+          <button id="adminRefresh" class="ghost" type="button">Refresh users</button>
+        </div>
+        <div id="adminUsersList" class="admin-users-list"></div>
+      </section>
+
       <section class="panel api-health-panel">
         <div class="history-header">
           <div>
@@ -216,7 +294,6 @@
         </div>
         <div id="historyList" class="history-list"></div>
       </section>
-
     </main>
 
     <section id="faceView" class="face-view hidden" aria-hidden="true">
@@ -312,7 +389,7 @@
           <div id="faceHistoryList" class="history-list"></div>
         </div>
       </div>
-      <button id="closeFaceView" class="accent">Back to console</button>
+      <button id="closeFaceView" class="accent">Back to home</button>
     </section>
 
     <section id="voiceChatView" class="voice-chat-view hidden" aria-hidden="true">
@@ -356,7 +433,7 @@
         <span>Eh...</span>
         <span>Ah...</span>
       </div>
-      <button id="closeVoiceChatView" class="accent">Back to console</button>
+      <button id="closeVoiceChatView" class="accent">Back to home</button>
     </section>
 
     <script src="app.js"></script>

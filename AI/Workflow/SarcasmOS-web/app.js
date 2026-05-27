@@ -3,6 +3,7 @@ let GOOGLE_CLIENT_ID = "";
 
 const loginView = document.getElementById("loginView");
 const loginBot = document.getElementById("loginBot");
+const homeBenderSvg = document.querySelector(".home-bender-svg");
 const googleLoginButton = document.getElementById("googleLoginButton");
 const loginError = document.getElementById("loginError");
 const loginSignOutBtn = document.getElementById("loginSignOutBtn");
@@ -11,6 +12,13 @@ const userAvatar = document.getElementById("userAvatar");
 const userName = document.getElementById("userName");
 const userEmail = document.getElementById("userEmail");
 const signOutBtn = document.getElementById("signOutBtn");
+const openAdminConsole = document.getElementById("openAdminConsole");
+const adminView = document.getElementById("adminView");
+const adminUserAvatar = document.getElementById("adminUserAvatar");
+const adminUserName = document.getElementById("adminUserName");
+const adminUserEmail = document.getElementById("adminUserEmail");
+const adminSignOutBtn = document.getElementById("adminSignOutBtn");
+const openSarcasmConsole = document.getElementById("openSarcasmConsole");
 const adminPanel = document.getElementById("adminPanel");
 const adminRefresh = document.getElementById("adminRefresh");
 const adminUsersList = document.getElementById("adminUsersList");
@@ -42,6 +50,8 @@ const faceView = document.getElementById("faceView");
 const voiceChatView = document.getElementById("voiceChatView");
 const openFaceView = document.getElementById("openFaceView");
 const openVoiceChatView = document.getElementById("openVoiceChatView");
+const heroFaceViewBtn = document.getElementById("heroFaceViewBtn");
+const heroVoiceChatBtn = document.getElementById("heroVoiceChatBtn");
 const closeFaceView = document.getElementById("closeFaceView");
 const closeVoiceChatView = document.getElementById("closeVoiceChatView");
 const faceUploadInput = document.getElementById("faceUploadInput");
@@ -100,6 +110,7 @@ let audioReplyEnabled = true;
 let googleToolsState = null;
 let googleToolsMonitor = null;
 let currentQuota = null;
+let adminConsoleOverride = false;
 const audioSyncMap = new Map();
 let audioSyncEnabled = false;
 let currentUser = null;
@@ -522,6 +533,7 @@ function clearUserSession() {
   const token = currentUser?.token;
   currentUser = null;
   currentQuota = null;
+  adminConsoleOverride = false;
   stopGoogleToolsMonitor();
   renderGoogleToolsStatus(null);
   try {
@@ -541,18 +553,23 @@ function clearUserSession() {
 function renderAuthState() {
   const isSignedIn = Boolean(currentUser?.email && currentUser?.token);
   const isAuthorized = Boolean(currentUser?.authorized);
-  const canUseApp = isSignedIn && isAuthorized;
+  const isAdmin = Boolean(currentUser?.isAdmin);
+  const canUseApp = isSignedIn && isAuthorized && (!isAdmin || adminConsoleOverride);
+  const canUseAdmin = isSignedIn && isAuthorized && isAdmin && !adminConsoleOverride;
   if (!canUseApp) {
     closeFacePanel();
     closeVoiceChatPanel();
   }
-  loginView?.classList.toggle("hidden", canUseApp);
+  loginView?.classList.toggle("hidden", canUseApp || canUseAdmin);
   mainView?.classList.toggle("hidden", !canUseApp);
   mainView?.setAttribute("aria-hidden", canUseApp ? "false" : "true");
-  adminPanel?.classList.toggle("hidden", !currentUser?.isAdmin);
+  adminView?.classList.toggle("hidden", !canUseAdmin);
+  adminView?.setAttribute("aria-hidden", canUseAdmin ? "false" : "true");
+  adminPanel?.classList.toggle("hidden", !canUseAdmin);
   googleToolsPanel?.classList.toggle("hidden", !canUseApp);
   loginSignOutBtn?.classList.toggle("hidden", !isSignedIn);
   googleLoginButton?.classList.toggle("hidden", isSignedIn);
+  openAdminConsole?.classList.toggle("hidden", !isAdmin);
   if (canUseApp) {
     startGoogleToolsMonitor();
   } else {
@@ -572,6 +589,16 @@ function renderAuthState() {
   if (userAvatar) {
     userAvatar.src = currentUser?.picture || "";
     userAvatar.classList.toggle("hidden", !currentUser?.picture);
+  }
+  if (adminUserName) {
+    adminUserName.textContent = currentUser?.name || "Admin";
+  }
+  if (adminUserEmail) {
+    adminUserEmail.textContent = currentUser?.email || "";
+  }
+  if (adminUserAvatar) {
+    adminUserAvatar.src = currentUser?.picture || "";
+    adminUserAvatar.classList.toggle("hidden", !currentUser?.picture);
   }
 }
 
@@ -895,6 +922,54 @@ function initLoginBotLook() {
     const distance = Math.min(1, Math.hypot(avgX, avgY) / 170);
     const x = Math.round(Math.cos(angle) * distance * 15);
     const y = Math.round(Math.sin(angle) * distance * 10);
+    setPupils(x, y);
+  });
+  document.addEventListener("pointerleave", () => setPupils(0, 0));
+}
+
+function initHomeBenderLook() {
+  if (!homeBenderSvg) {
+    return;
+  }
+  const pupils = Array.from(homeBenderSvg.querySelectorAll(".home-bender-pupil"));
+  if (!pupils.length) {
+    return;
+  }
+  const pupilStates = pupils.map((pupil) => {
+    const baseTransform = pupil.getAttribute("transform") || "";
+    const centerX = Number(pupil.getAttribute("x") || 0) + Number(pupil.getAttribute("width") || 0) / 2;
+    const centerY = Number(pupil.getAttribute("y") || 0) + Number(pupil.getAttribute("height") || 0) / 2;
+    return { pupil, baseTransform, centerX, centerY };
+  });
+  const setPupils = (x, y) => {
+    for (const state of pupilStates) {
+      state.pupil.setAttribute("transform", `translate(${x} ${y}) ${state.baseTransform}`);
+    }
+  };
+  document.addEventListener("pointermove", (event) => {
+    if (mainView?.classList.contains("hidden")) {
+      return;
+    }
+    const point = homeBenderSvg.createSVGPoint();
+    point.x = event.clientX;
+    point.y = event.clientY;
+    const matrix = homeBenderSvg.getScreenCTM();
+    if (!matrix) {
+      return;
+    }
+    const cursor = point.matrixTransform(matrix.inverse());
+    let totalX = 0;
+    let totalY = 0;
+    for (const state of pupilStates) {
+      totalX += cursor.x - state.centerX;
+      totalY += cursor.y - state.centerY;
+    }
+    const avgX = totalX / pupilStates.length;
+    const avgY = totalY / pupilStates.length;
+    const angle = Math.atan2(avgY, avgX);
+    const distance = Math.min(1, Math.hypot(avgX, avgY) / 170);
+    const x = Math.round(Math.cos(angle) * distance * 14);
+    const y = Math.round(Math.sin(angle) * distance * 9);
     setPupils(x, y);
   });
   document.addEventListener("pointerleave", () => setPupils(0, 0));
@@ -1995,6 +2070,15 @@ statusBtn.addEventListener("click", refreshStatus);
 apiHealthRefresh.addEventListener("click", checkApiHealth);
 signOutBtn.addEventListener("click", clearUserSession);
 loginSignOutBtn.addEventListener("click", clearUserSession);
+adminSignOutBtn.addEventListener("click", clearUserSession);
+openSarcasmConsole.addEventListener("click", () => {
+  adminConsoleOverride = true;
+  renderAuthState();
+});
+openAdminConsole.addEventListener("click", () => {
+  adminConsoleOverride = false;
+  renderAuthState();
+});
 adminRefresh.addEventListener("click", loadAdminUsers);
 googleToolsRefresh.addEventListener("click", () => loadGoogleToolsStatus({ check: true }));
 connectGoogleCalendar.addEventListener("click", connectCalendarTool);
@@ -2042,6 +2126,8 @@ openFaceView.addEventListener("click", () => {
   startBlinkLoop();
 });
 
+heroFaceViewBtn.addEventListener("click", () => openFaceView.click());
+
 openVoiceChatView.addEventListener("click", () => {
   mainView.classList.add("hidden");
   voiceChatView.classList.remove("hidden");
@@ -2051,6 +2137,8 @@ openVoiceChatView.addEventListener("click", () => {
   startBlinkLoop();
   renderAllHistoryViews();
 });
+
+heroVoiceChatBtn.addEventListener("click", () => openVoiceChatView.click());
 
 closeFaceView.addEventListener("click", closeFacePanel);
 closeVoiceChatView.addEventListener("click", closeVoiceChatPanel);
@@ -2123,6 +2211,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initSvgRefs();
   setLookDirection("look-center");
   initLoginBotLook();
+  initHomeBenderLook();
   await initAuth();
   loadVoiceChatFontScale();
   loadAudioReplyPreference();

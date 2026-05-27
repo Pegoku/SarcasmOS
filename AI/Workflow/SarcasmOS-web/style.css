@@ -153,7 +153,7 @@ audio {
 }
 
 .login-shell {
-  width: min(460px, 100%);
+  width: min(560px, 100%);
   display: grid;
   justify-items: center;
   position: relative;
@@ -175,6 +175,7 @@ audio {
   position: relative;
   z-index: 1;
   overflow: hidden;
+  margin-top: 28px;
 }
 
 .login-panel::after {
@@ -221,9 +222,9 @@ audio {
 .login-bot {
   display: grid;
   place-items: center;
-  width: min(390px, 86vw);
-  height: 180px;
-  margin-bottom: 14px;
+  width: min(520px, 96vw);
+  height: min(430px, 78vw);
+  margin-bottom: 0;
   background: transparent;
   border: 0;
   box-shadow: none;
@@ -231,8 +232,8 @@ audio {
 }
 
 .login-bot svg {
-  width: 100%;
-  height: auto;
+  width: auto;
+  height: 100%;
   overflow: visible;
   filter: drop-shadow(0 16px 10px rgba(0, 0, 0, 0.34));
   animation: loginBotFloat 5.4s ease-in-out infinite;
@@ -240,7 +241,9 @@ audio {
 
 .login-bot-visor-outer,
 .login-bot-mouth-outer {
-  fill: #05070a;
+  fill: #f8fbff;
+  stroke: #05070a;
+  stroke-width: 9;
 }
 
 .login-bot-visor-ring {
@@ -253,10 +256,7 @@ audio {
 
 .login-bot-eye-white {
   fill: #fbfbfa;
-}
-
-.login-bot-mouth-inner {
-  fill: #fbfbfa;
+  stroke: none;
 }
 
 .login-bot-mouth-line,
@@ -274,12 +274,34 @@ audio {
 
 .login-bot-pupil {
   fill: #060a0f;
+  transition: transform 0.08s linear;
+  will-change: transform;
 }
 
-.login-bot-mouth rect {
-  fill: rgba(248, 252, 255, 0.94);
-  stroke: rgba(4, 8, 13, 0.92);
-  stroke-width: 7;
+.login-bot-eye-white {
+  stroke: none;
+}
+
+.login-bot-mouth-outer {
+  fill: #fbfbfa;
+  stroke: #05070a;
+  stroke-width: 9;
+}
+
+.login-bot-mouth-inner {
+  fill: #fbfbfa;
+  stroke: none;
+}
+
+.login-bot-face {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.login-bot-eye-group {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: loginBotBlink 4.8s ease-in-out infinite;
 }
 
 @keyframes loginBotFloat {
@@ -288,6 +310,15 @@ audio {
   }
   50% {
     transform: translateY(-10px) rotate(1deg);
+  }
+}
+
+@keyframes loginBotBlink {
+  0%, 92%, 100% {
+    transform: scaleY(1);
+  }
+  94%, 96% {
+    transform: scaleY(0.1);
   }
 }
 
@@ -518,6 +549,44 @@ h2 {
   align-items: center;
 }
 
+.toggle-row,
+.compact-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toggle-row {
+  justify-content: space-between;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.toggle-row .helper-text {
+  display: block;
+  margin: 3px 0 0;
+}
+
+.toggle-row input,
+.compact-toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+.compact-toggle {
+  min-height: 44px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
 .text-controls {
   margin-top: 20px;
 }
@@ -623,15 +692,95 @@ h2 {
   gap: 10px;
 }
 
+.google-tool-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.google-tool-row .helper-text {
+  margin-bottom: 0;
+}
+
+.tool-help-link {
+  display: inline-block;
+  margin-top: 8px;
+  color: var(--accent);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.tool-help-link:hover {
+  text-decoration: underline;
+}
+
 .admin-user {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto auto;
+  grid-template-columns: 42px minmax(0, 1fr) auto auto auto auto;
   align-items: center;
   gap: 12px;
   padding: 14px;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.035);
+}
+
+.admin-chat-summary {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  padding-top: 8px;
+}
+
+.admin-chat-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.admin-chat-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-chat-item p {
+  margin: 0;
+  color: var(--text);
+}
+
+.admin-chat-item span,
+.admin-chat-item small {
+  color: var(--muted);
+}
+
+.admin-chat-turn {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 10px;
+  border-left: 2px solid rgba(246, 196, 69, 0.45);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.admin-chat-turn-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-chat-turn p {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .admin-user img {
@@ -1518,21 +1667,38 @@ body.face-open {
 @media (max-width: 760px) {
   body {
     padding: 24px 14px 48px;
+    overflow-x: hidden;
   }
 
   .login-view {
+    width: 100%;
+    max-width: 100vw;
     padding: 12px 0;
   }
 
+  .login-shell {
+    width: min(100%, calc(100vw - 28px));
+  }
+
   .login-panel {
-    padding: 24px;
+    width: min(310px, calc(100vw - 56px));
+    max-width: 100%;
+    min-width: 0;
+    padding: 22px;
+  }
+
+  .login-copy,
+  .login-panel .subtitle,
+  .login-note {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .login-bot {
-    width: min(320px, 88vw);
-    height: 150px;
+    width: min(340px, calc(100vw - 28px));
+    height: min(300px, 76vw);
     min-height: 0;
-    margin-bottom: 10px;
+    margin-bottom: 0;
   }
 
   .login-bot svg {
@@ -1540,7 +1706,7 @@ body.face-open {
   }
 
   .login-panel h1 {
-    font-size: clamp(3rem, 16vw, 4.8rem);
+    font-size: clamp(2.5rem, 14vw, 3.8rem);
   }
 
   .hero {
@@ -1575,6 +1741,10 @@ body.face-open {
 
   .admin-user {
     grid-template-columns: 36px minmax(0, 1fr);
+  }
+
+  .google-tool-row {
+    grid-template-columns: 1fr;
   }
 
   .admin-user label {

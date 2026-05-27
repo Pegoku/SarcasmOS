@@ -1,6 +1,5 @@
-let API_BASE = "http://localhost:8000";
+let API_BASE = "";
 let GOOGLE_CLIENT_ID = "";
-const API_BASE_CANDIDATES = ["http://localhost:8000", "http://localhost:8001"];
 
 const loginView = document.getElementById("loginView");
 const loginBot = document.getElementById("loginBot");
@@ -15,6 +14,13 @@ const signOutBtn = document.getElementById("signOutBtn");
 const adminPanel = document.getElementById("adminPanel");
 const adminRefresh = document.getElementById("adminRefresh");
 const adminUsersList = document.getElementById("adminUsersList");
+const googleToolsPanel = document.getElementById("googleToolsPanel");
+const googleToolsRefresh = document.getElementById("googleToolsRefresh");
+const googleCalendarStatus = document.getElementById("googleCalendarStatus");
+const googleCalendarHelp = document.getElementById("googleCalendarHelp");
+const connectGoogleCalendar = document.getElementById("connectGoogleCalendar");
+const disconnectGoogleCalendar = document.getElementById("disconnectGoogleCalendar");
+const googleToolsError = document.getElementById("googleToolsError");
 const uploadInput = document.getElementById("uploadInput");
 const uploadSend = document.getElementById("uploadSend");
 const recordBtn = document.getElementById("recordBtn");
@@ -30,6 +36,7 @@ const statusBtn = document.getElementById("statusBtn");
 const statusOutput = document.getElementById("statusOutput");
 const apiHealthRefresh = document.getElementById("apiHealthRefresh");
 const apiHealthList = document.getElementById("apiHealthList");
+const audioReplyToggle = document.getElementById("audioReplyToggle");
 const mainView = document.getElementById("mainView");
 const faceView = document.getElementById("faceView");
 const voiceChatView = document.getElementById("voiceChatView");
@@ -51,6 +58,7 @@ const voiceChatList = document.getElementById("voiceChatList");
 const voiceChatRecordBtn = document.getElementById("voiceChatRecordBtn");
 const voiceChatStopBtn = document.getElementById("voiceChatStopBtn");
 const voiceChatTextInput = document.getElementById("voiceChatTextInput");
+const voiceChatAudioReplyToggle = document.getElementById("voiceChatAudioReplyToggle");
 const voiceChatTextSend = document.getElementById("voiceChatTextSend");
 const voiceChatRecordState = document.getElementById("voiceChatRecordState");
 const voiceChatNewChat = document.getElementById("voiceChatNewChat");
@@ -69,6 +77,10 @@ let svgMouthGroup = null;
 const HISTORY_STORAGE_KEY = "sarcasmos.chatHistory";
 const CHAT_FONT_STORAGE_KEY = "sarcasmos.voiceChatFontScale";
 const AUTH_STORAGE_KEY = "sarcasmos.googleUser";
+const HISTORY_STORAGE_VERSION = "v2";
+const AUDIO_REPLY_STORAGE_KEY = "sarcasmos.audioReplyEnabled";
+const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+const GOOGLE_TOOLS_CHECK_INTERVAL_MS = 30000;
 const DEFAULT_CHAT_ID = "default";
 let mediaRecorder = null;
 let audioChunks = [];
@@ -84,6 +96,10 @@ let thinkTimer = null;
 let thinkLongTimer = null;
 let isBusy = false;
 let voiceChatFontScale = 1;
+let audioReplyEnabled = true;
+let googleToolsState = null;
+let googleToolsMonitor = null;
+let currentQuota = null;
 const audioSyncMap = new Map();
 let audioSyncEnabled = false;
 let currentUser = null;
@@ -424,6 +440,13 @@ function showError(message) {
   errorOutput.textContent = message || "";
 }
 
+function friendlyRequestError(response, data, fallback) {
+  if (response?.status === 429) {
+    return "Se te han acabado los mensajes hasta la proxima semana. Pide a un admin que te reactive 5 mensajes desde el panel si necesitas seguir ahora.";
+  }
+  return data?.error || fallback;
+}
+
 function showLoginError(message) {
   if (loginError) {
     loginError.textContent = message || "";
@@ -434,9 +457,14 @@ function authHeaders() {
   return currentUser?.token ? { Authorization: `Bearer ${currentUser.token}` } : {};
 }
 
+function userHistoryStorageKey() {
+  const email = String(currentUser?.email || "anonymous").trim().toLowerCase();
+  return `${HISTORY_STORAGE_KEY}.${HISTORY_STORAGE_VERSION}.${email}`;
+}
+
 async function loadPublicConfig() {
   const errors = [];
-  for (const baseUrl of API_BASE_CANDIDATES) {
+  for (const baseUrl of apiBaseCandidates()) {
     try {
       const response = await fetch(`${baseUrl}/api/config`, { cache: "no-store" });
       if (!response.ok) {
@@ -451,6 +479,16 @@ async function loadPublicConfig() {
     }
   }
   throw new Error(`Backend config unavailable. ${errors.join(" | ")}`);
+}
+
+function apiBaseCandidates() {
+  const sameOrigin = "";
+  const localBackends = ["http://localhost:8000", "http://localhost:8001"];
+  const isLocalhost = ["localhost", "127.0.0.1", ""].includes(window.location.hostname);
+  if (!isLocalhost || window.location.port === "9000") {
+    return [sameOrigin, ...localBackends];
+  }
+  return [...localBackends, sameOrigin];
 }
 
 function saveUserSession(user) {
@@ -483,6 +521,9 @@ function loadUserSession() {
 function clearUserSession() {
   const token = currentUser?.token;
   currentUser = null;
+  currentQuota = null;
+  stopGoogleToolsMonitor();
+  renderGoogleToolsStatus(null);
   try {
     localStorage.removeItem(AUTH_STORAGE_KEY);
   } catch (error) {
@@ -509,8 +550,14 @@ function renderAuthState() {
   mainView?.classList.toggle("hidden", !canUseApp);
   mainView?.setAttribute("aria-hidden", canUseApp ? "false" : "true");
   adminPanel?.classList.toggle("hidden", !currentUser?.isAdmin);
+  googleToolsPanel?.classList.toggle("hidden", !canUseApp);
   loginSignOutBtn?.classList.toggle("hidden", !isSignedIn);
   googleLoginButton?.classList.toggle("hidden", isSignedIn);
+  if (canUseApp) {
+    startGoogleToolsMonitor();
+  } else {
+    stopGoogleToolsMonitor();
+  }
 
   if (userBadge) {
     userBadge.classList.toggle("hidden", !canUseApp);
@@ -544,7 +591,10 @@ async function loginWithGoogle(credential) {
     if (!response.ok) {
       throw new Error(data.error || "Google sign-in failed.");
     }
-    saveUserSession({ ...data.user, token: data.token });
+    saveUserSession({ ...data.user, token: data.token, sessionExpiresAt: data.expiresAt || "" });
+    currentQuota = data.quota || null;
+    await loadHistory();
+    renderAllHistoryViews();
     if (!data.user.authorized) {
       showLoginError("Your Google account is signed in, but an admin must authorize access.");
     }
@@ -584,34 +634,270 @@ function renderGoogleButton() {
   });
 }
 
+function setGoogleToolsError(message) {
+  if (googleToolsError) {
+    googleToolsError.textContent = message || "";
+  }
+}
+
+function formatGoogleToolCheckTime(value) {
+  if (!value) {
+    return "";
+  }
+  const checkedAt = new Date(value);
+  if (Number.isNaN(checkedAt.getTime())) {
+    return "";
+  }
+  return checkedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function renderGoogleToolsStatus(status) {
+  googleToolsState = status || null;
+  const calendar = status?.calendar || {};
+  const connected = Boolean(calendar.connected);
+  const configured = Boolean(calendar.configured || calendar.expiresAt || calendar.error);
+  const needsReconnect = Boolean(calendar.needsReconnect || (configured && !connected));
+  const checkedLabel = formatGoogleToolCheckTime(calendar.lastCheckedAt);
+  if (googleCalendarStatus) {
+    if (connected) {
+      const suffix = checkedLabel ? ` - checked ${checkedLabel}` : "";
+      googleCalendarStatus.textContent = `Connected until ${new Date(calendar.expiresAt).toLocaleString()}${suffix}`;
+    } else if (calendar.error) {
+      googleCalendarStatus.textContent = calendar.error;
+    } else if (calendar.expiresAt) {
+      googleCalendarStatus.textContent = "Permission expired. Reconnect Calendar.";
+    } else {
+      googleCalendarStatus.textContent = "Not connected.";
+    }
+  }
+  if (googleCalendarHelp) {
+    googleCalendarHelp.href = calendar.helpUrl || "#";
+    googleCalendarHelp.classList.toggle("hidden", !calendar.helpUrl);
+  }
+  if (connectGoogleCalendar) {
+    connectGoogleCalendar.textContent = connected || needsReconnect ? "Reconnect Calendar" : "Connect Calendar";
+  }
+  if (disconnectGoogleCalendar) {
+    disconnectGoogleCalendar.disabled = !configured;
+  }
+}
+
+async function loadGoogleToolsStatus(options = {}) {
+  if (!currentUser?.authorized) {
+    return;
+  }
+  const check = Boolean(options.check);
+  const quiet = Boolean(options.quiet);
+  if (!quiet) {
+    setGoogleToolsError("");
+  }
+  try {
+    const suffix = check ? "?check=1" : "";
+    const response = await fetch(`${API_BASE}/api/google-tools${suffix}`, {
+      headers: authHeaders(),
+      cache: "no-store",
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to load Google tools.");
+    }
+    renderGoogleToolsStatus(data);
+    if (!quiet && data?.calendar?.error) {
+      setGoogleToolsError(data.calendar.error);
+    }
+    return data;
+  } catch (error) {
+    if (!quiet) {
+      setGoogleToolsError(error.message || "Failed to load Google tools.");
+    }
+    return null;
+  }
+}
+
+function startGoogleToolsMonitor() {
+  if (googleToolsMonitor || !currentUser?.authorized) {
+    return;
+  }
+  checkGoogleToolsConnection({ quiet: true });
+  googleToolsMonitor = window.setInterval(() => {
+    checkGoogleToolsConnection({ quiet: true });
+  }, GOOGLE_TOOLS_CHECK_INTERVAL_MS);
+}
+
+function stopGoogleToolsMonitor() {
+  if (!googleToolsMonitor) {
+    return;
+  }
+  window.clearInterval(googleToolsMonitor);
+  googleToolsMonitor = null;
+}
+
+function requestGoogleCalendarToken(prompt = "consent") {
+  return new Promise((resolve, reject) => {
+    if (!GOOGLE_CLIENT_ID) {
+      reject(new Error("GOOGLE_CLIENT_ID is not configured."));
+      return;
+    }
+    if (!window.google?.accounts?.oauth2) {
+      reject(new Error("Google OAuth client is not loaded yet."));
+      return;
+    }
+    const tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: GOOGLE_CALENDAR_SCOPE,
+      prompt,
+      callback: (response) => {
+        if (response.error) {
+          reject(new Error(response.error_description || response.error));
+          return;
+        }
+        resolve(response);
+      },
+    });
+    tokenClient.requestAccessToken();
+  });
+}
+
+async function connectCalendarTool() {
+  setGoogleToolsError("");
+  if (connectGoogleCalendar) {
+    connectGoogleCalendar.disabled = true;
+  }
+  try {
+    const token = await requestGoogleCalendarToken("consent");
+    const response = await fetch(`${API_BASE}/api/google-tools/calendar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({
+        accessToken: token.access_token,
+        expiresIn: Number(token.expires_in || 3600),
+        scope: token.scope || GOOGLE_CALENDAR_SCOPE,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to connect Google Calendar.");
+    }
+    renderGoogleToolsStatus(data);
+  } catch (error) {
+    setGoogleToolsError(error.message || "Failed to connect Google Calendar.");
+  } finally {
+    if (connectGoogleCalendar) {
+      connectGoogleCalendar.disabled = false;
+    }
+  }
+}
+
+async function refreshCalendarToolIfNeeded() {
+  const calendar = googleToolsState?.calendar;
+  if (!calendar?.expiresAt) {
+    return;
+  }
+  const expiresAt = new Date(calendar.expiresAt).getTime();
+  if (Number.isNaN(expiresAt) || expiresAt - Date.now() > 120000) {
+    return;
+  }
+  try {
+    const token = await requestGoogleCalendarToken("");
+    const response = await fetch(`${API_BASE}/api/google-tools/calendar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({
+        accessToken: token.access_token,
+        expiresIn: Number(token.expires_in || 3600),
+        scope: token.scope || GOOGLE_CALENDAR_SCOPE,
+      }),
+    });
+    const data = await response.json();
+    if (response.ok) {
+      renderGoogleToolsStatus(data);
+    }
+  } catch (error) {
+    console.warn("Google Calendar silent refresh failed.", error);
+    renderGoogleToolsStatus({
+      calendar: {
+        connected: false,
+        expiresAt: calendar.expiresAt,
+        scope: calendar.scope || GOOGLE_CALENDAR_SCOPE,
+      },
+    });
+  }
+}
+
+async function checkGoogleToolsConnection(options = {}) {
+  await refreshCalendarToolIfNeeded();
+  if (googleToolsState?.calendar?.needsReconnect) {
+    return googleToolsState;
+  }
+  return loadGoogleToolsStatus({ check: true, quiet: Boolean(options.quiet) });
+}
+
+async function disconnectCalendarTool() {
+  setGoogleToolsError("");
+  try {
+    const response = await fetch(`${API_BASE}/api/google-tools/calendar`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to disconnect Google Calendar.");
+    }
+    renderGoogleToolsStatus(data);
+  } catch (error) {
+    setGoogleToolsError(error.message || "Failed to disconnect Google Calendar.");
+  }
+}
+
 function initLoginBotLook() {
   if (!loginBot) {
     return;
   }
-  let eyes = Array.from(loginBot.querySelectorAll(".login-bot-eye-group"));
-  if (!eyes.length) {
-    eyes = Array.from(loginBot.querySelectorAll(".login-bot-eye"));
-  }
-  if (!eyes.length) {
+  const pupils = Array.from(loginBot.querySelectorAll(".login-bot-pupil"));
+  if (!pupils.length) {
     return;
   }
-  const setEyes = (x, y) => {
-    for (const eye of eyes) {
-      eye.style.transform = `translate(${x}px, ${y}px)`;
+  const pupilStates = pupils.map((pupil) => {
+    const baseTransform = pupil.getAttribute("transform") || "";
+    const centerX = Number(pupil.getAttribute("x") || 0) + Number(pupil.getAttribute("width") || 0) / 2;
+    const centerY = Number(pupil.getAttribute("y") || 0) + Number(pupil.getAttribute("height") || 0) / 2;
+    return { pupil, baseTransform, centerX, centerY };
+  });
+  const setPupils = (x, y) => {
+    for (const state of pupilStates) {
+      state.pupil.setAttribute(
+        "transform",
+        `translate(${x} ${y}) ${state.baseTransform}`
+      );
     }
   };
   document.addEventListener("pointermove", (event) => {
     if (loginView?.classList.contains("hidden")) {
       return;
     }
-    const rect = loginBot.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-    const dx = Math.max(-1, Math.min(1, (event.clientX - centerX) / (window.innerWidth * 0.32)));
-    const dy = Math.max(-1, Math.min(1, (event.clientY - centerY) / (window.innerHeight * 0.28)));
-    setEyes(Math.round(dx * 16), Math.round(dy * 12));
+    const svg = loginBot.querySelector("svg");
+    const point = svg?.createSVGPoint();
+    if (!svg || !point) {
+      return;
+    }
+    point.x = event.clientX;
+    point.y = event.clientY;
+    const cursor = point.matrixTransform(svg.getScreenCTM().inverse());
+    let totalX = 0;
+    let totalY = 0;
+    for (const state of pupilStates) {
+      totalX += cursor.x - state.centerX;
+      totalY += cursor.y - state.centerY;
+    }
+    const avgX = totalX / pupilStates.length;
+    const avgY = totalY / pupilStates.length;
+    const angle = Math.atan2(avgY, avgX);
+    const distance = Math.min(1, Math.hypot(avgX, avgY) / 170);
+    const x = Math.round(Math.cos(angle) * distance * 15);
+    const y = Math.round(Math.sin(angle) * distance * 10);
+    setPupils(x, y);
   });
-  document.addEventListener("pointerleave", () => setEyes(0, 0));
+  document.addEventListener("pointerleave", () => setPupils(0, 0));
 }
 
 async function initAuth() {
@@ -630,7 +916,8 @@ async function initAuth() {
       if (!response.ok) {
         throw new Error(data.error || "Session expired.");
       }
-      saveUserSession({ ...data.user, token: currentUser.token });
+      saveUserSession({ ...data.user, token: currentUser.token, sessionExpiresAt: currentUser.sessionExpiresAt || "" });
+      currentQuota = data.quota || null;
     } catch (error) {
       currentUser = null;
       localStorage.removeItem(AUTH_STORAGE_KEY);
@@ -641,6 +928,9 @@ async function initAuth() {
   renderGoogleButton();
   if (currentUser?.isAdmin) {
     loadAdminUsers();
+  }
+  if (currentUser?.authorized) {
+    loadGoogleToolsStatus({ check: true, quiet: true });
   }
 }
 
@@ -732,6 +1022,7 @@ async function checkApiHealth() {
     try {
       const response = await fetch(`${API_BASE}${check.path}`, {
         method: check.method,
+        headers: authHeaders(),
         cache: "no-store",
       });
       const elapsed = Math.round(performance.now() - started);
@@ -815,6 +1106,8 @@ function renderAdminUsers(users) {
           <input class="admin-user-admin" type="checkbox" ${user.isAdmin ? "checked" : ""} />
           Admin
         </label>
+        <button class="admin-user-chats ghost" type="button">Chats</button>
+        <button class="admin-user-reset-quota ghost" type="button">Reset 5 chats</button>
       </div>
     `)
     .join("");
@@ -826,8 +1119,137 @@ function bindAdminUserControls() {
     const email = row.dataset.email;
     const authorized = row.querySelector(".admin-user-authorized");
     const isAdmin = row.querySelector(".admin-user-admin");
+    const chatsButton = row.querySelector(".admin-user-chats");
+    const resetQuotaButton = row.querySelector(".admin-user-reset-quota");
     authorized?.addEventListener("change", () => updateAdminUser(email, { authorized: authorized.checked }));
     isAdmin?.addEventListener("change", () => updateAdminUser(email, { isAdmin: isAdmin.checked }));
+    chatsButton?.addEventListener("click", () => loadAdminUserChats(email, row));
+    resetQuotaButton?.addEventListener("click", () => resetAdminUserQuota(email, resetQuotaButton));
+  }
+}
+
+async function loadAdminUserChats(email, row) {
+  const existing = row.querySelector(".admin-chat-summary");
+  if (existing) {
+    existing.remove();
+    return;
+  }
+  const panel = document.createElement("div");
+  panel.className = "admin-chat-summary";
+  panel.innerHTML = `<p class="helper-text">Loading chat summary...</p>`;
+  row.appendChild(panel);
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/users/${encodeURIComponent(email)}/chats`, {
+      headers: authHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to load chats.");
+    }
+    const chats = Array.isArray(data.chats) ? data.chats : [];
+    panel.innerHTML = `
+      <p><strong>${data.chatCount || 0}</strong> chats, <strong>${data.messageCount || 0}</strong> messages</p>
+      ${chats.length ? chats.map((chat) => `
+        <div class="admin-chat-item" data-chat-id="${escapeHtml(chat.id || "")}">
+          <div class="admin-chat-head">
+            <p>${escapeHtml(chat.title || "New chat")} <span>${escapeHtml(chat.updatedAt || "")}</span></p>
+            <button class="admin-chat-delete ghost" type="button">Delete</button>
+          </div>
+          <small>${Number(chat.messageCount || 0)} messages</small>
+          ${Array.isArray(chat.items) && chat.items.length ? chat.items.map((item) => `
+            <div class="admin-chat-turn" data-item-index="${Number(item.index || 0)}">
+              <div class="admin-chat-turn-head">
+                <small>${escapeHtml(item.timestamp || "")}</small>
+                <button class="admin-chat-turn-delete ghost" type="button">Delete</button>
+              </div>
+              <p><strong>User:</strong> ${escapeHtml(item.question || "None")}</p>
+              <p><strong>Bender:</strong> ${escapeHtml(item.answer || "None")}</p>
+            </div>
+          `).join("") : `
+            <small>Last question: ${escapeHtml(chat.lastQuestion || "None")}</small>
+            <small>Last answer: ${escapeHtml(chat.lastAnswer || "None")}</small>
+          `}
+        </div>
+      `).join("") : `<p class="helper-text">No chats yet.</p>`}
+    `;
+    for (const button of panel.querySelectorAll(".admin-chat-delete")) {
+      button.addEventListener("click", () => deleteAdminUserChat(email, button.closest(".admin-chat-item")?.dataset.chatId, row));
+    }
+    for (const button of panel.querySelectorAll(".admin-chat-turn-delete")) {
+      button.addEventListener("click", () => {
+        const chatItem = button.closest(".admin-chat-item");
+        const turn = button.closest(".admin-chat-turn");
+        deleteAdminUserChatTurn(email, chatItem?.dataset.chatId, turn?.dataset.itemIndex, row);
+      });
+    }
+  } catch (error) {
+    panel.innerHTML = `<p class="error">${escapeHtml(error.message || "Failed to load chats.")}</p>`;
+  }
+}
+
+async function deleteAdminUserChatTurn(email, chatId, itemIndex, row) {
+  if (!chatId || itemIndex === undefined) {
+    return;
+  }
+  try {
+    const response = await fetch(
+      `${API_BASE}/api/admin/users/${encodeURIComponent(email)}/chats/${encodeURIComponent(chatId)}/items/${encodeURIComponent(itemIndex)}`,
+      {
+        method: "DELETE",
+        headers: authHeaders(),
+      }
+    );
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to delete message.");
+    }
+    row.querySelector(".admin-chat-summary")?.remove();
+    await loadAdminUserChats(email, row);
+  } catch (error) {
+    showError(error.message || "Failed to delete message.");
+  }
+}
+
+async function deleteAdminUserChat(email, chatId, row) {
+  if (!chatId) {
+    return;
+  }
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/users/${encodeURIComponent(email)}/chats/${encodeURIComponent(chatId)}`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to delete chat.");
+    }
+    row.querySelector(".admin-chat-summary")?.remove();
+    await loadAdminUserChats(email, row);
+  } catch (error) {
+    showError(error.message || "Failed to delete chat.");
+  }
+}
+
+async function resetAdminUserQuota(email, button) {
+  if (button) {
+    button.disabled = true;
+  }
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/users/${encodeURIComponent(email)}/quota/reset`, {
+      method: "POST",
+      headers: authHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to reset quota.");
+    }
+    await loadAdminUsers();
+  } catch (error) {
+    showError(error.message || "Failed to reset quota.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+    }
   }
 }
 
@@ -843,7 +1265,11 @@ async function updateAdminUser(email, patch) {
       throw new Error(data.error || "Failed to update user.");
     }
     if (data.user?.email === currentUser?.email) {
-      saveUserSession({ ...data.user, token: currentUser.token });
+      saveUserSession({
+        ...data.user,
+        token: currentUser.token,
+        sessionExpiresAt: currentUser.sessionExpiresAt || "",
+      });
     }
     await loadAdminUsers();
   } catch (error) {
@@ -880,6 +1306,37 @@ function loadVoiceChatFontScale() {
     console.warn("Failed to load chat font size.", error);
   }
   applyVoiceChatFontScale();
+}
+
+function applyAudioReplyPreference() {
+  if (audioReplyToggle) {
+    audioReplyToggle.checked = audioReplyEnabled;
+  }
+  if (voiceChatAudioReplyToggle) {
+    voiceChatAudioReplyToggle.checked = audioReplyEnabled;
+  }
+  try {
+    localStorage.setItem(AUDIO_REPLY_STORAGE_KEY, audioReplyEnabled ? "1" : "0");
+  } catch (error) {
+    console.warn("Failed to save audio reply preference.", error);
+  }
+}
+
+function loadAudioReplyPreference() {
+  try {
+    const raw = localStorage.getItem(AUDIO_REPLY_STORAGE_KEY);
+    if (raw === "0") {
+      audioReplyEnabled = false;
+    }
+  } catch (error) {
+    console.warn("Failed to load audio reply preference.", error);
+  }
+  applyAudioReplyPreference();
+}
+
+function setAudioReplyPreference(enabled) {
+  audioReplyEnabled = Boolean(enabled);
+  applyAudioReplyPreference();
 }
 
 function changeVoiceChatFontScale(delta) {
@@ -951,6 +1408,9 @@ function renderAllHistoryViews() {
 }
 
 function updateResult(data) {
+  if (data?.quota) {
+    currentQuota = data.quota;
+  }
   if (data.transcript !== undefined) {
     transcriptOutput.textContent = data.transcript || "(empty transcript)";
     faceTranscriptOutput.textContent = transcriptOutput.textContent;
@@ -1008,6 +1468,12 @@ function updateResult(data) {
         setSpeaking(true);
       }
     }
+  } else {
+    audioPlayer.removeAttribute("src");
+    faceAudioPlayer.removeAttribute("src");
+    audioPlayer.load();
+    faceAudioPlayer.load();
+    setRecordingState("Text answer ready.");
   }
 }
 
@@ -1267,14 +1733,14 @@ async function persistHistory() {
     items: getAllHistoryItems(),
   };
   try {
-    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(payload));
+    localStorage.setItem(userHistoryStorageKey(), JSON.stringify(payload));
   } catch (error) {
     console.warn("Failed to save chat history locally.", error);
   }
   try {
     await fetch(`${API_BASE}/api/history`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify(payload),
     });
   } catch (error) {
@@ -1312,7 +1778,7 @@ async function loadHistory() {
   };
 
   try {
-    const response = await fetch(`${API_BASE}/api/history`);
+    const response = await fetch(`${API_BASE}/api/history`, { headers: authHeaders() });
     if (response.ok) {
       const data = await response.json();
       loaded = applyHistoryData(data);
@@ -1323,7 +1789,7 @@ async function loadHistory() {
 
   if (!loaded) {
     try {
-      const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+      const raw = localStorage.getItem(userHistoryStorageKey());
       if (!raw) {
         throw new Error("No local history.");
       }
@@ -1343,21 +1809,24 @@ async function loadHistory() {
 }
 
 async function sendAudioBlob(blob, filename) {
+  await refreshCalendarToolIfNeeded();
   const formData = new FormData();
   formData.append("audio", blob, filename);
   formData.append("context", JSON.stringify(getActiveChatContext()));
   formData.append("chatId", activeChatId);
+  formData.append("synthesizeAudio", audioReplyEnabled ? "true" : "false");
   setLoading(true, "Sending audio...", "audio");
   showError("");
 
   try {
     const response = await fetch(`${API_BASE}/api/chat/audio`, {
       method: "POST",
+      headers: authHeaders(),
       body: formData,
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.error || "Audio request failed");
+      throw new Error(friendlyRequestError(response, data, "Audio request failed"));
     }
     updateResult(data);
   } catch (error) {
@@ -1368,18 +1837,24 @@ async function sendAudioBlob(blob, filename) {
 }
 
 async function sendTextMessage(message) {
+  await refreshCalendarToolIfNeeded();
   setLoading(true, "Sending text...");
   showError("");
 
   try {
     const response = await fetch(`${API_BASE}/api/chat/text`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, context: getActiveChatContext(), chatId: activeChatId }),
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({
+        message,
+        context: getActiveChatContext(),
+        chatId: activeChatId,
+        synthesizeAudio: audioReplyEnabled,
+      }),
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.error || "Text request failed");
+      throw new Error(friendlyRequestError(response, data, "Text request failed"));
     }
     updateResult(data);
   } catch (error) {
@@ -1521,6 +1996,9 @@ apiHealthRefresh.addEventListener("click", checkApiHealth);
 signOutBtn.addEventListener("click", clearUserSession);
 loginSignOutBtn.addEventListener("click", clearUserSession);
 adminRefresh.addEventListener("click", loadAdminUsers);
+googleToolsRefresh.addEventListener("click", () => loadGoogleToolsStatus({ check: true }));
+connectGoogleCalendar.addEventListener("click", connectCalendarTool);
+disconnectGoogleCalendar.addEventListener("click", disconnectCalendarTool);
 
 clearHistory.addEventListener("click", async () => {
   const filenames = Array.from(new Set(chatHistory.map((entry) => getAudioFilename(entry.audioUrl)).filter(Boolean)));
@@ -1551,6 +2029,8 @@ clearFaceHistory.addEventListener("click", async () => {
 voiceChatNewChat.addEventListener("click", createNewVoiceChat);
 voiceChatFontSmall.addEventListener("click", () => changeVoiceChatFontScale(-0.1));
 voiceChatFontLarge.addEventListener("click", () => changeVoiceChatFontScale(0.1));
+audioReplyToggle.addEventListener("change", () => setAudioReplyPreference(audioReplyToggle.checked));
+voiceChatAudioReplyToggle.addEventListener("change", () => setAudioReplyPreference(voiceChatAudioReplyToggle.checked));
 
 openFaceView.addEventListener("click", () => {
   mainView.classList.add("hidden");
@@ -1606,38 +2086,6 @@ for (const player of [audioPlayer, faceAudioPlayer]) {
   });
 }
 
-for (const button of document.querySelectorAll("button[data-command]")) {
-  button.addEventListener("click", async () => {
-    const command = button.dataset.command;
-    showError("");
-    try {
-      const response = await fetch(`${API_BASE}/api/command`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ command }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Command failed");
-      }
-      answerOutput.textContent = JSON.stringify(data, null, 2);
-      if (command.startsWith("eye.look.")) {
-        const direction = command.split(".").pop();
-        const map = {
-          left: "look-left",
-          right: "look-right",
-          up: "look-up",
-          down: "look-down",
-          center: "look-center",
-        };
-        setLookDirection(map[direction] || "look-center");
-      }
-    } catch (error) {
-      showError(error.message || "Command failed");
-    }
-  });
-}
-
 function closeFacePanel() {
   stopBlinkLoop();
   faceView.classList.remove("speaking");
@@ -1677,8 +2125,15 @@ document.addEventListener("DOMContentLoaded", async () => {
   initLoginBotLook();
   await initAuth();
   loadVoiceChatFontScale();
+  loadAudioReplyPreference();
   loadHistory().then(() => renderAllHistoryViews());
   checkApiHealth();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && currentUser?.authorized) {
+    checkGoogleToolsConnection({ quiet: true });
+  }
 });
 
 document.addEventListener("pointerdown", enableAudioSync, { once: true });

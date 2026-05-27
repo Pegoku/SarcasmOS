@@ -11,31 +11,30 @@
     <section id="loginView" class="login-view" aria-label="Sign in">
       <div class="login-shell">
         <div id="loginBot" class="login-bot" aria-hidden="true">
-          <svg viewBox="0 0 780 360" role="img">
+          <svg viewBox="0 0 400 400" role="img">
             <defs>
               <filter id="loginBotShadow" x="-20%" y="-20%" width="140%" height="150%">
                 <feDropShadow dx="12" dy="14" stdDeviation="8" flood-opacity="0.32" />
               </filter>
             </defs>
             <g class="login-bot-face" filter="url(#loginBotShadow)">
-              <rect class="login-bot-visor-outer" x="210" y="22" width="390" height="172" rx="86" />
-              <rect class="login-bot-visor-ring" x="228" y="40" width="354" height="136" rx="68" />
-              <rect class="login-bot-visor-inner" x="244" y="56" width="322" height="104" rx="52" />
+              <rect class="login-bot-visor-outer" x="30" y="50" width="340" height="150" rx="75" />
+              <rect class="login-bot-visor-inner" x="42" y="62" width="316" height="126" rx="63" />
               <g class="login-bot-eye-group login-bot-eye-left">
-                <path class="login-bot-eye-white" d="M250 108c0-50 39-78 92-78 62 0 99 32 99 78s-37 78-99 78c-53 0-92-28-92-78Z" />
-                <rect class="login-bot-pupil" x="346" y="96" width="24" height="24" transform="rotate(7 358 108)" />
+                <path class="login-bot-eye-white" d="M 60,125 C 60,90 85,75 120,75 C 160,75 190,95 190,125 C 190,160 160,175 120,175 C 80,175 60,155 60,125 Z" />
+                <rect class="login-bot-pupil" x="110" y="110" width="22" height="22" transform="rotate(8 121 121)" />
               </g>
               <g class="login-bot-eye-group login-bot-eye-right">
-                <path class="login-bot-eye-white" d="M444 108c0-46 37-78 99-78 53 0 92 28 92 78s-39 78-92 78c-62 0-99-32-99-78Z" />
-                <rect class="login-bot-pupil" x="532" y="96" width="24" height="24" transform="rotate(-6 544 108)" />
+                <path class="login-bot-eye-white" d="M 210,125 C 210,95 240,75 280,75 C 315,75 340,90 340,125 C 340,155 320,175 280,175 C 240,175 210,160 210,125 Z" />
+                <rect class="login-bot-pupil" x="270" y="108" width="22" height="22" transform="rotate(-5 281 119)" />
               </g>
             </g>
             <g class="login-bot-mouth" filter="url(#loginBotShadow)">
-              <rect class="login-bot-mouth-outer" x="313" y="223" width="198" height="116" rx="58" />
-              <rect class="login-bot-mouth-inner" x="329" y="239" width="166" height="84" rx="42" />
-              <path class="login-bot-mouth-line" d="M332 274c48 2 111 4 160 0" />
-              <path class="login-bot-mouth-line" d="M332 304c48 4 111 5 160 0" />
-              <path class="login-bot-tooth" d="M361 239v83M395 238v86M429 238v86M463 239v83" />
+              <rect class="login-bot-mouth-outer" x="120" y="230" width="180" height="100" rx="45" />
+              <rect class="login-bot-mouth-inner" x="132" y="242" width="156" height="76" rx="35" />
+              <path class="login-bot-mouth-line" d="M 135,263 Q 210,265 285,263" />
+              <path class="login-bot-mouth-line" d="M 135,296 Q 210,300 285,296" />
+              <path class="login-bot-tooth" d="M 160,238 V 322 M 192,234 V 326 M 224,234 V 326 M 256,238 V 322" />
             </g>
           </svg>
         </div>
@@ -96,6 +95,20 @@
         </div>
       </section>
 
+      <section class="panel chat-settings-panel" aria-label="Chat settings">
+        <div class="panel-title-row">
+          <h2>Chat Settings</h2>
+          <span class="step-pill">Cost</span>
+        </div>
+        <label class="toggle-row">
+          <span>
+            <span class="label">Audio reply</span>
+            <span class="helper-text">Generate Bender voice audio after each answer.</span>
+          </span>
+          <input id="audioReplyToggle" type="checkbox" checked />
+        </label>
+      </section>
+
       <section id="adminPanel" class="panel admin-panel hidden" aria-label="Admin panel">
         <div class="history-header">
           <div>
@@ -105,6 +118,28 @@
           <button id="adminRefresh" class="ghost" type="button">Refresh users</button>
         </div>
         <div id="adminUsersList" class="admin-users-list"></div>
+      </section>
+
+      <section id="googleToolsPanel" class="panel google-tools-panel" aria-label="Google tools">
+        <div class="history-header">
+          <div>
+            <h2>Google Tools</h2>
+            <p class="helper-text">Connect read-only Google tools Bender can use when answering.</p>
+          </div>
+          <button id="googleToolsRefresh" class="ghost" type="button">Refresh</button>
+        </div>
+        <div class="google-tool-row">
+          <div>
+            <p class="label">Calendar</p>
+            <p id="googleCalendarStatus" class="helper-text">Not connected.</p>
+            <a id="googleCalendarHelp" class="tool-help-link hidden" href="#" target="_blank" rel="noreferrer">Enable Calendar API</a>
+          </div>
+          <div class="controls">
+            <button id="connectGoogleCalendar" class="accent" type="button">Connect Calendar</button>
+            <button id="disconnectGoogleCalendar" class="ghost" type="button">Disconnect</button>
+          </div>
+        </div>
+        <p id="googleToolsError" class="error"></p>
       </section>
 
       <div class="console-grid">
@@ -182,20 +217,6 @@
         <div id="historyList" class="history-list"></div>
       </section>
 
-      <section class="panel">
-        <div class="panel-title-row">
-          <h2>Commands</h2>
-          <span class="step-pill">Robot</span>
-        </div>
-        <div class="controls">
-          <button data-command="eye.look.left">Look left</button>
-          <button data-command="eye.look.center">Look center</button>
-          <button data-command="eye.look.right">Look right</button>
-          <button data-command="expression.happy_fake">Expression: happy</button>
-          <button data-command="expression.sarcastic">Expression: sarcastic</button>
-          <button data-command="expression.angry">Expression: angry</button>
-        </div>
-      </section>
     </main>
 
     <section id="faceView" class="face-view hidden" aria-hidden="true">
@@ -312,11 +333,15 @@
         <div class="voice-chat-messages" id="voiceChatList"></div>
         <div class="voice-chat-input">
           <div class="controls">
-            <button id="voiceChatRecordBtn" class="accent">Record</button>
-            <button id="voiceChatStopBtn" disabled>Stop</button>
-            <input id="voiceChatTextInput" type="text" placeholder="Type a message for Bender" />
-            <button id="voiceChatTextSend" class="accent">Send</button>
-          </div>
+          <button id="voiceChatRecordBtn" class="accent">Record</button>
+          <button id="voiceChatStopBtn" disabled>Stop</button>
+          <input id="voiceChatTextInput" type="text" placeholder="Type a message for Bender" />
+          <label class="compact-toggle">
+            <input id="voiceChatAudioReplyToggle" type="checkbox" checked />
+            <span>Audio</span>
+          </label>
+          <button id="voiceChatTextSend" class="accent">Send</button>
+        </div>
           <div class="meter">
             <span id="voiceChatRecordState">Idle</span>
           </div>

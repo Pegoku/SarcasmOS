@@ -1,1 +1,6 @@
 .venv
+AI/Workflow/SarcasmOS-web/.sarcasmos-run/
+AI/Workflow/SarcasmOS-web/backend/outputs/auth_sessions.json
+AI/Workflow/SarcasmOS-web/backend/outputs/google_tools.json
+AI/Workflow/SarcasmOS-web/backend/outputs/chat_usage.json
+AI/Workflow/SarcasmOS-web/backend/outputs/histories/

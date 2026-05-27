@@ -17,6 +17,8 @@ import requests
 
 DEFAULT_OPENROUTER_BASE_URL = "https://ai.hackclub.com/proxy/v1"
 DEFAULT_REPLICATE_BASE_URL = "https://ai.hackclub.com/proxy/v1/replicate"
+DEFAULT_FALLBACK_LLM_BASE_URL = "https://api.pioneer.ai/v1"
+DEFAULT_FALLBACK_LLM_MODEL = "claude-opus-4-7"
 DEFAULT_STT_MODEL = (
     "vaibhavs10/incredibly-fast-whisper:"
     "3ab86df6c8f54c11309d4d1f930ac292bad43ace52d10c80d87eb258b3c9f79c"
@@ -112,47 +114,6 @@ TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "eye_look",
-            "description": "Emulate robot eye movement in the CLI. This implements commands like eye.look.left, eye.look.right, eye.look.up, eye.look.down, and eye.look.center.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "direction": {
-                        "type": "string",
-                        "enum": ["left", "right", "up", "down", "center"],
-                    }
-                },
-                "required": ["direction"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "set_expression",
-            "description": "Emulate the robot's eyes and teeth/mouth in the CLI for visual expressions.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "expression": {
-                        "type": "string",
-                        "enum": [
-                            "neutral", "sarcastic", "angry", "happy_fake", "suspicious",
-                            "tired", "asleep", "surprised", "bored", "dramatic",
-                            "watch", "party", "error", "battery_low", "sunny",
-                            "rainy", "cloudy", "stormy", "snowy",
-                        ],
-                    }
-                },
-                "required": ["expression"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "robot_status",
             "description": "Return available robot status. Use for battery, Wi-Fi, sensors, eyes, mouth, microphone, or internal temperature questions.",
             "parameters": {
@@ -164,6 +125,40 @@ TOOLS = [
     },
 ]
 
+GOOGLE_CALENDAR_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "google_calendar_search",
+        "description": (
+            "Search the signed-in user's Google Calendar events. Use for appointments, "
+            "meetings, plans, availability, or questions about a specific date."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "time_min": {
+                    "type": "string",
+                    "description": "Inclusive ISO 8601 start datetime, for example 2026-05-25T00:00:00+02:00.",
+                },
+                "time_max": {
+                    "type": "string",
+                    "description": "Exclusive ISO 8601 end datetime, for example 2026-05-26T00:00:00+02:00.",
+                },
+                "query": {
+                    "type": "string",
+                    "description": "Optional text search inside calendar events.",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Maximum events to return. Defaults to 10, max 20.",
+                },
+            },
+            "required": ["time_min", "time_max"],
+            "additionalProperties": False,
+        },
+    },
+}
+
 
 @dataclass
 class BenderConfig:
@@ -171,6 +166,9 @@ class BenderConfig:
     replicate_token: str
     voice_id: str
     openrouter_base_url: str
+    fallback_llm_token: str
+    fallback_llm_base_url: str
+    fallback_llm_model: str
     replicate_base_url: str
     stt_model: str
     llm_model: str
@@ -219,6 +217,9 @@ class BenderConfig:
             os.environ.get("REPLICATE_BASE_URL", DEFAULT_REPLICATE_BASE_URL)
         )
         openrouter_base_url = os.environ.get("OPENROUTER_BASE_URL", DEFAULT_OPENROUTER_BASE_URL)
+        fallback_llm_token = os.environ.get("PIONEER_API_KEY", "").strip()
+        fallback_llm_base_url = os.environ.get("PIONEER_BASE_URL", DEFAULT_FALLBACK_LLM_BASE_URL)
+        fallback_llm_model = os.environ.get("PIONEER_MODEL", DEFAULT_FALLBACK_LLM_MODEL)
 
         sysprompt = read_sysprompt(None, str(base_dir / "sysprompt.txt"))
 
@@ -227,6 +228,9 @@ class BenderConfig:
             replicate_token=replicate_token,
             voice_id=voice_id,
             openrouter_base_url=openrouter_base_url,
+            fallback_llm_token=fallback_llm_token,
+            fallback_llm_base_url=fallback_llm_base_url,
+            fallback_llm_model=fallback_llm_model,
             replicate_base_url=replicate_base_url,
             stt_model=os.environ.get("STT_MODEL", DEFAULT_STT_MODEL),
             llm_model=os.environ.get("LLM_MODEL", DEFAULT_LLM_MODEL),
@@ -463,11 +467,14 @@ def get_weather(location: str) -> dict:
 
 def get_time(timezone: str | None = None) -> dict:
     timezone = timezone or "Europe/Madrid"
+    timezone = str(timezone).strip().strip("\"'`")
+    if not timezone:
+        timezone = "Europe/Madrid"
     try:
         now = dt.datetime.now(ZoneInfo(timezone))
-    except ZoneInfoNotFoundError:
-        timezone = "Europe/Madrid"
-        now = dt.datetime.now(ZoneInfo(timezone))
+    except (ZoneInfoNotFoundError, ValueError):
+        timezone = "local"
+        now = dt.datetime.now().astimezone()
 
     return {
         "timezone": timezone,
@@ -537,8 +544,55 @@ def service_status() -> dict:
     }
 
 
-def run_tool_call(name: str, arguments: dict) -> object:
+def google_calendar_search(
+    access_token: str,
+    time_min: str,
+    time_max: str,
+    query: str = "",
+    max_results: int = 10,
+) -> dict:
+    max_results = max(1, min(int(max_results or 10), 20))
+    params = {
+        "timeMin": time_min,
+        "timeMax": time_max,
+        "singleEvents": "true",
+        "orderBy": "startTime",
+        "maxResults": str(max_results),
+    }
+    if query:
+        params["q"] = query
+    response = requests.get(
+        "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        headers={"Authorization": f"Bearer {access_token}"},
+        params=params,
+        timeout=30,
+    )
+    if response.status_code in {401, 403}:
+        return {
+            "ok": False,
+            "error": "Google Calendar permission expired or is not connected. Ask the user to reconnect Calendar.",
+        }
+    response.raise_for_status()
+    events = []
+    for item in response.json().get("items", []):
+        start = item.get("start", {})
+        end = item.get("end", {})
+        events.append(
+            {
+                "summary": item.get("summary", "(no title)"),
+                "start": start.get("dateTime") or start.get("date"),
+                "end": end.get("dateTime") or end.get("date"),
+                "location": item.get("location", ""),
+                "description": item.get("description", ""),
+                "htmlLink": item.get("htmlLink", ""),
+            }
+        )
+    return {"ok": True, "count": len(events), "events": events}
+
+
+def run_tool_call(name: str, arguments: dict, tool_context: dict | None = None) -> object:
     render_face("tool", name)
+    tool_context = tool_context or {}
 
     if name == "get_weather":
         return get_weather(arguments["location"])
@@ -546,19 +600,21 @@ def run_tool_call(name: str, arguments: dict) -> object:
     if name == "get_time":
         return get_time(arguments.get("timezone"))
 
-    if name == "eye_look":
-        direction = arguments["direction"]
-        render_face(direction, f"eye.look.{direction}")
-        return {"ok": True, "command": f"eye.look.{direction}"}
-
-    if name == "set_expression":
-        expression = arguments["expression"]
-        render_face(expression)
-        return {"ok": True, "expression": expression}
-
     if name == "robot_status":
         render_face("watch", "checking status")
         return robot_status()
+
+    if name == "google_calendar_search":
+        access_token = str(tool_context.get("google_calendar_access_token") or "")
+        if not access_token:
+            return {"ok": False, "error": "Google Calendar is not connected for this user."}
+        return google_calendar_search(
+            access_token=access_token,
+            time_min=arguments["time_min"],
+            time_max=arguments["time_max"],
+            query=str(arguments.get("query") or ""),
+            max_results=int(arguments.get("max_results") or 10),
+        )
 
     return {"ok": False, "error": f"Unknown tool: {name}"}
 
@@ -585,6 +641,88 @@ def chat_completion(api_token: str, base_url: str, payload: dict) -> dict:
     )
     response.raise_for_status()
     return response.json()
+
+
+def fallback_plain_messages(messages: list[dict]) -> list[dict]:
+    plain_messages = []
+    for message in messages:
+        role = message.get("role", "user")
+        content = message.get("content") or ""
+        if role == "tool":
+            tool_name = message.get("name", "tool")
+            plain_messages.append(
+                {
+                    "role": "user",
+                    "content": f"Tool result from {tool_name}: {content}",
+                }
+            )
+            continue
+        tool_calls = message.get("tool_calls") or []
+        if tool_calls:
+            call_names = []
+            for call in tool_calls:
+                function = call.get("function", {}) if isinstance(call, dict) else {}
+                call_names.append(str(function.get("name", "tool")))
+            content = (content + "\n" if content else "") + "Tool calls requested: " + ", ".join(call_names)
+        if role not in {"system", "user", "assistant"}:
+            role = "user"
+        plain_messages.append({"role": role, "content": content})
+    return plain_messages
+
+
+def fallback_plain_payload(payload: dict, fallback_model: str) -> dict:
+    return {
+        "model": fallback_model,
+        "messages": fallback_plain_messages(payload.get("messages", [])),
+    }
+
+
+class ToolContinuationRejected(RuntimeError):
+    pass
+
+
+def chat_completion_with_fallback(
+    api_token: str,
+    base_url: str,
+    payload: dict,
+    fallback_token: str = "",
+    fallback_base_url: str = "",
+    fallback_model: str = "",
+) -> dict:
+    try:
+        return chat_completion(api_token, base_url, payload)
+    except requests.RequestException as primary_error:
+        if not fallback_token or not fallback_base_url or not fallback_model:
+            raise
+        fallback_payload = dict(payload)
+        fallback_payload["model"] = fallback_model
+        print(f"Primary LLM failed; retrying fallback model {fallback_model}: {primary_error}")
+        try:
+            return chat_completion(fallback_token, fallback_base_url, fallback_payload)
+        except requests.RequestException as fallback_error:
+            if any(message.get("role") == "tool" for message in payload.get("messages", [])):
+                try:
+                    print("Fallback LLM rejected tool continuation; retrying with plain tool results.")
+                    return chat_completion(
+                        fallback_token,
+                        fallback_base_url,
+                        fallback_plain_payload(payload, fallback_model),
+                    )
+                except requests.RequestException as plain_fallback_error:
+                    primary_status = getattr(primary_error.response, "status_code", None)
+                    fallback_status = getattr(plain_fallback_error.response, "status_code", None)
+                    raise ToolContinuationRejected(
+                        "LLM tool continuation unavailable. "
+                        f"Primary status: {primary_status or 'network/error'}; "
+                        f"fallback status: {fallback_status or 'network/error'}."
+                    ) from plain_fallback_error
+            primary_status = getattr(primary_error.response, "status_code", None)
+            fallback_status = getattr(fallback_error.response, "status_code", None)
+            raise RuntimeError(
+                "LLM providers unavailable. "
+                f"Primary status: {primary_status or 'network/error'}; "
+                f"fallback status: {fallback_status or 'network/error'}."
+            ) from fallback_error
 
 
 def context_messages_from_history(history: list[dict] | None) -> list[dict]:
@@ -624,6 +762,66 @@ def context_messages_from_history(history: list[dict] | None) -> list[dict]:
     return [{"role": "system", "content": memory}]
 
 
+def local_tool_answer(tool_results: list[tuple[str, object]]) -> str:
+    if not tool_results:
+        return "No he podido terminar la respuesta con las APIs disponibles."
+    name, result = tool_results[-1]
+    if not isinstance(result, dict):
+        return f"Resultado de {name}: {result}"
+    if not result.get("ok", True):
+        return str(result.get("error") or "La herramienta no devolvio un resultado valido.")
+    if name == "get_time":
+        return f"Ahora es {result.get('time')} del {result.get('date')} ({result.get('timezone')})."
+    if name == "get_weather":
+        location = result.get("location") or "esa zona"
+        summary = result.get("summary") or result.get("condition") or "sin resumen"
+        temp = result.get("temperature_c")
+        feels = result.get("feels_like_c")
+        parts = [f"En {location}: {summary}"]
+        if temp is not None:
+            parts.append(f"{temp} C")
+        if feels is not None:
+            parts.append(f"sensacion {feels} C")
+        return ", ".join(parts) + "."
+    if name == "google_calendar_search":
+        events = result.get("events") or []
+        if not events:
+            return "No tienes eventos en ese rango."
+        lines = []
+        for event in events[:5]:
+            lines.append(f"{event.get('start')}: {event.get('summary')}")
+        return "Eventos encontrados: " + "; ".join(lines)
+    if name == "robot_status":
+        return json.dumps(result, ensure_ascii=False)
+    return json.dumps(result, ensure_ascii=False)
+
+
+def looks_like_tool_json(answer: str) -> bool:
+    text = answer.strip()
+    if not (text.startswith("{") and text.endswith("}")):
+        return False
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(payload, dict) and (
+        "expression" in payload
+        or "command" in payload
+        or set(payload.keys()).issubset({"ok", "expression", "command"})
+    )
+
+
+def force_human_answer(transcript: str, answer: str) -> str:
+    if not looks_like_tool_json(answer):
+        return answer.strip()
+    user_text = transcript.strip() or "eso"
+    return (
+        f"Te respondo sin numeritos raros: sobre \"{user_text}\", necesito una pregunta un poco mas concreta "
+        "para darte algo util. Si querias una reaccion, aqui va: sorprendido estoy, pero no tanto como mi "
+        "procesador cuando le pidieron sentido comun."
+    )
+
+
 def generate_answer(
     api_token: str,
     base_url: str,
@@ -631,7 +829,15 @@ def generate_answer(
     transcript: str,
     sysprompt: str,
     context: list[dict] | None = None,
+    tool_context: dict | None = None,
+    fallback_token: str = "",
+    fallback_base_url: str = "",
+    fallback_model: str = "",
 ) -> str:
+    tool_context = tool_context or {}
+    tools = list(TOOLS)
+    if tool_context.get("google_calendar_access_token"):
+        tools.append(GOOGLE_CALENDAR_TOOL)
     tool_prompt = (
         sysprompt
         + "\n\nCONVERSATION MEMORY:\n"
@@ -642,10 +848,13 @@ def generate_answer(
         + "\n\nTOOLS AVAILABLE:\n"
         + "- Use get_weather for real weather instead of guessing.\n"
         + "- Use get_time for current time/date instead of guessing.\n"
-        + "- Use eye_look to implement eye.look.left/right/up/down/center in the CLI.\n"
-        + "- Use set_expression for robot face states, including weather states like sunny/rainy/cloudy/stormy/snowy.\n"
         + "- Use robot_status for robot state questions; do not invent unavailable sensor readings.\n"
-        + "When waiting, thinking, or calling tools, the CLI face will emulate eyes and teeth."
+        + "- Use google_calendar_search for the user's connected Google Calendar. "
+        + "For relative dates, call get_time first if needed, then search the relevant date range.\n"
+        + "\n\nANSWERING STYLE:\n"
+        + "- Always return a normal textual answer for the user. Never return raw JSON, tool names, commands, or internal state.\n"
+        + "- If the answer is uncomfortable, direct, or harsh, still answer clearly and honestly, with a small touch of Bender-style humor.\n"
+        + "- If the user gives only a vague fragment, say what is missing and make a useful guess instead of staying silent."
     )
     messages = [
         {"role": "system", "content": tool_prompt},
@@ -653,19 +862,28 @@ def generate_answer(
     messages.extend(context_messages_from_history(context))
     messages.append({"role": "user", "content": transcript})
     final_expression = "speaking"
+    tool_results: list[tuple[str, object]] = []
 
     for _ in range(MAX_TOOL_ROUNDS):
         render_face("thinking", "generating/tool planning")
-        data = chat_completion(
-            api_token,
-            base_url,
-            {
-                "model": model,
-                "messages": messages,
-                "tools": TOOLS,
-                "tool_choice": "auto",
-            },
-        )
+        try:
+            data = chat_completion_with_fallback(
+                api_token,
+                base_url,
+                {
+                    "model": model,
+                    "messages": messages,
+                    "tools": tools,
+                    "tool_choice": "auto",
+                },
+                fallback_token,
+                fallback_base_url,
+                fallback_model,
+            )
+        except ToolContinuationRejected:
+            answer = local_tool_answer(tool_results)
+            render_face(final_expression, "local tool answer ready")
+            return answer
         message = data["choices"][0]["message"]
         tool_calls = message.get("tool_calls") or []
 
@@ -673,8 +891,9 @@ def generate_answer(
             answer = message.get("content")
             if not answer or not answer.strip():
                 raise RuntimeError("LLM returned an empty answer.")
+            answer = force_human_answer(transcript, answer)
             render_face(final_expression, "final answer ready")
-            return answer.strip()
+            return answer
 
         messages.append(
             {
@@ -688,10 +907,11 @@ def generate_answer(
             name = function.get("name", "")
             try:
                 arguments = parse_tool_arguments(function.get("arguments"))
-                result = run_tool_call(name, arguments)
+                result = run_tool_call(name, arguments, tool_context)
             except Exception as error:
                 render_face("error", name)
                 result = {"ok": False, "error": str(error)}
+            tool_results.append((name, result))
             if isinstance(result, dict) and result.get("expression"):
                 final_expression = str(result["expression"])
             messages.append(
@@ -854,7 +1074,12 @@ def transcribe_audio(audio_path: str, config: BenderConfig) -> str:
     return extract_transcript(output)
 
 
-def generate_text_answer(transcript: str, config: BenderConfig, context: list[dict] | None = None) -> str:
+def generate_text_answer(
+    transcript: str,
+    config: BenderConfig,
+    context: list[dict] | None = None,
+    tool_context: dict | None = None,
+) -> str:
     render_face("thinking", "generating answer")
     answer = generate_answer(
         config.openrouter_token,
@@ -863,6 +1088,10 @@ def generate_text_answer(transcript: str, config: BenderConfig, context: list[di
         transcript,
         config.sysprompt,
         context,
+        tool_context,
+        config.fallback_llm_token,
+        config.fallback_llm_base_url,
+        config.fallback_llm_model,
     )
     if len(answer) > 10000:
         raise RuntimeError("LLM answer is longer than the 10,000 character TTS limit.")
@@ -912,21 +1141,21 @@ def process_audio_file(audio_path: str, options: dict | None = None) -> dict:
     config = BenderConfig.from_env()
     options = options or {}
     transcript = transcribe_audio(audio_path, config)
-    answer = generate_text_answer(transcript, config, options.get("context"))
-    output_path = synthesize_speech(answer, config)
+    answer = generate_text_answer(transcript, config, options.get("context"), options.get("tool_context"))
+    output_path = synthesize_speech(answer, config) if options.get("synthesize_audio", True) else None
     return {
         "transcript": transcript,
         "answer": answer,
-        "audio_path": str(output_path),
+        "audio_path": str(output_path) if output_path else "",
     }
 
 
 def process_text_message(message: str, options: dict | None = None) -> dict:
     config = BenderConfig.from_env()
     options = options or {}
-    answer = generate_text_answer(message, config, options.get("context"))
-    output_path = synthesize_speech(answer, config)
+    answer = generate_text_answer(message, config, options.get("context"), options.get("tool_context"))
+    output_path = synthesize_speech(answer, config) if options.get("synthesize_audio", True) else None
     return {
         "answer": answer,
-        "audio_path": str(output_path),
+        "audio_path": str(output_path) if output_path else "",
     }

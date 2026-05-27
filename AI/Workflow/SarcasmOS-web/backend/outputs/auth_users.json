@@ -7,7 +7,7 @@
       "authorized": true,
       "isAdmin": true,
       "createdAt": "2026-05-24T17:37:51+00:00",
-      "lastLoginAt": "2026-05-27T18:39:29+00:00"
+      "lastLoginAt": "2026-05-27T18:52:21+00:00"
     },
     "elpepox1348@gmail.com": {
       "email": "elpepox1348@gmail.com",
@@ -23,9 +23,9 @@
       "name": "Pere Gomila",
       "picture": "https://lh3.googleusercontent.com/a/ACg8ocJwWeWy9e8diICXDyHdoWeQLPDzqZQGYah74TeutpQbP8KqaA=s96-c",
       "authorized": true,
-      "isAdmin": false,
+      "isAdmin": true,
       "createdAt": "2026-05-25T11:26:51+00:00",
-      "lastLoginAt": "2026-05-27T18:41:55+00:00"
+      "lastLoginAt": "2026-05-27T19:43:09+00:00"
     },
     "hugo.delgado7970@iesmacardona.cat": {
       "email": "hugo.delgado7970@iesmacardona.cat",
@@ -35,6 +35,15 @@
       "isAdmin": false,
       "createdAt": "2026-05-26T17:15:36+00:00",
       "lastLoginAt": "2026-05-26T17:15:55+00:00"
+    },
+    "pegokumedia@gmail.com": {
+      "email": "pegokumedia@gmail.com",
+      "name": "Pegoku YT",
+      "picture": "https://lh3.googleusercontent.com/a/ACg8ocLlSavzIITdMhwHuDK7bsTe4zpIURWyfncNJ5YN5t-NlNi3Mw=s96-c",
+      "authorized": true,
+      "isAdmin": false,
+      "createdAt": "2026-05-27T19:42:56+00:00",
+      "lastLoginAt": "2026-05-27T19:42:56+00:00"
     }
   }
 }

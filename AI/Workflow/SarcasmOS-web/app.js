@@ -14,6 +14,7 @@ const userAvatar = document.getElementById("userAvatar");
 const userName = document.getElementById("userName");
 const userEmail = document.getElementById("userEmail");
 const signOutBtn = document.getElementById("signOutBtn");
+const languageToggle = document.getElementById("languageToggle");
 const openAdminConsole = document.getElementById("openAdminConsole");
 const adminView = document.getElementById("adminView");
 const adminUserAvatar = document.getElementById("adminUserAvatar");
@@ -89,6 +90,7 @@ let svgMouthGroup = null;
 const HISTORY_STORAGE_KEY = "sarcasmos.chatHistory";
 const CHAT_FONT_STORAGE_KEY = "sarcasmos.voiceChatFontScale";
 const AUTH_STORAGE_KEY = "sarcasmos.googleUser";
+const LANGUAGE_STORAGE_KEY = "sarcasmos.language";
 const HISTORY_STORAGE_VERSION = "v2";
 const AUDIO_REPLY_STORAGE_KEY = "sarcasmos.audioReplyEnabled";
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
@@ -98,6 +100,76 @@ const BENDER_WARNING_AUDIO = [
   "/api/audio/easteregg-warning-2.wav",
   "/api/audio/easteregg-warning-3.wav",
 ];
+const HOME_HERO_SUBTITLES = {
+  en: [
+    "A sharper way to talk, ask, listen, and get things done without opening six different tabs like a tired accountant.",
+    "Your mildly judgemental robot assistant for voice, text, tasks, and the occasional reality check.",
+    "Ask by voice, type like a civilized menace, or upload audio and let Bender do the heavy lifting.",
+    "A home base for quick answers, saved conversations, and robotic sarcasm with surprisingly useful timing.",
+    "Talk to Bender, connect your tools, and pretend this was your plan all along.",
+    "One place for voice, text, memory, and a robot face that is absolutely judging your cursor.",
+    "Productivity, but with the emotional warmth of a vending machine in a basement.",
+    "For when your brain has too many tabs open and none of them are paying rent.",
+    "Ask Bender anything. The answer may help, hurt, or both, which is basically efficiency.",
+    "A digital assistant for people who want answers faster than their motivation disappears.",
+    "Bring your questions. Bender will bring the confidence of someone who has never had a human body.",
+    "Less chaos, more answers, and just enough sarcasm to keep everyone legally awake.",
+    "Because doing everything manually builds character, and character is overrated.",
+    "Voice, text, memory, and the comforting sense that at least one robot is disappointed in you.",
+    "A home for tasks, questions, and tiny existential crises with better formatting.",
+    "The assistant that helps before your todo list becomes archaeological evidence.",
+    "For when your calendar, inbox, and motivation all died in the same meeting.",
+    "Answers fast enough to outrun your bad decisions. Almost.",
+    "A robot assistant for days when common sense called in sick.",
+    "Voice, text, and memory, because apparently suffering also needs version control.",
+    "Bender helps you organize life, or at least makes the chaos sound intentional.",
+    "Built for questions, reminders, and emotional damage with decent latency.",
+    "Less therapy, more automation. Results may vary, dignity not included.",
+    "A friendly home for your prompts, unless your prompts deserve consequences.",
+    "Bender organizes your day with the empathy of a tax audit and the charm of a stolen wallet.",
+    "Ask Bender for help and he will answer like your problems are bugs he would delete with pleasure.",
+    "A robot assistant that remembers your tasks, your chaos, and probably where you buried your motivation.",
+    "Bender cannot fix your life, but he can label the wreckage with impressive confidence.",
+    "For questions, plans, reminders, and the kind of honesty your friends wisely avoid.",
+    "Bender brings answers, sarcasm, and the emotional support of a locked fire exit.",
+    "Your personal robot for turning tiny disasters into scheduled events.",
+    "Bender is here to help, judge, and make your bad decisions feel professionally documented.",
+  ],
+  es: [
+    "Una forma más directa de hablar, preguntar, escuchar y resolver cosas sin abrir seis pestañas como un contable derrotado.",
+    "Tu asistente robótico ligeramente borde para voz, texto, tareas y alguna dosis saludable de realidad.",
+    "Pregunta por voz, escribe como una amenaza civilizada o sube audio y deja que Bender cargue con el marrón.",
+    "Un punto de partida para respuestas rápidas, conversaciones guardadas y sarcasmo robótico sorprendentemente útil.",
+    "Habla con Bender, conecta tus herramientas y finge que este era tu plan desde el principio.",
+    "Un solo sitio para voz, texto, memoria y una cara robótica que juzga tu cursor con bastante precisión.",
+    "Productividad, pero con el calor emocional de una máquina expendedora en un sótano.",
+    "Para cuando tu cerebro tiene demasiadas pestañas abiertas y ninguna paga alquiler.",
+    "Pregúntale a Bender lo que quieras. La respuesta puede ayudar, doler, o ambas cosas, que eso también es eficiencia.",
+    "Un asistente digital para quien quiere respuestas antes de que desaparezca su motivación.",
+    "Trae tus preguntas. Bender trae la confianza de alguien que nunca ha tenido cuerpo humano.",
+    "Menos caos, más respuestas y el sarcasmo justo para mantener a todos legalmente despiertos.",
+    "Porque hacerlo todo a mano forja carácter, y el carácter está sobrevalorado.",
+    "Voz, texto, memoria y la tranquilidad de que al menos un robot está decepcionado contigo.",
+    "Un hogar para tareas, preguntas y pequeñas crisis existenciales con mejor formato.",
+    "El asistente que ayuda antes de que tu lista de tareas se convierta en prueba arqueologica.",
+    "Para cuando tu calendario, tu bandeja de entrada y tus ganas murieron en la misma reunión.",
+    "Respuestas lo bastante rápidas como para adelantar a tus malas decisiones. Casi.",
+    "Un asistente robótico para esos días en los que el sentido común se dio de baja.",
+    "Voz, texto y memoria, porque al parecer el sufrimiento también necesita control de versiones.",
+    "Bender te ayuda a ordenar la vida, o al menos a que el caos parezca intencionado.",
+    "Hecho para preguntas, recordatorios y daño emocional con una latencia decente.",
+    "Menos terapia, más automatización. Resultados variables, dignidad no incluida.",
+    "Un hogar amable para tus prompts, salvo que tus prompts merezcan consecuencias.",
+    "Bender organiza tu día con la empatía de una inspección de Hacienda y el encanto de una cartera robada.",
+    "Pídele ayuda a Bender y responderá como si tus problemas fueran bugs que borraría con gusto.",
+    "Un asistente robótico que recuerda tus tareas, tu caos y probablemente dónde enterraste tu motivación.",
+    "Bender no puede arreglar tu vida, pero puede etiquetar el desastre con una confianza admirable.",
+    "Para preguntas, planes, recordatorios y esa honestidad que tus amigos evitan por supervivencia.",
+    "Bender trae respuestas, sarcasmo y el apoyo emocional de una salida de emergencia cerrada.",
+    "Tu robot personal para convertir pequeños desastres en eventos programados.",
+    "Bender está aquí para ayudar, juzgar y documentar profesionalmente tus malas decisiones.",
+  ],
+};
 const DEFAULT_CHAT_ID = "default";
 let mediaRecorder = null;
 let audioChunks = [];
@@ -118,6 +190,8 @@ let googleToolsState = null;
 let googleToolsMonitor = null;
 let currentQuota = null;
 let adminConsoleOverride = false;
+let currentLanguage = "en";
+let homeSubtitleIndex = 0;
 let homeBenderAnnoyance = 0;
 let benderWarningTimer = null;
 let homeBenderMoodTimer = null;
@@ -526,16 +600,16 @@ function annoyHomeBender() {
   homeBenderAnnoyance += 1;
   animateHomeBenderAnger();
   if (homeBenderAnnoyance === 1) {
-    showBenderWarning("Si vuelves hacerlo te hecho de la pagina");
+    showBenderWarning("Si vuelves a hacerlo, te echo de la página");
     playBenderWarningAudio(0);
     return;
   }
   if (homeBenderAnnoyance === 2) {
-    showBenderWarning("Ultima vez que te lo digo, Para ya!");
+    showBenderWarning("Última vez que te lo digo. ¡Para ya!");
     playBenderWarningAudio(1);
     return;
   }
-  showBenderWarning("Tu mismo te lo has buscado");
+  showBenderWarning("Tú mismo te lo has buscado");
   playBenderWarningAudio(2);
   clearUserSession();
   homeBenderAnnoyance = 0;
@@ -543,7 +617,7 @@ function annoyHomeBender() {
 
 function friendlyRequestError(response, data, fallback) {
   if (response?.status === 429) {
-    return "Se te han acabado los mensajes hasta la proxima semana. Pide a un admin que te reactive 5 mensajes desde el panel si necesitas seguir ahora.";
+    return "Se te han acabado los mensajes hasta la próxima semana. Pide a un admin que te reactive 5 mensajes desde el panel si necesitas seguir ahora.";
   }
   return data?.error || fallback;
 }
@@ -561,6 +635,249 @@ function authHeaders() {
 function userHistoryStorageKey() {
   const email = String(currentUser?.email || "anonymous").trim().toLowerCase();
   return `${HISTORY_STORAGE_KEY}.${HISTORY_STORAGE_VERSION}.${email}`;
+}
+
+function chooseHomeSubtitleIndex() {
+  const subtitles = HOME_HERO_SUBTITLES.en;
+  let nextIndex = Math.floor(Math.random() * subtitles.length);
+  try {
+    const lastIndex = Number(sessionStorage.getItem("sarcasmos.lastHomeSubtitle"));
+    if (subtitles.length > 1 && nextIndex === lastIndex) {
+      nextIndex = (nextIndex + 1) % subtitles.length;
+    }
+    sessionStorage.setItem("sarcasmos.lastHomeSubtitle", String(nextIndex));
+  } catch (error) {
+    console.warn("Failed to remember home subtitle.", error);
+  }
+  homeSubtitleIndex = nextIndex;
+}
+
+function setHomeSubtitleText() {
+  setText(
+    ".console-hero .hero-copy > .subtitle",
+    HOME_HERO_SUBTITLES[currentLanguage][homeSubtitleIndex] || HOME_HERO_SUBTITLES[currentLanguage][0],
+  );
+}
+
+function rotateHomeSubtitle() {
+  chooseHomeSubtitleIndex();
+  setHomeSubtitleText();
+}
+
+const HOME_TRANSLATIONS = {
+  en: {
+    documentTitle: "SarcasmOS Home",
+    navKicker: "Home",
+    translate: "Traducir",
+    admin: "Admin",
+    signOut: "Sign out",
+    eyebrow: "SarcasmOS",
+    heroTitle: "Meet Bender at home.",
+    heroSubtitle: "",
+    startVoice: "Start voice chat",
+    openFace: "Open face view",
+    voice: "Voice",
+    text: "Text",
+    calendar: "Calendar",
+    ready: "Ready",
+    optional: "Optional",
+    robotStatus: "Robot status",
+    statusIdle: "Click refresh to check.",
+    refreshStatus: "Refresh status",
+    liveFace: "Live face",
+    faceSubtitle: "Big screen mode for Bender.",
+    voiceChat: "Voice chat",
+    voiceSubtitle: "Conversation mode with memory.",
+    openVoiceChat: "Open voice chat",
+    audioReply: "Audio reply",
+    audioReplyHelp: "Generate Bender voice audio after each answer.",
+    googleTools: "Google Tools",
+    googleToolsHelp: "Connect read-only Google tools Bender can use when answering.",
+    refresh: "Refresh",
+    connectCalendar: "Connect Calendar",
+    reconnectCalendar: "Reconnect Calendar",
+    disconnect: "Disconnect",
+    notConnected: "Not connected.",
+    enableCalendar: "Enable Calendar API",
+    talkEyebrow: "Talk to Bender",
+    nextMessage: "Send the next message",
+    audioInput: "Audio Input",
+    voicePill: "Voice",
+    audioHelp: "Record directly or send an existing audio file.",
+    chooseAudio: "Choose audio file",
+    sendUpload: "Send upload",
+    record: "Record",
+    stop: "Stop",
+    idle: "Idle",
+    textInput: "Text Input",
+    textPill: "Text",
+    textHelp: "Fast path for prompts, tests, and follow-up questions.",
+    textPlaceholder: "Type a message for Bender",
+    sendText: "Send text",
+    result: "Result",
+    output: "Output",
+    transcript: "Transcript",
+    answer: "Answer",
+    waitingAudio: "Waiting for audio...",
+    waitingResponse: "Waiting for response...",
+    backHome: "Back to home",
+  },
+  es: {
+    documentTitle: "Inicio de SarcasmOS",
+    navKicker: "Inicio",
+    translate: "Translate",
+    admin: "Admin",
+    signOut: "Cerrar sesión",
+    eyebrow: "SarcasmOS",
+    heroTitle: "Bender, en casa.",
+    heroSubtitle: "",
+    startVoice: "Iniciar chat de voz",
+    openFace: "Abrir cara",
+    voice: "Voz",
+    text: "Texto",
+    calendar: "Calendario",
+    ready: "Listo",
+    optional: "Opcional",
+    robotStatus: "Estado del robot",
+    statusIdle: "Pulsa refrescar para comprobar.",
+    refreshStatus: "Refrescar estado",
+    liveFace: "Cara en directo",
+    faceSubtitle: "Modo pantalla grande para Bender.",
+    voiceChat: "Chat de voz",
+    voiceSubtitle: "Modo conversación con memoria.",
+    openVoiceChat: "Abrir chat de voz",
+    audioReply: "Respuesta con audio",
+    audioReplyHelp: "Genera la voz de Bender después de cada respuesta.",
+    googleTools: "Herramientas de Google",
+    googleToolsHelp: "Conecta herramientas de solo lectura que Bender puede usar al responder.",
+    refresh: "Refrescar",
+    connectCalendar: "Conectar calendario",
+    reconnectCalendar: "Reconectar calendario",
+    disconnect: "Desconectar",
+    notConnected: "No conectado.",
+    enableCalendar: "Activar API de Calendar",
+    talkEyebrow: "Habla con Bender",
+    nextMessage: "Envía el siguiente mensaje",
+    audioInput: "Entrada de audio",
+    voicePill: "Voz",
+    audioHelp: "Graba directamente o envía un archivo de audio.",
+    chooseAudio: "Elegir audio",
+    sendUpload: "Enviar archivo",
+    record: "Grabar",
+    stop: "Parar",
+    idle: "En espera",
+    textInput: "Entrada de texto",
+    textPill: "Texto",
+    textHelp: "La vía rápida para prompts, pruebas y preguntas de seguimiento.",
+    textPlaceholder: "Escribe un mensaje para Bender",
+    sendText: "Enviar texto",
+    result: "Resultado",
+    output: "Salida",
+    transcript: "Transcripción",
+    answer: "Respuesta",
+    waitingAudio: "Esperando audio...",
+    waitingResponse: "Esperando respuesta...",
+    backHome: "Volver al inicio",
+  },
+};
+
+function setText(selector, value) {
+  const element = document.querySelector(selector);
+  if (element) {
+    element.textContent = value;
+  }
+}
+
+function applyLanguage(language) {
+  currentLanguage = HOME_TRANSLATIONS[language] ? language : "en";
+  const t = HOME_TRANSLATIONS[currentLanguage];
+  document.documentElement.lang = currentLanguage;
+  document.title = t.documentTitle;
+  setText(".console-nav span", t.navKicker);
+  setText("#languageToggle", t.translate);
+  setText("#openAdminConsole", t.admin);
+  setText("#signOutBtn", t.signOut);
+  setText(".console-hero .eyebrow", t.eyebrow);
+  setText(".console-hero h1", t.heroTitle);
+  setHomeSubtitleText();
+  setText("#heroVoiceChatBtn", t.startVoice);
+  setText("#heroFaceViewBtn", t.openFace);
+  setText(".home-metrics div:nth-child(1) strong", t.voice);
+  setText(".home-metrics div:nth-child(2) strong", t.text);
+  setText(".home-metrics div:nth-child(3) strong", t.calendar);
+  setText(".home-metrics div:nth-child(1) span", t.ready);
+  setText(".home-metrics div:nth-child(2) span", t.ready);
+  setText(".home-metrics div:nth-child(3) span", t.optional);
+  setText(".status-card .status-label", t.robotStatus);
+  if (statusOutput?.textContent === HOME_TRANSLATIONS.en.statusIdle || statusOutput?.textContent === HOME_TRANSLATIONS.es.statusIdle) {
+    statusOutput.textContent = t.statusIdle;
+  }
+  setText("#statusBtn", t.refreshStatus);
+  setText(".feature-strip .face-callout:nth-child(1) .label", t.liveFace);
+  setText(".feature-strip .face-callout:nth-child(1) .subtitle", t.faceSubtitle);
+  setText(".feature-strip .face-callout:nth-child(2) .label", t.voiceChat);
+  setText(".feature-strip .face-callout:nth-child(2) .subtitle", t.voiceSubtitle);
+  setText("#openFaceView", t.openFace);
+  setText("#openVoiceChatView", t.openVoiceChat);
+  setText(".chat-settings-panel .label", t.audioReply);
+  setText(".chat-settings-panel .helper-text", t.audioReplyHelp);
+  setText("#googleToolsPanel h2", t.googleTools);
+  setText("#googleToolsPanel .history-header .helper-text", t.googleToolsHelp);
+  setText("#googleToolsRefresh", t.refresh);
+  setText("#disconnectGoogleCalendar", t.disconnect);
+  setText("#googleCalendarHelp", t.enableCalendar);
+  setText(".section-heading .eyebrow", t.talkEyebrow);
+  setText(".section-heading h2", t.nextMessage);
+  setText(".console-input-grid .input-panel:nth-child(1) h2", t.audioInput);
+  setText(".console-input-grid .input-panel:nth-child(1) .step-pill", t.voicePill);
+  setText(".console-input-grid .input-panel:nth-child(1) .helper-text", t.audioHelp);
+  setText(".file-input span", t.chooseAudio);
+  setText("#uploadSend", t.sendUpload);
+  setText("#recordBtn", t.record);
+  setText("#stopBtn", t.stop);
+  if (recordState?.textContent === HOME_TRANSLATIONS.en.idle || recordState?.textContent === HOME_TRANSLATIONS.es.idle) {
+    recordState.textContent = t.idle;
+  }
+  setText(".console-input-grid .input-panel:nth-child(2) h2", t.textInput);
+  setText(".console-input-grid .input-panel:nth-child(2) .step-pill", t.textPill);
+  setText(".console-input-grid .input-panel:nth-child(2) .helper-text", t.textHelp);
+  if (textInput) {
+    textInput.placeholder = t.textPlaceholder;
+  }
+  setText("#textSend", t.sendText);
+  setText("#mainView > .panel:last-of-type h2", t.result);
+  setText("#mainView > .panel:last-of-type .step-pill", t.output);
+  setText("#mainView > .panel:last-of-type .grid > div:nth-child(1) .label", t.transcript);
+  setText("#mainView > .panel:last-of-type .grid > div:nth-child(2) .label", t.answer);
+  if (transcriptOutput?.textContent === HOME_TRANSLATIONS.en.waitingAudio || transcriptOutput?.textContent === HOME_TRANSLATIONS.es.waitingAudio) {
+    transcriptOutput.textContent = t.waitingAudio;
+  }
+  if (answerOutput?.textContent === HOME_TRANSLATIONS.en.waitingResponse || answerOutput?.textContent === HOME_TRANSLATIONS.es.waitingResponse) {
+    answerOutput.textContent = t.waitingResponse;
+  }
+  setText("#closeFaceView", t.backHome);
+  setText("#closeVoiceChatView", t.backHome);
+  renderGoogleToolsStatus(googleToolsState);
+}
+
+function loadLanguagePreference() {
+  try {
+    const saved = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    applyLanguage(saved || "en");
+  } catch (error) {
+    console.warn("Failed to load language preference.", error);
+    applyLanguage("en");
+  }
+}
+
+function toggleLanguage() {
+  const nextLanguage = currentLanguage === "en" ? "es" : "en";
+  try {
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, nextLanguage);
+  } catch (error) {
+    console.warn("Failed to save language preference.", error);
+  }
+  applyLanguage(nextLanguage);
 }
 
 async function loadPublicConfig() {
@@ -771,6 +1088,7 @@ function formatGoogleToolCheckTime(value) {
 function renderGoogleToolsStatus(status) {
   googleToolsState = status || null;
   const calendar = status?.calendar || {};
+  const t = HOME_TRANSLATIONS[currentLanguage] || HOME_TRANSLATIONS.en;
   const connected = Boolean(calendar.connected);
   const configured = Boolean(calendar.configured || calendar.expiresAt || calendar.error);
   const needsReconnect = Boolean(calendar.needsReconnect || (configured && !connected));
@@ -784,7 +1102,7 @@ function renderGoogleToolsStatus(status) {
     } else if (calendar.expiresAt) {
       googleCalendarStatus.textContent = "Permission expired. Reconnect Calendar.";
     } else {
-      googleCalendarStatus.textContent = "Not connected.";
+      googleCalendarStatus.textContent = t.notConnected;
     }
   }
   if (googleCalendarHelp) {
@@ -792,7 +1110,7 @@ function renderGoogleToolsStatus(status) {
     googleCalendarHelp.classList.toggle("hidden", !calendar.helpUrl);
   }
   if (connectGoogleCalendar) {
-    connectGoogleCalendar.textContent = connected || needsReconnect ? "Reconnect Calendar" : "Connect Calendar";
+    connectGoogleCalendar.textContent = connected || needsReconnect ? t.reconnectCalendar : t.connectCalendar;
   }
   if (disconnectGoogleCalendar) {
     disconnectGoogleCalendar.disabled = !configured;
@@ -2161,12 +2479,15 @@ apiHealthRefresh.addEventListener("click", checkApiHealth);
 signOutBtn.addEventListener("click", clearUserSession);
 loginSignOutBtn.addEventListener("click", clearUserSession);
 adminSignOutBtn.addEventListener("click", clearUserSession);
+languageToggle.addEventListener("click", toggleLanguage);
 homeBenderButton.addEventListener("click", annoyHomeBender);
 openSarcasmConsole.addEventListener("click", () => {
+  rotateHomeSubtitle();
   adminConsoleOverride = false;
   renderAuthState();
 });
 openAdminConsole.addEventListener("click", () => {
+  rotateHomeSubtitle();
   adminConsoleOverride = true;
   renderAuthState();
 });
@@ -2208,6 +2529,7 @@ audioReplyToggle.addEventListener("change", () => setAudioReplyPreference(audioR
 voiceChatAudioReplyToggle.addEventListener("change", () => setAudioReplyPreference(voiceChatAudioReplyToggle.checked));
 
 openFaceView.addEventListener("click", () => {
+  rotateHomeSubtitle();
   mainView.classList.add("hidden");
   faceView.classList.remove("hidden");
   faceView.setAttribute("aria-hidden", "false");
@@ -2220,6 +2542,7 @@ openFaceView.addEventListener("click", () => {
 heroFaceViewBtn.addEventListener("click", () => openFaceView.click());
 
 openVoiceChatView.addEventListener("click", () => {
+  rotateHomeSubtitle();
   mainView.classList.add("hidden");
   voiceChatView.classList.remove("hidden");
   voiceChatView.setAttribute("aria-hidden", "false");
@@ -2266,6 +2589,7 @@ for (const player of [audioPlayer, faceAudioPlayer]) {
 }
 
 function closeFacePanel() {
+  rotateHomeSubtitle();
   stopBlinkLoop();
   faceView.classList.remove("speaking");
   faceView.classList.remove("blinking");
@@ -2280,6 +2604,7 @@ function closeFacePanel() {
 }
 
 function closeVoiceChatPanel() {
+  rotateHomeSubtitle();
   stopBlinkLoop();
   voiceChatView.classList.remove("speaking");
   setLookDirection("look-center");
@@ -2303,6 +2628,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   setLookDirection("look-center");
   initLoginBotLook();
   initHomeBenderLook();
+  chooseHomeSubtitleIndex();
+  loadLanguagePreference();
   await initAuth();
   loadVoiceChatFontScale();
   loadAudioReplyPreference();

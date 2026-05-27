@@ -754,9 +754,9 @@ def context_messages_from_history(history: list[dict] | None) -> list[dict]:
     if not lines:
         return []
     memory = (
-        "HISTORIAL REAL DEL CHAT ACTUAL, antes del ultimo mensaje del usuario:\n\n"
+        "HISTORIAL REAL DEL CHAT ACTUAL, antes del último mensaje del usuario:\n\n"
         + "\n\n---\n\n".join(lines)
-        + "\n\nUsa este historial como memoria real de esta conversacion. "
+        + "\n\nUsa este historial como memoria real de esta conversación. "
         + "Si el usuario pide un resumen, resume estos mensajes previos."
     )
     return [{"role": "system", "content": memory}]
@@ -769,7 +769,7 @@ def local_tool_answer(tool_results: list[tuple[str, object]]) -> str:
     if not isinstance(result, dict):
         return f"Resultado de {name}: {result}"
     if not result.get("ok", True):
-        return str(result.get("error") or "La herramienta no devolvio un resultado valido.")
+        return str(result.get("error") or "La herramienta no devolvió un resultado válido.")
     if name == "get_time":
         return f"Ahora es {result.get('time')} del {result.get('date')} ({result.get('timezone')})."
     if name == "get_weather":
@@ -781,7 +781,7 @@ def local_tool_answer(tool_results: list[tuple[str, object]]) -> str:
         if temp is not None:
             parts.append(f"{temp} C")
         if feels is not None:
-            parts.append(f"sensacion {feels} C")
+            parts.append(f"sensación {feels} C")
         return ", ".join(parts) + "."
     if name == "google_calendar_search":
         events = result.get("events") or []
@@ -816,9 +816,9 @@ def force_human_answer(transcript: str, answer: str) -> str:
         return answer.strip()
     user_text = transcript.strip() or "eso"
     return (
-        f"Te respondo sin numeritos raros: sobre \"{user_text}\", necesito una pregunta un poco mas concreta "
-        "para darte algo util. Si querias una reaccion, aqui va: sorprendido estoy, pero no tanto como mi "
-        "procesador cuando le pidieron sentido comun."
+        f"Te respondo sin numeritos raros: sobre \"{user_text}\", necesito una pregunta un poco más concreta "
+        "para darte algo útil. Si querías una reacción, aquí va: sorprendido estoy, pero no tanto como mi "
+        "procesador cuando le pidieron sentido común."
     )
 
 

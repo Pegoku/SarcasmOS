@@ -1,10 +1,13 @@
 from pathlib import Path
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import datetime as dt
 import hashlib
 import json
 import mimetypes
 import os
 import secrets
+import threading
 from urllib.parse import unquote, urlparse
 import uuid
 
@@ -51,6 +54,13 @@ AUTH_SESSION_TTL = dt.timedelta(days=7)
 AUTHORIZED_WEEKLY_CHAT_LIMIT = 5
 GOOGLE_CALENDAR_CHECK_URL = "https://www.googleapis.com/calendar/v3/users/me/calendarList"
 
+AUTH_USERS_LOCK = threading.RLock()
+AUTH_SESSIONS_LOCK = threading.RLock()
+GOOGLE_TOOLS_LOCK = threading.RLock()
+USAGE_LOCK = threading.RLock()
+HISTORY_LOCK = threading.RLock()
+CHAT_EXECUTOR = ThreadPoolExecutor(max_workers=int(os.environ.get("CHAT_CONCURRENCY", "20")))
+
 
 app = FastAPI(title="SarcasmOS Bender API")
 
@@ -70,6 +80,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def configure_concurrency() -> None:
+    loop = asyncio.get_running_loop()
+    loop.set_default_executor(CHAT_EXECUTOR)
 
 
 def load_public_env() -> None:
@@ -149,71 +165,79 @@ def admin_emails() -> set[str]:
 
 
 def load_auth_users() -> dict:
-    path = auth_users_path()
-    if not path.is_file():
-        return {"users": {}}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {"users": {}}
-    if not isinstance(data, dict) or not isinstance(data.get("users"), dict):
-        return {"users": {}}
-    return data
+    with AUTH_USERS_LOCK:
+        path = auth_users_path()
+        if not path.is_file():
+            return {"users": {}}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {"users": {}}
+        if not isinstance(data, dict) or not isinstance(data.get("users"), dict):
+            return {"users": {}}
+        return data
 
 
 def save_auth_users(data: dict) -> None:
-    auth_users_path().write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    with AUTH_USERS_LOCK:
+        auth_users_path().write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def load_auth_sessions() -> dict:
-    path = auth_sessions_path()
-    if not path.is_file():
-        return {"sessions": {}}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {"sessions": {}}
-    if not isinstance(data, dict) or not isinstance(data.get("sessions"), dict):
-        return {"sessions": {}}
-    return data
+    with AUTH_SESSIONS_LOCK:
+        path = auth_sessions_path()
+        if not path.is_file():
+            return {"sessions": {}}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {"sessions": {}}
+        if not isinstance(data, dict) or not isinstance(data.get("sessions"), dict):
+            return {"sessions": {}}
+        return data
 
 
 def save_auth_sessions(data: dict) -> None:
-    auth_sessions_path().write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    with AUTH_SESSIONS_LOCK:
+        auth_sessions_path().write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def load_google_tools() -> dict:
-    path = google_tools_path()
-    if not path.is_file():
-        return {"users": {}}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {"users": {}}
-    if not isinstance(data, dict) or not isinstance(data.get("users"), dict):
-        return {"users": {}}
-    return data
+    with GOOGLE_TOOLS_LOCK:
+        path = google_tools_path()
+        if not path.is_file():
+            return {"users": {}}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {"users": {}}
+        if not isinstance(data, dict) or not isinstance(data.get("users"), dict):
+            return {"users": {}}
+        return data
 
 
 def save_google_tools(data: dict) -> None:
-    google_tools_path().write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    with GOOGLE_TOOLS_LOCK:
+        google_tools_path().write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def load_usage() -> dict:
-    path = usage_path()
-    if not path.is_file():
-        return {"users": {}}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {"users": {}}
-    if not isinstance(data, dict) or not isinstance(data.get("users"), dict):
-        return {"users": {}}
-    return data
+    with USAGE_LOCK:
+        path = usage_path()
+        if not path.is_file():
+            return {"users": {}}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {"users": {}}
+        if not isinstance(data, dict) or not isinstance(data.get("users"), dict):
+            return {"users": {}}
+        return data
 
 
 def save_usage(data: dict) -> None:
-    usage_path().write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    with USAGE_LOCK:
+        usage_path().write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def parse_utc_datetime(value: str) -> dt.datetime | None:
@@ -227,40 +251,43 @@ def parse_utc_datetime(value: str) -> dt.datetime | None:
 
 
 def create_auth_session(email: str) -> tuple[str, str]:
-    now = dt.datetime.now(dt.UTC)
-    expires_at = now + AUTH_SESSION_TTL
-    token = secrets.token_urlsafe(32)
-    data = load_auth_sessions()
-    sessions = data.setdefault("sessions", {})
-    sessions[token] = {
-        "email": email.strip().lower(),
-        "createdAt": now.isoformat(timespec="seconds"),
-        "expiresAt": expires_at.isoformat(timespec="seconds"),
-    }
-    save_auth_sessions(data)
-    return token, sessions[token]["expiresAt"]
+    with AUTH_SESSIONS_LOCK:
+        now = dt.datetime.now(dt.UTC)
+        expires_at = now + AUTH_SESSION_TTL
+        token = secrets.token_urlsafe(32)
+        data = load_auth_sessions()
+        sessions = data.setdefault("sessions", {})
+        sessions[token] = {
+            "email": email.strip().lower(),
+            "createdAt": now.isoformat(timespec="seconds"),
+            "expiresAt": expires_at.isoformat(timespec="seconds"),
+        }
+        save_auth_sessions(data)
+        return token, sessions[token]["expiresAt"]
 
 
 def get_auth_session(token: str) -> dict | None:
-    data = load_auth_sessions()
-    sessions = data.setdefault("sessions", {})
-    session = sessions.get(token)
-    if not isinstance(session, dict):
-        return None
-    expires_at = parse_utc_datetime(str(session.get("expiresAt", "")))
-    if not expires_at or expires_at <= dt.datetime.now(dt.UTC):
-        sessions.pop(token, None)
-        save_auth_sessions(data)
-        return None
-    return session
+    with AUTH_SESSIONS_LOCK:
+        data = load_auth_sessions()
+        sessions = data.setdefault("sessions", {})
+        session = sessions.get(token)
+        if not isinstance(session, dict):
+            return None
+        expires_at = parse_utc_datetime(str(session.get("expiresAt", "")))
+        if not expires_at or expires_at <= dt.datetime.now(dt.UTC):
+            sessions.pop(token, None)
+            save_auth_sessions(data)
+            return None
+        return session
 
 
 def delete_auth_session(token: str) -> None:
-    data = load_auth_sessions()
-    sessions = data.setdefault("sessions", {})
-    if token in sessions:
-        sessions.pop(token, None)
-        save_auth_sessions(data)
+    with AUTH_SESSIONS_LOCK:
+        data = load_auth_sessions()
+        sessions = data.setdefault("sessions", {})
+        if token in sessions:
+            sessions.pop(token, None)
+            save_auth_sessions(data)
 
 
 def public_user(user: dict) -> dict:
@@ -313,36 +340,38 @@ def chat_quota_for_user(user: dict) -> dict:
 
 
 def consume_chat_quota(user: dict) -> dict:
-    if not user.get("authorized"):
-        raise HTTPException(status_code=403, detail="Your account is not authorized yet.")
-    quota = chat_quota_for_user(user)
-    if not quota["limited"]:
-        return quota
-    if quota["remaining"] <= 0:
-        raise HTTPException(
-            status_code=429,
-            detail=(
-                "Se te han acabado los mensajes disponibles hasta la proxima semana. "
-                "Pide a un admin que te reactive 5 mensajes si necesitas seguir usando el chat ahora."
-            ),
-        )
-    email = str(user.get("email", "")).strip().lower()
-    data = load_usage()
-    users = data.setdefault("users", {})
-    user_usage = users.setdefault(email, {})
-    period = week_key()
-    user_usage[period] = int(user_usage.get(period, 0)) + 1
-    save_usage(data)
-    return chat_quota_for_user(user)
+    with USAGE_LOCK:
+        if not user.get("authorized"):
+            raise HTTPException(status_code=403, detail="Your account is not authorized yet.")
+        quota = chat_quota_for_user(user)
+        if not quota["limited"]:
+            return quota
+        if quota["remaining"] <= 0:
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "Se te han acabado los mensajes disponibles hasta la próxima semana. "
+                    "Pide a un admin que te reactive 5 mensajes si necesitas seguir usando el chat ahora."
+                ),
+            )
+        email = str(user.get("email", "")).strip().lower()
+        data = load_usage()
+        users = data.setdefault("users", {})
+        user_usage = users.setdefault(email, {})
+        period = week_key()
+        user_usage[period] = int(user_usage.get(period, 0)) + 1
+        save_usage(data)
+        return chat_quota_for_user(user)
 
 
 def reset_chat_quota(email: str) -> dict:
-    normalized_email = email.strip().lower()
-    data = load_usage()
-    user_usage = data.setdefault("users", {}).setdefault(normalized_email, {})
-    user_usage[week_key()] = 0
-    save_usage(data)
-    return chat_quota_for_user({"email": normalized_email, "authorized": True, "isAdmin": False})
+    with USAGE_LOCK:
+        normalized_email = email.strip().lower()
+        data = load_usage()
+        user_usage = data.setdefault("users", {}).setdefault(normalized_email, {})
+        user_usage[week_key()] = 0
+        save_usage(data)
+        return chat_quota_for_user({"email": normalized_email, "authorized": True, "isAdmin": False})
 
 
 def validate_google_calendar_token(access_token: str) -> tuple[bool, str, str]:
@@ -441,25 +470,26 @@ def tool_context_for_user(user: dict | None) -> dict:
 
 
 def upsert_auth_user(email: str, name: str, picture: str) -> dict:
-    now = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
-    normalized_email = email.strip().lower()
-    admins = admin_emails()
-    data = load_auth_users()
-    users = data.setdefault("users", {})
-    existing = users.get(normalized_email, {})
-    is_bootstrap_admin = normalized_email in admins
-    user = {
-        "email": normalized_email,
-        "name": name or existing.get("name") or normalized_email,
-        "picture": picture or existing.get("picture", ""),
-        "authorized": bool(existing.get("authorized")) or is_bootstrap_admin,
-        "isAdmin": bool(existing.get("isAdmin")) or is_bootstrap_admin,
-        "createdAt": existing.get("createdAt") or now,
-        "lastLoginAt": now,
-    }
-    users[normalized_email] = user
-    save_auth_users(data)
-    return user
+    with AUTH_USERS_LOCK:
+        now = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
+        normalized_email = email.strip().lower()
+        admins = admin_emails()
+        data = load_auth_users()
+        users = data.setdefault("users", {})
+        existing = users.get(normalized_email, {})
+        is_bootstrap_admin = normalized_email in admins
+        user = {
+            "email": normalized_email,
+            "name": name or existing.get("name") or normalized_email,
+            "picture": picture or existing.get("picture", ""),
+            "authorized": bool(existing.get("authorized")) or is_bootstrap_admin,
+            "isAdmin": bool(existing.get("isAdmin")) or is_bootstrap_admin,
+            "createdAt": existing.get("createdAt") or now,
+            "lastLoginAt": now,
+        }
+        users[normalized_email] = user
+        save_auth_users(data)
+        return user
 
 
 def current_auth_user(authorization: str | None) -> dict:
@@ -631,26 +661,28 @@ def empty_history_document() -> dict:
 
 
 def load_history_document_for_email(email: str) -> dict:
-    path = user_history_path(email)
-    if not path.is_file():
+    with HISTORY_LOCK:
+        path = user_history_path(email)
+        if not path.is_file():
+            return empty_history_document()
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return empty_history_document()
+        if isinstance(data, dict):
+            if isinstance(data.get("chats"), list):
+                data["items"] = history_items_from_payload(data)
+                return data
+            if isinstance(data.get("items"), list):
+                return history_document_from_payload(HistoryPayload(items=data["items"]))
+        if isinstance(data, list):
+            return history_document_from_payload(HistoryPayload(items=data))
         return empty_history_document()
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return empty_history_document()
-    if isinstance(data, dict):
-        if isinstance(data.get("chats"), list):
-            data["items"] = history_items_from_payload(data)
-            return data
-        if isinstance(data.get("items"), list):
-            return history_document_from_payload(HistoryPayload(items=data["items"]))
-    if isinstance(data, list):
-        return history_document_from_payload(HistoryPayload(items=data))
-    return empty_history_document()
 
 
 def save_history_document_for_email(email: str, document: dict) -> None:
-    user_history_path(email).write_text(json.dumps(document, ensure_ascii=False, indent=2), encoding="utf-8")
+    with HISTORY_LOCK:
+        user_history_path(email).write_text(json.dumps(document, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def chat_summary_for_email(email: str) -> dict:
@@ -813,9 +845,12 @@ async def chat_audio(
         upload_path = uploads_dir() / upload_name
         upload_path.parent.mkdir(parents=True, exist_ok=True)
         contents = await audio.read()
-        upload_path.write_bytes(contents)
+        await asyncio.to_thread(upload_path.write_bytes, contents)
 
-        result = process_audio_file(
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            CHAT_EXECUTOR,
+            process_audio_file,
             str(upload_path),
             {
                 "context": best_chat_context(parse_context_payload(context), chatId, user["email"]),
@@ -845,7 +880,10 @@ async def chat_text(payload: TextRequest, authorization: str | None = Header(def
         if not payload.message.strip():
             raise HTTPException(status_code=400, detail="Message cannot be empty.")
         quota = consume_chat_quota(user)
-        result = process_text_message(
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            CHAT_EXECUTOR,
+            process_text_message,
             payload.message,
             {
                 "context": best_chat_context(payload.context, payload.chatId, user["email"]),
@@ -957,20 +995,21 @@ async def connect_google_calendar(
             raise HTTPException(status_code=400, detail="Missing Google access token.")
         expires_at = dt.datetime.now(dt.UTC) + dt.timedelta(seconds=max(60, int(payload.expiresIn or 3600)))
         email = user["email"].strip().lower()
-        data = load_google_tools()
-        users = data.setdefault("users", {})
-        user_tools = users.setdefault(email, {})
-        user_tools["calendar"] = {
-            "accessToken": payload.accessToken.strip(),
-            "expiresAt": expires_at.isoformat(timespec="seconds"),
-            "scope": payload.scope or "https://www.googleapis.com/auth/calendar.readonly",
-            "updatedAt": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
-            "lastCheckedAt": "",
-            "lastError": "",
-            "helpUrl": "",
-        }
-        users[email] = user_tools
-        save_google_tools(data)
+        with GOOGLE_TOOLS_LOCK:
+            data = load_google_tools()
+            users = data.setdefault("users", {})
+            user_tools = users.setdefault(email, {})
+            user_tools["calendar"] = {
+                "accessToken": payload.accessToken.strip(),
+                "expiresAt": expires_at.isoformat(timespec="seconds"),
+                "scope": payload.scope or "https://www.googleapis.com/auth/calendar.readonly",
+                "updatedAt": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+                "lastCheckedAt": "",
+                "lastError": "",
+                "helpUrl": "",
+            }
+            users[email] = user_tools
+            save_google_tools(data)
         return JSONResponse(content=google_tool_status(email, check=True))
     except HTTPException as error:
         return error_response(str(error.detail), status_code=error.status_code)
@@ -983,11 +1022,12 @@ async def disconnect_google_calendar(authorization: str | None = Header(default=
     try:
         user = current_auth_user(authorization)
         email = user["email"].strip().lower()
-        data = load_google_tools()
-        user_tools = data.setdefault("users", {}).setdefault(email, {})
-        if isinstance(user_tools, dict):
-            user_tools.pop("calendar", None)
-        save_google_tools(data)
+        with GOOGLE_TOOLS_LOCK:
+            data = load_google_tools()
+            user_tools = data.setdefault("users", {}).setdefault(email, {})
+            if isinstance(user_tools, dict):
+                user_tools.pop("calendar", None)
+            save_google_tools(data)
         return JSONResponse(content=google_tool_status(email))
     except HTTPException as error:
         return error_response(str(error.detail), status_code=error.status_code)
@@ -1098,21 +1138,22 @@ async def admin_update_user(
     try:
         admin = require_admin_user(authorization)
         normalized_email = email.strip().lower()
-        data = load_auth_users()
-        users = data.setdefault("users", {})
-        user = users.get(normalized_email)
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found.")
-        if admin["email"] == normalized_email and payload.isAdmin is False:
-            raise HTTPException(status_code=400, detail="You cannot remove your own admin access.")
-        if payload.authorized is not None:
-            user["authorized"] = bool(payload.authorized)
-        if payload.isAdmin is not None:
-            user["isAdmin"] = bool(payload.isAdmin)
-            if payload.isAdmin:
-                user["authorized"] = True
-        users[normalized_email] = user
-        save_auth_users(data)
+        with AUTH_USERS_LOCK:
+            data = load_auth_users()
+            users = data.setdefault("users", {})
+            user = users.get(normalized_email)
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found.")
+            if admin["email"] == normalized_email and payload.isAdmin is False:
+                raise HTTPException(status_code=400, detail="You cannot remove your own admin access.")
+            if payload.authorized is not None:
+                user["authorized"] = bool(payload.authorized)
+            if payload.isAdmin is not None:
+                user["isAdmin"] = bool(payload.isAdmin)
+                if payload.isAdmin:
+                    user["authorized"] = True
+            users[normalized_email] = user
+            save_auth_users(data)
         return JSONResponse(content={"user": public_user(user)})
     except HTTPException as error:
         return error_response(str(error.detail), status_code=error.status_code)

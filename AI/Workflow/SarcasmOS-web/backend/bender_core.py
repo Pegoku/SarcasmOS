@@ -190,7 +190,9 @@ class BenderConfig:
     outputs_dir: Path | None = None
 
     @classmethod
-    def from_env(cls) -> "BenderConfig":
+    def from_env(cls, overrides: dict | None = None) -> "BenderConfig":
+        overrides = overrides or {}
+        strict_developer_mode = bool(overrides.get("_strictDeveloperMode"))
         base_dir = Path(__file__).resolve().parent
         env_candidates = [
             base_dir / ".env",
@@ -201,25 +203,41 @@ class BenderConfig:
         for env_path in env_candidates:
             load_dotenv(env_path)
 
-        api_token = os.environ.get("HACK_CLUB_AI_KEY")
-        replicate_token = api_token or os.environ.get("REPLICATE_API_TOKEN")
-        openrouter_token = api_token or os.environ.get("OPENROUTER_API_TOKEN")
-        if not replicate_token:
-            raise RuntimeError("HACK_CLUB_AI_KEY or REPLICATE_API_TOKEN is required.")
+        if strict_developer_mode:
+            api_token = overrides.get("hackClubAiKey")
+            replicate_token = api_token or overrides.get("replicateApiToken", "")
+            openrouter_token = api_token or overrides.get("openrouterApiToken", "")
+            fallback_llm_token = str(overrides.get("pioneerApiKey", "")).strip()
+            fallback_llm_base_url = overrides.get("pioneerBaseUrl") or ""
+            fallback_llm_model = overrides.get("pioneerModel") or overrides.get("llmModel") or ""
+            openrouter_base_url = overrides.get("openrouterBaseUrl") or ""
+            llm_model = overrides.get("llmModel") or ""
+        else:
+            api_token = overrides.get("hackClubAiKey") or os.environ.get("HACK_CLUB_AI_KEY")
+            replicate_token = api_token or overrides.get("replicateApiToken") or os.environ.get("REPLICATE_API_TOKEN")
+            openrouter_token = api_token or overrides.get("openrouterApiToken") or os.environ.get("OPENROUTER_API_TOKEN")
+            fallback_llm_token = (overrides.get("pioneerApiKey") or os.environ.get("PIONEER_API_KEY", "")).strip()
+            fallback_llm_base_url = overrides.get("pioneerBaseUrl") or os.environ.get("PIONEER_BASE_URL", DEFAULT_FALLBACK_LLM_BASE_URL)
+            fallback_llm_model = overrides.get("pioneerModel") or os.environ.get("PIONEER_MODEL", DEFAULT_FALLBACK_LLM_MODEL)
+            openrouter_base_url = overrides.get("openrouterBaseUrl") or os.environ.get("OPENROUTER_BASE_URL", DEFAULT_OPENROUTER_BASE_URL)
+            llm_model = overrides.get("llmModel") or os.environ.get("LLM_MODEL", DEFAULT_LLM_MODEL)
+        if not openrouter_token and fallback_llm_token:
+            openrouter_token = fallback_llm_token
+            openrouter_base_url = fallback_llm_base_url
+            llm_model = fallback_llm_model
+
         if not openrouter_token:
-            raise RuntimeError("HACK_CLUB_AI_KEY or OPENROUTER_API_TOKEN is required.")
+            raise RuntimeError("Developer mode requires the user's Completions API KEY or Fallback API Key.")
+        if not openrouter_base_url:
+            raise RuntimeError("Developer mode requires the user's Completions API URL or Fallback Completions API URL.")
+        if not llm_model:
+            raise RuntimeError("Developer mode requires the user's LLM model.")
 
         voice_id = os.environ.get("MINIMAX_VOICE_ID")
-        if not voice_id:
-            raise RuntimeError("MINIMAX_VOICE_ID is required.")
-
         replicate_base_url = normalize_replicate_base_url(
-            os.environ.get("REPLICATE_BASE_URL", DEFAULT_REPLICATE_BASE_URL)
+            (overrides.get("replicateBaseUrl") if strict_developer_mode else None)
+            or os.environ.get("REPLICATE_BASE_URL", DEFAULT_REPLICATE_BASE_URL)
         )
-        openrouter_base_url = os.environ.get("OPENROUTER_BASE_URL", DEFAULT_OPENROUTER_BASE_URL)
-        fallback_llm_token = os.environ.get("PIONEER_API_KEY", "").strip()
-        fallback_llm_base_url = os.environ.get("PIONEER_BASE_URL", DEFAULT_FALLBACK_LLM_BASE_URL)
-        fallback_llm_model = os.environ.get("PIONEER_MODEL", DEFAULT_FALLBACK_LLM_MODEL)
 
         sysprompt = read_sysprompt(None, str(base_dir / "sysprompt.txt"))
 
@@ -232,9 +250,9 @@ class BenderConfig:
             fallback_llm_base_url=fallback_llm_base_url,
             fallback_llm_model=fallback_llm_model,
             replicate_base_url=replicate_base_url,
-            stt_model=os.environ.get("STT_MODEL", DEFAULT_STT_MODEL),
-            llm_model=os.environ.get("LLM_MODEL", DEFAULT_LLM_MODEL),
-            tts_model=os.environ.get("TTS_MODEL", DEFAULT_TTS_MODEL),
+            stt_model=overrides.get("sttModel") or os.environ.get("STT_MODEL", DEFAULT_STT_MODEL),
+            llm_model=llm_model,
+            tts_model=(overrides.get("ttsModel") if strict_developer_mode else None) or os.environ.get("TTS_MODEL", DEFAULT_TTS_MODEL),
             language=os.environ.get("WHISPER_LANGUAGE", "spanish"),
             task=os.environ.get("WHISPER_TASK", "transcribe"),
             timestamp=os.environ.get("WHISPER_TIMESTAMP", "chunk"),
@@ -246,7 +264,7 @@ class BenderConfig:
             audio_format=os.environ.get("MINIMAX_AUDIO_FORMAT", "wav"),
             language_boost=os.environ.get("MINIMAX_LANGUAGE_BOOST", "Spanish"),
             sysprompt=sysprompt,
-            hf_token=os.environ.get("HF_TOKEN"),
+            hf_token=overrides.get("hfToken") or os.environ.get("HF_TOKEN"),
             base_dir=base_dir,
             uploads_dir=base_dir / "uploads",
             outputs_dir=base_dir / "outputs",
@@ -1051,6 +1069,10 @@ def ensure_supported_audio(input_path: Path) -> Path:
 
 
 def transcribe_audio(audio_path: str, config: BenderConfig) -> str:
+    if not config.replicate_token:
+        raise RuntimeError("Replicate API key is required for audio transcription.")
+    if not config.replicate_base_url:
+        raise RuntimeError("Replicate API URL is required for audio transcription.")
     source_path = ensure_supported_audio(Path(audio_path))
     stt_input = {
         "audio": audio_input(str(source_path)),
@@ -1099,6 +1121,14 @@ def generate_text_answer(
 
 
 def synthesize_speech(text: str, config: BenderConfig) -> Path:
+    if not config.replicate_token:
+        raise RuntimeError("Replicate API key is required for TTS audio.")
+    if not config.replicate_base_url:
+        raise RuntimeError("Replicate API URL is required for TTS audio.")
+    if not config.tts_model:
+        raise RuntimeError("TTS model is required for TTS audio.")
+    if not config.voice_id:
+        raise RuntimeError("MINIMAX_VOICE_ID is required for TTS audio.")
     tts_input = {
         "text": text,
         "voice_id": config.voice_id,
@@ -1138,8 +1168,8 @@ def synthesize_speech(text: str, config: BenderConfig) -> Path:
 
 
 def process_audio_file(audio_path: str, options: dict | None = None) -> dict:
-    config = BenderConfig.from_env()
     options = options or {}
+    config = BenderConfig.from_env(options.get("config_overrides"))
     transcript = transcribe_audio(audio_path, config)
     answer = generate_text_answer(transcript, config, options.get("context"), options.get("tool_context"))
     output_path = synthesize_speech(answer, config) if options.get("synthesize_audio", True) else None
@@ -1151,8 +1181,8 @@ def process_audio_file(audio_path: str, options: dict | None = None) -> dict:
 
 
 def process_text_message(message: str, options: dict | None = None) -> dict:
-    config = BenderConfig.from_env()
     options = options or {}
+    config = BenderConfig.from_env(options.get("config_overrides"))
     answer = generate_text_answer(message, config, options.get("context"), options.get("tool_context"))
     output_path = synthesize_speech(answer, config) if options.get("synthesize_audio", True) else None
     return {

@@ -17,15 +17,33 @@ const signOutBtn = document.getElementById("signOutBtn");
 const languageToggle = document.getElementById("languageToggle");
 const openAdminConsole = document.getElementById("openAdminConsole");
 const adminView = document.getElementById("adminView");
+const developerView = document.getElementById("developerView");
+const openDeveloperMode = document.getElementById("openDeveloperMode");
+const closeDeveloperMode = document.getElementById("closeDeveloperMode");
+const developerLanguageToggle = document.getElementById("developerLanguageToggle");
 const adminUserAvatar = document.getElementById("adminUserAvatar");
 const adminUserName = document.getElementById("adminUserName");
 const adminUserEmail = document.getElementById("adminUserEmail");
 const adminSignOutBtn = document.getElementById("adminSignOutBtn");
+const adminLanguageToggle = document.getElementById("adminLanguageToggle");
 const openSarcasmConsole = document.getElementById("openSarcasmConsole");
 const adminPanel = document.getElementById("adminPanel");
 const adminRefresh = document.getElementById("adminRefresh");
 const adminUsersList = document.getElementById("adminUsersList");
+const developerRequestsNotice = document.getElementById("developerRequestsNotice");
 const googleToolsPanel = document.getElementById("googleToolsPanel");
+const developerModePanel = document.getElementById("developerModePanel");
+const developerModeRequest = document.getElementById("developerModeRequest");
+const developerModeStatus = document.getElementById("developerModeStatus");
+const developerModeForm = document.getElementById("developerModeForm");
+const developerCompletionsUrl = document.getElementById("developerCompletionsUrl");
+const developerCompletionsKey = document.getElementById("developerCompletionsKey");
+const developerReplicateUrl = document.getElementById("developerReplicateUrl");
+const developerReplicateKey = document.getElementById("developerReplicateKey");
+const developerFallbackUrl = document.getElementById("developerFallbackUrl");
+const developerFallbackKey = document.getElementById("developerFallbackKey");
+const developerLlmModel = document.getElementById("developerLlmModel");
+const developerTtsModel = document.getElementById("developerTtsModel");
 const googleToolsRefresh = document.getElementById("googleToolsRefresh");
 const googleCalendarStatus = document.getElementById("googleCalendarStatus");
 const googleCalendarHelp = document.getElementById("googleCalendarHelp");
@@ -187,9 +205,12 @@ let isBusy = false;
 let voiceChatFontScale = 1;
 let audioReplyEnabled = true;
 let googleToolsState = null;
+let developerModeState = null;
 let googleToolsMonitor = null;
 let currentQuota = null;
+let lastAdminUsers = [];
 let adminConsoleOverride = false;
+let developerViewOverride = false;
 let currentLanguage = "en";
 let homeSubtitleIndex = 0;
 let homeBenderAnnoyance = 0;
@@ -528,7 +549,7 @@ function setLoading(isLoading, label, mode = "") {
   voiceChatRecordBtn.disabled = isLoading;
   voiceChatStopBtn.disabled = !mediaRecorder || !mediaRecorder.state || mediaRecorder.state === "inactive";
   voiceChatTextSend.disabled = isLoading;
-  setRecordingState(label || (isLoading ? "Thinking..." : "Idle"));
+  setRecordingState(label || (isLoading ? tr("thinking") : tr("idle")));
   setThinking(isLoading, mode);
 }
 
@@ -714,6 +735,7 @@ const HOME_TRANSLATIONS = {
     textHelp: "Fast path for prompts, tests, and follow-up questions.",
     textPlaceholder: "Type a message for Bender",
     sendText: "Send text",
+    send: "Send",
     result: "Result",
     output: "Output",
     transcript: "Transcript",
@@ -721,6 +743,80 @@ const HOME_TRANSLATIONS = {
     waitingAudio: "Waiting for audio...",
     waitingResponse: "Waiting for response...",
     backHome: "Back to home",
+    adminConsoleTitle: "Admin Console",
+    adminConsoleSubtitle: "Manage users, inspect chat history, and check API health.",
+    sarcasmosHome: "SarcasmOS Home",
+    adminPanelTitle: "Admin Panel",
+    adminPanelHelp: "Authorize users and manage admin access.",
+    refreshUsers: "Refresh users",
+    apiHealthTitle: "API Health",
+    apiHealthHelp: "Endpoint checks for the backend services used by this console.",
+    checkApis: "Check APIs",
+    chatHistoryTitle: "Chat History",
+    chatHistoryHelp: "Recent messages saved by the backend.",
+    clearHistory: "Clear history",
+    loadingUsers: "Loading users...",
+    noUsers: "No users have signed in yet.",
+    authorized: "Authorized",
+    adminRole: "Admin",
+    chats: "Chats",
+    resetFiveChats: "Reset 5 chats",
+    loadingChatSummary: "Loading chat summary...",
+    chatSingular: "chat",
+    chatPlural: "chats",
+    messageSingular: "message",
+    messagePlural: "messages",
+    newChat: "New chat",
+    delete: "Delete",
+    user: "User",
+    none: "None",
+    lastQuestion: "Last question",
+    lastAnswer: "Last answer",
+    noChatsYet: "No chats yet.",
+    you: "You",
+    emptyTranscript: "(empty transcript)",
+    emptyAnswer: "(empty answer)",
+    audioReady: "Audio ready (click play).",
+    textAnswerReady: "Text answer ready.",
+    thinking: "Thinking...",
+    sendingAudio: "Sending audio...",
+    sendingText: "Sending text...",
+    recording: "Recording...",
+    processingRecording: "Processing recording...",
+    chooseAudioFirst: "Choose an audio file first.",
+    typeMessageFirst: "Type a message first.",
+    microphoneDenied: "Microphone permission denied or unavailable.",
+    failedStatus: "Failed to load status",
+    pendingAuthorization: "Your Google account is signed in, but an admin must authorize access.",
+    googleClientMissing: "Set GOOGLE_CLIENT_ID in backend/.env to enable Google sign-in.",
+    sessionExpired: "Session expired. Sign in again.",
+    apiDescBackend: "Main backend reachability",
+    apiDescRobot: "Bender runtime status",
+    apiDescHistory: "Saved conversations",
+    apiDescSchema: "Backend route registry",
+    apiDescConfig: "Google Sign-In configuration",
+    apiDescServices: "STT, LLM, and TTS configuration",
+    checking: "Checking...",
+    notChecked: "Not checked yet",
+    respondingIn: "Responding in",
+    failedFetch: "Failed to fetch",
+    configured: "Configured",
+    noBaseUrl: "No base URL shown",
+    serviceNotConfigured: "Service is not configured correctly",
+    developerMode: "Developer Mode",
+    developer: "Developer",
+    developerModeHelp: "Use your own API keys so your messages do not spend the shared weekly budget.",
+    requestAccess: "Request access",
+    requestedAccess: "Access requested",
+    developerApproved: "Approved. Add at least one API key to use your own budget.",
+    developerReady: "Active. Your chats use your API keys and do not consume weekly shared messages.",
+    developerNotRequested: "Not requested.",
+    developerWaiting: "Waiting for admin approval.",
+    saveDeveloperApis: "Save developer APIs",
+    developerModeLabel: "Developer",
+    developerRequestNotice: "developer mode request pending",
+    developerRequestsNotice: "developer mode requests pending",
+    approveDeveloper: "Approve developer mode",
   },
   es: {
     documentTitle: "Inicio de SarcasmOS",
@@ -771,6 +867,7 @@ const HOME_TRANSLATIONS = {
     textHelp: "La vía rápida para prompts, pruebas y preguntas de seguimiento.",
     textPlaceholder: "Escribe un mensaje para Bender",
     sendText: "Enviar texto",
+    send: "Enviar",
     result: "Resultado",
     output: "Salida",
     transcript: "Transcripción",
@@ -778,6 +875,80 @@ const HOME_TRANSLATIONS = {
     waitingAudio: "Esperando audio...",
     waitingResponse: "Esperando respuesta...",
     backHome: "Volver al inicio",
+    adminConsoleTitle: "Panel de Admin",
+    adminConsoleSubtitle: "Gestiona usuarios, revisa historiales de chat y comprueba la salud de la API.",
+    sarcasmosHome: "Inicio de SarcasmOS",
+    adminPanelTitle: "Panel de Administración",
+    adminPanelHelp: "Autoriza usuarios y gestiona el acceso de administradores.",
+    refreshUsers: "Refrescar usuarios",
+    apiHealthTitle: "Salud de la API",
+    apiHealthHelp: "Comprobaciones de endpoints para los servicios del backend usados por esta consola.",
+    checkApis: "Comprobar APIs",
+    chatHistoryTitle: "Historial de Chats",
+    chatHistoryHelp: "Mensajes recientes guardados por el backend.",
+    clearHistory: "Borrar historial",
+    loadingUsers: "Cargando usuarios...",
+    noUsers: "Todavía no ha iniciado sesión ningún usuario.",
+    authorized: "Autorizado",
+    adminRole: "Admin",
+    chats: "Chats",
+    resetFiveChats: "Resetear 5 chats",
+    loadingChatSummary: "Cargando resumen de chats...",
+    chatSingular: "chat",
+    chatPlural: "chats",
+    messageSingular: "mensaje",
+    messagePlural: "mensajes",
+    newChat: "Chat nuevo",
+    delete: "Borrar",
+    user: "Usuario",
+    none: "Nada",
+    lastQuestion: "Última pregunta",
+    lastAnswer: "Última respuesta",
+    noChatsYet: "Todavía no hay chats.",
+    you: "Tú",
+    emptyTranscript: "(transcripción vacía)",
+    emptyAnswer: "(respuesta vacía)",
+    audioReady: "Audio listo (pulsa play).",
+    textAnswerReady: "Respuesta de texto lista.",
+    thinking: "Pensando...",
+    sendingAudio: "Enviando audio...",
+    sendingText: "Enviando texto...",
+    recording: "Grabando...",
+    processingRecording: "Procesando grabación...",
+    chooseAudioFirst: "Elige un archivo de audio primero.",
+    typeMessageFirst: "Escribe un mensaje primero.",
+    microphoneDenied: "Permiso de micrófono denegado o no disponible.",
+    failedStatus: "No se pudo cargar el estado",
+    pendingAuthorization: "Has iniciado sesión con Google, pero un admin debe autorizar el acceso.",
+    googleClientMissing: "Configura GOOGLE_CLIENT_ID en backend/.env para activar Google Sign-In.",
+    sessionExpired: "Sesión caducada. Inicia sesión otra vez.",
+    apiDescBackend: "Conectividad principal del backend",
+    apiDescRobot: "Estado de ejecución de Bender",
+    apiDescHistory: "Conversaciones guardadas",
+    apiDescSchema: "Registro de rutas del backend",
+    apiDescConfig: "Configuración de Google Sign-In",
+    apiDescServices: "Configuración de STT, LLM y TTS",
+    checking: "Comprobando...",
+    notChecked: "Sin comprobar todavía",
+    respondingIn: "Responde en",
+    failedFetch: "No se pudo consultar",
+    configured: "Configurado",
+    noBaseUrl: "URL base no mostrada",
+    serviceNotConfigured: "El servicio no está configurado correctamente",
+    developerMode: "Modo Desarrollador",
+    developer: "Desarrollador",
+    developerModeHelp: "Usa tus propias API keys para que tus mensajes no gasten el presupuesto semanal compartido.",
+    requestAccess: "Solicitar acceso",
+    requestedAccess: "Acceso solicitado",
+    developerApproved: "Aprobado. Añade al menos una API key para usar tu propio presupuesto.",
+    developerReady: "Activo. Tus chats usan tus API keys y no consumen mensajes semanales compartidos.",
+    developerNotRequested: "No solicitado.",
+    developerWaiting: "Esperando aprobación de un admin.",
+    saveDeveloperApis: "Guardar APIs de desarrollador",
+    developerModeLabel: "Desarrollador",
+    developerRequestNotice: "solicitud de modo desarrollador pendiente",
+    developerRequestsNotice: "solicitudes de modo desarrollador pendientes",
+    approveDeveloper: "Aprobar modo desarrollador",
   },
 };
 
@@ -788,6 +959,20 @@ function setText(selector, value) {
   }
 }
 
+function setAllText(selector, value) {
+  for (const element of document.querySelectorAll(selector)) {
+    element.textContent = value;
+  }
+}
+
+function tr(key) {
+  return (HOME_TRANSLATIONS[currentLanguage] || HOME_TRANSLATIONS.en)[key] || HOME_TRANSLATIONS.en[key] || key;
+}
+
+function plural(count, singularKey, pluralKey) {
+  return Number(count) === 1 ? tr(singularKey) : tr(pluralKey);
+}
+
 function applyLanguage(language) {
   currentLanguage = HOME_TRANSLATIONS[language] ? language : "en";
   const t = HOME_TRANSLATIONS[currentLanguage];
@@ -795,8 +980,15 @@ function applyLanguage(language) {
   document.title = t.documentTitle;
   setText(".console-nav span", t.navKicker);
   setText("#languageToggle", t.translate);
+  setText("#adminLanguageToggle", t.translate);
+  setText("#developerLanguageToggle", t.translate);
   setText("#openAdminConsole", t.admin);
+  setText("#openDeveloperMode", t.developer);
+  setText("#closeDeveloperMode", t.backHome);
   setText("#signOutBtn", t.signOut);
+  setText("#loginSignOutBtn", t.signOut);
+  setText("#adminSignOutBtn", t.signOut);
+  setText("#openSarcasmConsole", t.sarcasmosHome);
   setText(".console-hero .eyebrow", t.eyebrow);
   setText(".console-hero h1", t.heroTitle);
   setHomeSubtitleText();
@@ -826,17 +1018,28 @@ function applyLanguage(language) {
   setText("#googleToolsRefresh", t.refresh);
   setText("#disconnectGoogleCalendar", t.disconnect);
   setText("#googleCalendarHelp", t.enableCalendar);
+  setText("#developerModePanel h2", t.developerMode);
+  setText("#developerView .console-nav span", t.developerMode);
+  setText("#developerModePanel .history-header .helper-text", t.developerModeHelp);
+  setText("#developerModeRequest", developerModeState?.developerRequested ? t.requestedAccess : t.requestAccess);
+  setText("#developerModeSave", t.saveDeveloperApis);
   setText(".section-heading .eyebrow", t.talkEyebrow);
   setText(".section-heading h2", t.nextMessage);
   setText(".console-input-grid .input-panel:nth-child(1) h2", t.audioInput);
   setText(".console-input-grid .input-panel:nth-child(1) .step-pill", t.voicePill);
   setText(".console-input-grid .input-panel:nth-child(1) .helper-text", t.audioHelp);
-  setText(".file-input span", t.chooseAudio);
+  setAllText(".file-input span", t.chooseAudio);
   setText("#uploadSend", t.sendUpload);
   setText("#recordBtn", t.record);
   setText("#stopBtn", t.stop);
+  setText("#faceUploadSend", t.sendUpload);
+  setText("#faceRecordBtn", t.record);
+  setText("#faceStopBtn", t.stop);
+  setText("#voiceChatRecordBtn", t.record);
+  setText("#voiceChatStopBtn", t.stop);
+  setText("#voiceChatTextSend", t.send);
   if (recordState?.textContent === HOME_TRANSLATIONS.en.idle || recordState?.textContent === HOME_TRANSLATIONS.es.idle) {
-    recordState.textContent = t.idle;
+    setRecordingState(t.idle);
   }
   setText(".console-input-grid .input-panel:nth-child(2) h2", t.textInput);
   setText(".console-input-grid .input-panel:nth-child(2) .step-pill", t.textPill);
@@ -844,7 +1047,14 @@ function applyLanguage(language) {
   if (textInput) {
     textInput.placeholder = t.textPlaceholder;
   }
+  if (faceTextInput) {
+    faceTextInput.placeholder = t.textPlaceholder;
+  }
+  if (voiceChatTextInput) {
+    voiceChatTextInput.placeholder = t.textPlaceholder;
+  }
   setText("#textSend", t.sendText);
+  setText("#faceTextSend", t.sendText);
   setText("#mainView > .panel:last-of-type h2", t.result);
   setText("#mainView > .panel:last-of-type .step-pill", t.output);
   setText("#mainView > .panel:last-of-type .grid > div:nth-child(1) .label", t.transcript);
@@ -857,7 +1067,23 @@ function applyLanguage(language) {
   }
   setText("#closeFaceView", t.backHome);
   setText("#closeVoiceChatView", t.backHome);
+  setText("#adminView .hero-copy h1", t.adminConsoleTitle);
+  setText("#adminView .hero-copy .subtitle", t.adminConsoleSubtitle);
+  setText("#adminPanel h2", t.adminPanelTitle);
+  setText("#adminPanel .helper-text", t.adminPanelHelp);
+  setText("#adminRefresh", t.refreshUsers);
+  setText(".api-health-panel h2", t.apiHealthTitle);
+  setText(".api-health-panel .helper-text", t.apiHealthHelp);
+  setText("#apiHealthRefresh", t.checkApis);
+  setText("#adminView > .panel:last-of-type h2", t.chatHistoryTitle);
+  setText("#adminView > .panel:last-of-type .helper-text", t.chatHistoryHelp);
+  setText("#clearHistory", t.clearHistory);
   renderGoogleToolsStatus(googleToolsState);
+  renderDeveloperModeStatus(developerModeState);
+  if (lastAdminUsers.length) {
+    renderAdminUsers(lastAdminUsers);
+  }
+  renderAllHistoryViews();
 }
 
 function loadLanguagePreference() {
@@ -941,6 +1167,7 @@ function clearUserSession() {
   currentUser = null;
   currentQuota = null;
   adminConsoleOverride = false;
+  developerViewOverride = false;
   stopGoogleToolsMonitor();
   renderGoogleToolsStatus(null);
   try {
@@ -961,24 +1188,29 @@ function renderAuthState() {
   const isSignedIn = Boolean(currentUser?.email && currentUser?.token);
   const isAuthorized = Boolean(currentUser?.authorized);
   const isAdmin = Boolean(currentUser?.isAdmin);
-  const canUseApp = isSignedIn && isAuthorized && (!isAdmin || !adminConsoleOverride);
-  const canUseAdmin = isSignedIn && isAuthorized && isAdmin && adminConsoleOverride;
+  const canUseDeveloper = isSignedIn && isAuthorized && developerViewOverride;
+  const canUseApp = isSignedIn && isAuthorized && !developerViewOverride && (!isAdmin || !adminConsoleOverride);
+  const canUseAdmin = isSignedIn && isAuthorized && isAdmin && adminConsoleOverride && !developerViewOverride;
   if (!canUseApp) {
     closeFacePanel();
     closeVoiceChatPanel();
   }
-  loginView?.classList.toggle("hidden", canUseApp || canUseAdmin);
+  loginView?.classList.toggle("hidden", canUseApp || canUseAdmin || canUseDeveloper);
   mainView?.classList.toggle("hidden", !canUseApp);
   mainView?.setAttribute("aria-hidden", canUseApp ? "false" : "true");
+  developerView?.classList.toggle("hidden", !canUseDeveloper);
+  developerView?.setAttribute("aria-hidden", canUseDeveloper ? "false" : "true");
   adminView?.classList.toggle("hidden", !canUseAdmin);
   adminView?.setAttribute("aria-hidden", canUseAdmin ? "false" : "true");
   adminPanel?.classList.toggle("hidden", !canUseAdmin);
   googleToolsPanel?.classList.toggle("hidden", !canUseApp);
+  developerModePanel?.classList.toggle("hidden", !canUseDeveloper);
   loginSignOutBtn?.classList.toggle("hidden", !isSignedIn);
   googleLoginButton?.classList.toggle("hidden", isSignedIn);
   openAdminConsole?.classList.toggle("hidden", !isAdmin);
-  if (canUseApp) {
+  if (canUseApp || canUseDeveloper) {
     startGoogleToolsMonitor();
+    loadDeveloperModeStatus();
   } else {
     stopGoogleToolsMonitor();
   }
@@ -1030,7 +1262,7 @@ async function loginWithGoogle(credential) {
     await loadHistory();
     renderAllHistoryViews();
     if (!data.user.authorized) {
-      showLoginError("Your Google account is signed in, but an admin must authorize access.");
+      showLoginError(tr("pendingAuthorization"));
     }
     if (data.user.isAdmin) {
       loadAdminUsers();
@@ -1046,7 +1278,7 @@ function renderGoogleButton() {
   }
   googleLoginButton.innerHTML = "";
   if (!GOOGLE_CLIENT_ID) {
-    showLoginError("Set GOOGLE_CLIENT_ID in backend/.env to enable Google sign-in.");
+    showLoginError(tr("googleClientMissing"));
     return;
   }
   if (!window.google?.accounts?.id) {
@@ -1114,6 +1346,103 @@ function renderGoogleToolsStatus(status) {
   }
   if (disconnectGoogleCalendar) {
     disconnectGoogleCalendar.disabled = !configured;
+  }
+}
+
+
+function renderDeveloperModeStatus(status) {
+  developerModeState = status || null;
+  if (!developerModeStatus || !developerModeRequest || !developerModeForm) {
+    return;
+  }
+  const approved = Boolean(status?.developerMode);
+  const requested = Boolean(status?.developerRequested);
+  const ready = Boolean(status?.ready);
+  developerModeForm.classList.toggle("hidden", !approved);
+  developerModeRequest.disabled = requested || approved;
+  developerModeRequest.textContent = requested || approved ? tr("requestedAccess") : tr("requestAccess");
+  if (ready) {
+    developerModeStatus.textContent = tr("developerReady");
+  } else if (approved) {
+    developerModeStatus.textContent = tr("developerApproved");
+  } else if (requested) {
+    developerModeStatus.textContent = tr("developerWaiting");
+  } else {
+    developerModeStatus.textContent = tr("developerNotRequested");
+  }
+}
+
+
+async function loadDeveloperModeStatus() {
+  if (!currentUser?.token) {
+    return;
+  }
+  try {
+    const response = await fetch(`${API_BASE}/api/developer-mode`, { headers: authHeaders() });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to load developer mode.");
+    }
+    renderDeveloperModeStatus(data);
+  } catch (error) {
+    console.warn("Failed to load developer mode.", error);
+  }
+}
+
+
+async function requestDeveloperMode() {
+  try {
+    const response = await fetch(`${API_BASE}/api/developer-mode/request`, {
+      method: "POST",
+      headers: authHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to request developer mode.");
+    }
+    if (data.user) {
+      saveUserSession({ ...data.user, token: currentUser.token, sessionExpiresAt: currentUser.sessionExpiresAt || "" });
+    }
+    await loadDeveloperModeStatus();
+  } catch (error) {
+    showError(error.message || "Failed to request developer mode.");
+  }
+}
+
+
+async function saveDeveloperModeSettings(event) {
+  event.preventDefault();
+  try {
+    const payload = {
+      openrouterBaseUrl: developerCompletionsUrl.value.trim(),
+      openrouterApiToken: developerCompletionsKey.value.trim(),
+      replicateBaseUrl: developerReplicateUrl.value.trim(),
+      replicateApiToken: developerReplicateKey.value.trim(),
+      pioneerBaseUrl: developerFallbackUrl.value.trim(),
+      pioneerApiKey: developerFallbackKey.value.trim(),
+      llmModel: developerLlmModel.value.trim(),
+      ttsModel: developerTtsModel.value.trim(),
+    };
+    const response = await fetch(`${API_BASE}/api/developer-mode/settings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to save developer APIs.");
+    }
+    developerCompletionsUrl.value = "";
+    developerCompletionsKey.value = "";
+    developerReplicateUrl.value = "";
+    developerReplicateKey.value = "";
+    developerFallbackUrl.value = "";
+    developerFallbackKey.value = "";
+    developerLlmModel.value = "";
+    developerTtsModel.value = "";
+    await loadDeveloperModeStatus();
+  } catch (error) {
+    showError(error.message || "Failed to save developer APIs.");
   }
 }
 
@@ -1404,7 +1733,7 @@ async function initAuth() {
     } catch (error) {
       currentUser = null;
       localStorage.removeItem(AUTH_STORAGE_KEY);
-      showLoginError("Session expired. Sign in again.");
+      showLoginError(tr("sessionExpired"));
     }
   }
   renderAuthState();
@@ -1423,36 +1752,42 @@ const API_HEALTH_CHECKS = [
     path: "/api/status",
     method: "GET",
     description: "Main backend reachability",
+    descriptionKey: "apiDescBackend",
   },
   {
     name: "Robot status",
     path: "/api/status",
     method: "GET",
     description: "Bender runtime status",
+    descriptionKey: "apiDescRobot",
   },
   {
     name: "Chat history",
     path: "/api/history",
     method: "GET",
     description: "Saved conversations",
+    descriptionKey: "apiDescHistory",
   },
   {
     name: "API schema",
     path: "/openapi.json",
     method: "GET",
     description: "Backend route registry",
+    descriptionKey: "apiDescSchema",
   },
   {
     name: "Public config",
     path: "/api/config",
     method: "GET",
     description: "Google Sign-In configuration",
+    descriptionKey: "apiDescConfig",
   },
   {
     name: "AI services",
     path: "/api/services/status",
     method: "GET",
     description: "STT, LLM, and TTS configuration",
+    descriptionKey: "apiDescServices",
     expandServices: true,
   },
 ];
@@ -1465,7 +1800,7 @@ function renderApiHealth(items, isChecking = false) {
   const checks = items.length ? items : API_HEALTH_CHECKS.map((item) => ({
     ...item,
     status: isChecking ? "checking" : "unknown",
-    detail: isChecking ? "Checking..." : "Not checked yet",
+    detail: isChecking ? tr("checking") : tr("notChecked"),
   }));
 
   for (const item of checks) {
@@ -1478,7 +1813,7 @@ function renderApiHealth(items, isChecking = false) {
     title.textContent = item.name;
     const meta = document.createElement("p");
     meta.className = "api-health-meta";
-    meta.textContent = `${item.method} ${item.path} - ${item.description}`;
+    meta.textContent = `${item.method} ${item.path} - ${item.descriptionKey ? tr(item.descriptionKey) : item.description}`;
     const detail = document.createElement("p");
     detail.className = "api-health-detail";
     detail.textContent = item.detail;
@@ -1524,8 +1859,8 @@ async function checkApiHealth() {
             description: service.model ? `Model: ${service.model}` : `${key.toUpperCase()} service`,
             status: service.ok ? "ok" : "fail",
             detail: service.ok
-              ? `${service.detail || "Configured"} - ${service.base_url || "No base URL shown"}`
-              : service.detail || data.error || "Service is not configured correctly",
+              ? `${service.detail || tr("configured")} - ${service.base_url || tr("noBaseUrl")}`
+              : service.detail || data.error || tr("serviceNotConfigured"),
           });
         }
         continue;
@@ -1533,13 +1868,13 @@ async function checkApiHealth() {
       results.push({
         ...check,
         status: "ok",
-        detail: `Responding in ${elapsed} ms`,
+        detail: `${tr("respondingIn")} ${elapsed} ms`,
       });
     } catch (error) {
       results.push({
         ...check,
         status: "fail",
-        detail: error.message || "Failed to fetch",
+        detail: error.message || tr("failedFetch"),
       });
     }
   }
@@ -1551,14 +1886,15 @@ async function loadAdminUsers() {
   if (!adminUsersList || !currentUser?.isAdmin) {
     return;
   }
-  adminUsersList.innerHTML = `<p class="helper-text">Loading users...</p>`;
+  adminUsersList.innerHTML = `<p class="helper-text">${escapeHtml(tr("loadingUsers"))}</p>`;
   try {
     const response = await fetch(`${API_BASE}/api/admin/users`, { headers: authHeaders() });
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data.error || "Failed to load users.");
     }
-    renderAdminUsers(data.users || []);
+    lastAdminUsers = data.users || [];
+    renderAdminUsers(lastAdminUsers);
   } catch (error) {
     adminUsersList.innerHTML = `<p class="error">${escapeHtml(error.message || "Failed to load users.")}</p>`;
   }
@@ -1568,29 +1904,44 @@ function renderAdminUsers(users) {
   if (!adminUsersList) {
     return;
   }
+  const pendingDeveloperRequests = users.filter((user) => user.developerRequested && !user.developerMode).length;
+  if (developerRequestsNotice) {
+    developerRequestsNotice.classList.toggle("hidden", pendingDeveloperRequests === 0);
+    developerRequestsNotice.textContent = pendingDeveloperRequests
+      ? `${pendingDeveloperRequests} ${pendingDeveloperRequests === 1 ? tr("developerRequestNotice") : tr("developerRequestsNotice")}`
+      : "";
+  }
   if (!users.length) {
-    adminUsersList.innerHTML = `<p class="helper-text">No users have signed in yet.</p>`;
+    adminUsersList.innerHTML = `<p class="helper-text">${escapeHtml(tr("noUsers"))}</p>`;
     return;
   }
   adminUsersList.innerHTML = users
-    .sort((a, b) => String(a.email).localeCompare(String(b.email)))
+    .sort((a, b) => {
+      const requestDelta = Number(Boolean(b.developerRequested && !b.developerMode)) - Number(Boolean(a.developerRequested && !a.developerMode));
+      return requestDelta || String(a.email).localeCompare(String(b.email));
+    })
     .map((user) => `
-      <div class="admin-user" data-email="${escapeHtml(user.email)}">
+      <div class="admin-user${user.developerRequested && !user.developerMode ? " developer-requested" : ""}" data-email="${escapeHtml(user.email)}">
         <img src="${escapeHtml(user.picture || "")}" alt="" class="${user.picture ? "" : "hidden"}" />
         <div>
           <p>${escapeHtml(user.name || user.email)}</p>
           <span>${escapeHtml(user.email)}</span>
+          ${user.developerRequested && !user.developerMode ? `<span class="developer-request-badge">${escapeHtml(tr("approveDeveloper"))}</span>` : ""}
         </div>
         <label>
           <input class="admin-user-authorized" type="checkbox" ${user.authorized ? "checked" : ""} />
-          Authorized
+          ${escapeHtml(tr("authorized"))}
         </label>
         <label>
           <input class="admin-user-admin" type="checkbox" ${user.isAdmin ? "checked" : ""} />
-          Admin
+          ${escapeHtml(tr("adminRole"))}
         </label>
-        <button class="admin-user-chats ghost" type="button">Chats</button>
-        <button class="admin-user-reset-quota ghost" type="button">Reset 5 chats</button>
+        <label class="developer-admin-toggle" title="${user.developerRequested ? escapeHtml(tr("approveDeveloper")) : ""}">
+          <input class="admin-user-developer" type="checkbox" ${user.developerMode ? "checked" : ""} />
+          ${escapeHtml(tr("developerModeLabel"))}
+        </label>
+        <button class="admin-user-chats ghost" type="button">${escapeHtml(tr("chats"))}</button>
+        <button class="admin-user-reset-quota ghost" type="button">${escapeHtml(tr("resetFiveChats"))}</button>
       </div>
     `)
     .join("");
@@ -1602,10 +1953,12 @@ function bindAdminUserControls() {
     const email = row.dataset.email;
     const authorized = row.querySelector(".admin-user-authorized");
     const isAdmin = row.querySelector(".admin-user-admin");
+    const developerMode = row.querySelector(".admin-user-developer");
     const chatsButton = row.querySelector(".admin-user-chats");
     const resetQuotaButton = row.querySelector(".admin-user-reset-quota");
     authorized?.addEventListener("change", () => updateAdminUser(email, { authorized: authorized.checked }));
     isAdmin?.addEventListener("change", () => updateAdminUser(email, { isAdmin: isAdmin.checked }));
+    developerMode?.addEventListener("change", () => updateAdminUser(email, { developerMode: developerMode.checked }));
     chatsButton?.addEventListener("click", () => loadAdminUserChats(email, row));
     resetQuotaButton?.addEventListener("click", () => resetAdminUserQuota(email, resetQuotaButton));
   }
@@ -1619,7 +1972,7 @@ async function loadAdminUserChats(email, row) {
   }
   const panel = document.createElement("div");
   panel.className = "admin-chat-summary";
-  panel.innerHTML = `<p class="helper-text">Loading chat summary...</p>`;
+  panel.innerHTML = `<p class="helper-text">${escapeHtml(tr("loadingChatSummary"))}</p>`;
   row.appendChild(panel);
   try {
     const response = await fetch(`${API_BASE}/api/admin/users/${encodeURIComponent(email)}/chats`, {
@@ -1631,29 +1984,29 @@ async function loadAdminUserChats(email, row) {
     }
     const chats = Array.isArray(data.chats) ? data.chats : [];
     panel.innerHTML = `
-      <p><strong>${data.chatCount || 0}</strong> chats, <strong>${data.messageCount || 0}</strong> messages</p>
+      <p><strong>${data.chatCount || 0}</strong> ${escapeHtml(plural(data.chatCount || 0, "chatSingular", "chatPlural"))}, <strong>${data.messageCount || 0}</strong> ${escapeHtml(plural(data.messageCount || 0, "messageSingular", "messagePlural"))}</p>
       ${chats.length ? chats.map((chat) => `
         <div class="admin-chat-item" data-chat-id="${escapeHtml(chat.id || "")}">
           <div class="admin-chat-head">
-            <p>${escapeHtml(chat.title || "New chat")} <span>${escapeHtml(chat.updatedAt || "")}</span></p>
-            <button class="admin-chat-delete ghost" type="button">Delete</button>
+            <p>${escapeHtml(chat.title || tr("newChat"))} <span>${escapeHtml(chat.updatedAt || "")}</span></p>
+            <button class="admin-chat-delete ghost" type="button">${escapeHtml(tr("delete"))}</button>
           </div>
-          <small>${Number(chat.messageCount || 0)} messages</small>
+          <small>${Number(chat.messageCount || 0)} ${escapeHtml(plural(chat.messageCount || 0, "messageSingular", "messagePlural"))}</small>
           ${Array.isArray(chat.items) && chat.items.length ? chat.items.map((item) => `
             <div class="admin-chat-turn" data-item-index="${Number(item.index || 0)}">
               <div class="admin-chat-turn-head">
                 <small>${escapeHtml(item.timestamp || "")}</small>
-                <button class="admin-chat-turn-delete ghost" type="button">Delete</button>
+                <button class="admin-chat-turn-delete ghost" type="button">${escapeHtml(tr("delete"))}</button>
               </div>
-              <p><strong>User:</strong> ${escapeHtml(item.question || "None")}</p>
-              <p><strong>Bender:</strong> ${escapeHtml(item.answer || "None")}</p>
+              <p><strong>${escapeHtml(tr("user"))}:</strong> ${escapeHtml(item.question || tr("none"))}</p>
+              <p><strong>Bender:</strong> ${escapeHtml(item.answer || tr("none"))}</p>
             </div>
           `).join("") : `
-            <small>Last question: ${escapeHtml(chat.lastQuestion || "None")}</small>
-            <small>Last answer: ${escapeHtml(chat.lastAnswer || "None")}</small>
+            <small>${escapeHtml(tr("lastQuestion"))}: ${escapeHtml(chat.lastQuestion || tr("none"))}</small>
+            <small>${escapeHtml(tr("lastAnswer"))}: ${escapeHtml(chat.lastAnswer || tr("none"))}</small>
           `}
         </div>
-      `).join("") : `<p class="helper-text">No chats yet.</p>`}
+      `).join("") : `<p class="helper-text">${escapeHtml(tr("noChatsYet"))}</p>`}
     `;
     for (const button of panel.querySelectorAll(".admin-chat-delete")) {
       button.addEventListener("click", () => deleteAdminUserChat(email, button.closest(".admin-chat-item")?.dataset.chatId, row));
@@ -1895,11 +2248,11 @@ function updateResult(data) {
     currentQuota = data.quota;
   }
   if (data.transcript !== undefined) {
-    transcriptOutput.textContent = data.transcript || "(empty transcript)";
+    transcriptOutput.textContent = data.transcript || tr("emptyTranscript");
     faceTranscriptOutput.textContent = transcriptOutput.textContent;
   }
   if (data.answer !== undefined) {
-    answerOutput.textContent = data.answer || "(empty answer)";
+    answerOutput.textContent = data.answer || tr("emptyAnswer");
     faceAnswerOutput.textContent = answerOutput.textContent;
   }
   if (data.answer || data.transcript) {
@@ -1928,7 +2281,7 @@ function updateResult(data) {
       if (voiceAudio) {
         pauseAllAudio(voiceAudio);
         voiceAudio.play().catch(() => {
-          setRecordingState("Audio ready (click play)." );
+          setRecordingState(tr("audioReady"));
         });
         if (!startMouthSync(voiceAudio)) {
           setSpeaking(true);
@@ -1937,7 +2290,7 @@ function updateResult(data) {
     } else if (activePlaybackTarget === "face") {
       pauseAllAudio(faceAudioPlayer);
       faceAudioPlayer.play().catch(() => {
-        setRecordingState("Audio ready (click play)." );
+        setRecordingState(tr("audioReady"));
       });
       if (!startMouthSync(faceAudioPlayer)) {
         setSpeaking(true);
@@ -1945,7 +2298,7 @@ function updateResult(data) {
     } else {
       pauseAllAudio(audioPlayer);
       audioPlayer.play().catch(() => {
-        setRecordingState("Audio ready (click play)." );
+        setRecordingState(tr("audioReady"));
       });
       if (!startMouthSync(audioPlayer)) {
         setSpeaking(true);
@@ -1956,7 +2309,7 @@ function updateResult(data) {
     faceAudioPlayer.removeAttribute("src");
     audioPlayer.load();
     faceAudioPlayer.load();
-    setRecordingState("Text answer ready.");
+    setRecordingState(tr("textAnswerReady"));
   }
 }
 
@@ -1966,7 +2319,7 @@ function renderHistory() {
       <div class="history-item" data-history-index="${index}">
         <div class="history-meta">
           <div class="label">${escapeHtml(entry.timestamp)}</div>
-          <button class="history-delete" type="button" aria-label="Delete this chat">Delete</button>
+          <button class="history-delete" type="button" aria-label="${escapeHtml(tr("delete"))}">${escapeHtml(tr("delete"))}</button>
         </div>
         <button class="history-open" type="button">
           <p>${escapeHtml(entry.question)}</p>
@@ -1992,10 +2345,10 @@ function renderChatSessions() {
       return `
         <div class="voice-chat-session" data-chat-id="${escapeHtml(chat.id)}">
           <button class="voice-chat-session-open${activeClass}" type="button">
-            <span class="voice-chat-session-title">${escapeHtml(chat.title || "New chat")}</span>
-            <span class="voice-chat-session-meta">${count} messages</span>
+            <span class="voice-chat-session-title">${escapeHtml(chat.title || tr("newChat"))}</span>
+            <span class="voice-chat-session-meta">${count} ${escapeHtml(plural(count, "messageSingular", "messagePlural"))}</span>
           </button>
-          <button class="voice-chat-session-delete" type="button" aria-label="Delete chat">Delete</button>
+          <button class="voice-chat-session-delete" type="button" aria-label="${escapeHtml(tr("delete"))}">${escapeHtml(tr("delete"))}</button>
         </div>
       `;
     })
@@ -2016,13 +2369,13 @@ function renderVoiceChat() {
         : "";
       return `
         <div class="voice-chat-message user">
-          <div class="label">You</div>
+          <div class="label">${escapeHtml(tr("you"))}</div>
           <p>${escapeHtml(question)}</p>
         </div>
         <div class="voice-chat-message assistant" data-history-index="${index}">
           <div class="voice-chat-message-top">
             <div class="label">Bender</div>
-            <button class="voice-chat-message-delete" type="button">Delete</button>
+            <button class="voice-chat-message-delete" type="button">${escapeHtml(tr("delete"))}</button>
           </div>
           <p>${escapeHtml(answer)}</p>
           ${audio}
@@ -2298,7 +2651,7 @@ async function sendAudioBlob(blob, filename) {
   formData.append("context", JSON.stringify(getActiveChatContext()));
   formData.append("chatId", activeChatId);
   formData.append("synthesizeAudio", audioReplyEnabled ? "true" : "false");
-  setLoading(true, "Sending audio...", "audio");
+  setLoading(true, tr("sendingAudio"), "audio");
   showError("");
 
   try {
@@ -2315,13 +2668,13 @@ async function sendAudioBlob(blob, filename) {
   } catch (error) {
     showError(error.message || "Audio request failed");
   } finally {
-    setLoading(false, "Idle");
+    setLoading(false, tr("idle"));
   }
 }
 
 async function sendTextMessage(message) {
   await refreshCalendarToolIfNeeded();
-  setLoading(true, "Sending text...");
+  setLoading(true, tr("sendingText"));
   showError("");
 
   try {
@@ -2343,7 +2696,7 @@ async function sendTextMessage(message) {
   } catch (error) {
     showError(error.message || "Text request failed");
   } finally {
-    setLoading(false, "Idle");
+    setLoading(false, tr("idle"));
   }
 }
 
@@ -2354,7 +2707,7 @@ async function refreshStatus() {
     const data = await response.json();
     statusOutput.textContent = JSON.stringify(data, null, 2);
   } catch (error) {
-    showError("Failed to load status");
+    showError(tr("failedStatus"));
   }
 }
 
@@ -2375,7 +2728,7 @@ async function startRecording() {
       stream.getTracks().forEach((track) => track.stop());
     });
     mediaRecorder.start();
-    setRecordingState("Recording...");
+    setRecordingState(tr("recording"));
     recordBtn.disabled = true;
     faceRecordBtn.disabled = true;
     voiceChatRecordBtn.disabled = true;
@@ -2383,7 +2736,7 @@ async function startRecording() {
     faceStopBtn.disabled = false;
     voiceChatStopBtn.disabled = false;
   } catch (error) {
-    showError("Microphone permission denied or unavailable.");
+    showError(tr("microphoneDenied"));
   }
 }
 
@@ -2396,7 +2749,7 @@ function stopRecording() {
     recordBtn.disabled = false;
     faceRecordBtn.disabled = false;
     voiceChatRecordBtn.disabled = false;
-    setRecordingState("Processing recording...");
+    setRecordingState(tr("processingRecording"));
   }
 }
 
@@ -2404,7 +2757,7 @@ uploadSend.addEventListener("click", () => {
   activePlaybackTarget = "main";
   const file = uploadInput.files[0];
   if (!file) {
-    showError("Choose an audio file first.");
+    showError(tr("chooseAudioFirst"));
     return;
   }
   pendingQuestion = "";
@@ -2415,7 +2768,7 @@ faceUploadSend.addEventListener("click", () => {
   activePlaybackTarget = "face";
   const file = faceUploadInput.files[0];
   if (!file) {
-    showError("Choose an audio file first.");
+    showError(tr("chooseAudioFirst"));
     return;
   }
   pendingQuestion = "";
@@ -2445,7 +2798,7 @@ textSend.addEventListener("click", () => {
   activePlaybackTarget = "main";
   const message = textInput.value.trim();
   if (!message) {
-    showError("Type a message first.");
+    showError(tr("typeMessageFirst"));
     return;
   }
   pendingQuestion = message;
@@ -2456,7 +2809,7 @@ faceTextSend.addEventListener("click", () => {
   activePlaybackTarget = "face";
   const message = faceTextInput.value.trim();
   if (!message) {
-    showError("Type a message first.");
+    showError(tr("typeMessageFirst"));
     return;
   }
   pendingQuestion = message;
@@ -2467,7 +2820,7 @@ voiceChatTextSend.addEventListener("click", () => {
   activePlaybackTarget = "voice";
   const message = voiceChatTextInput.value.trim();
   if (!message) {
-    showError("Type a message first.");
+    showError(tr("typeMessageFirst"));
     return;
   }
   pendingQuestion = message;
@@ -2479,15 +2832,29 @@ apiHealthRefresh.addEventListener("click", checkApiHealth);
 signOutBtn.addEventListener("click", clearUserSession);
 loginSignOutBtn.addEventListener("click", clearUserSession);
 adminSignOutBtn.addEventListener("click", clearUserSession);
-languageToggle.addEventListener("click", toggleLanguage);
+languageToggle?.addEventListener("click", toggleLanguage);
+adminLanguageToggle?.addEventListener("click", toggleLanguage);
+developerLanguageToggle?.addEventListener("click", toggleLanguage);
 homeBenderButton.addEventListener("click", annoyHomeBender);
 openSarcasmConsole.addEventListener("click", () => {
   rotateHomeSubtitle();
+  developerViewOverride = false;
   adminConsoleOverride = false;
+  renderAuthState();
+});
+openDeveloperMode?.addEventListener("click", () => {
+  adminConsoleOverride = false;
+  developerViewOverride = true;
+  renderAuthState();
+  loadDeveloperModeStatus();
+});
+closeDeveloperMode?.addEventListener("click", () => {
+  developerViewOverride = false;
   renderAuthState();
 });
 openAdminConsole.addEventListener("click", () => {
   rotateHomeSubtitle();
+  developerViewOverride = false;
   adminConsoleOverride = true;
   renderAuthState();
 });
@@ -2495,6 +2862,8 @@ adminRefresh.addEventListener("click", loadAdminUsers);
 googleToolsRefresh.addEventListener("click", () => loadGoogleToolsStatus({ check: true }));
 connectGoogleCalendar.addEventListener("click", connectCalendarTool);
 disconnectGoogleCalendar.addEventListener("click", disconnectCalendarTool);
+developerModeRequest?.addEventListener("click", requestDeveloperMode);
+developerModeForm?.addEventListener("submit", saveDeveloperModeSettings);
 
 clearHistory.addEventListener("click", async () => {
   const filenames = Array.from(new Set(chatHistory.map((entry) => getAudioFilename(entry.audioUrl)).filter(Boolean)));

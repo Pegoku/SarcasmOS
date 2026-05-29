@@ -41,12 +41,28 @@ class GoogleLoginRequest(BaseModel):
 class UserUpdateRequest(BaseModel):
     authorized: bool | None = None
     isAdmin: bool | None = None
+    developerMode: bool | None = None
 
 
 class GoogleToolTokenRequest(BaseModel):
     accessToken: str
     expiresIn: int | None = None
     scope: str | None = None
+
+
+class DeveloperSettingsRequest(BaseModel):
+    hackClubAiKey: str | None = None
+    openrouterApiToken: str | None = None
+    openrouterBaseUrl: str | None = None
+    llmModel: str | None = None
+    replicateApiToken: str | None = None
+    replicateBaseUrl: str | None = None
+    sttModel: str | None = None
+    ttsModel: str | None = None
+    pioneerApiKey: str | None = None
+    pioneerBaseUrl: str | None = None
+    pioneerModel: str | None = None
+    hfToken: str | None = None
 
 
 DEFAULT_ADMIN_EMAILS = {"sarcasmosmail@gmail.com"}
@@ -57,6 +73,7 @@ GOOGLE_CALENDAR_CHECK_URL = "https://www.googleapis.com/calendar/v3/users/me/cal
 AUTH_USERS_LOCK = threading.RLock()
 AUTH_SESSIONS_LOCK = threading.RLock()
 GOOGLE_TOOLS_LOCK = threading.RLock()
+DEVELOPER_KEYS_LOCK = threading.RLock()
 USAGE_LOCK = threading.RLock()
 HISTORY_LOCK = threading.RLock()
 CHAT_EXECUTOR = ThreadPoolExecutor(max_workers=int(os.environ.get("CHAT_CONCURRENCY", "20")))
@@ -157,6 +174,12 @@ def google_tools_path() -> Path:
     return output_root / "google_tools.json"
 
 
+def developer_keys_path() -> Path:
+    output_root = outputs_dir()
+    output_root.mkdir(parents=True, exist_ok=True)
+    return output_root / "developer_keys.json"
+
+
 def admin_emails() -> set[str]:
     load_public_env()
     raw = os.environ.get("ADMIN_EMAILS", "")
@@ -219,6 +242,25 @@ def load_google_tools() -> dict:
 def save_google_tools(data: dict) -> None:
     with GOOGLE_TOOLS_LOCK:
         google_tools_path().write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def load_developer_keys() -> dict:
+    with DEVELOPER_KEYS_LOCK:
+        path = developer_keys_path()
+        if not path.is_file():
+            return {"users": {}}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {"users": {}}
+        if not isinstance(data, dict) or not isinstance(data.get("users"), dict):
+            return {"users": {}}
+        return data
+
+
+def save_developer_keys(data: dict) -> None:
+    with DEVELOPER_KEYS_LOCK:
+        developer_keys_path().write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def load_usage() -> dict:
@@ -297,9 +339,65 @@ def public_user(user: dict) -> dict:
         "picture": user.get("picture", ""),
         "authorized": bool(user.get("authorized")),
         "isAdmin": bool(user.get("isAdmin")),
+        "developerMode": bool(user.get("developerMode")),
+        "developerRequested": bool(user.get("developerRequested")),
         "createdAt": user.get("createdAt", ""),
         "lastLoginAt": user.get("lastLoginAt", ""),
     }
+
+
+DEVELOPER_KEY_FIELDS = {
+    "hackClubAiKey",
+    "openrouterApiToken",
+    "openrouterBaseUrl",
+    "llmModel",
+    "replicateApiToken",
+    "replicateBaseUrl",
+    "sttModel",
+    "ttsModel",
+    "pioneerApiKey",
+    "pioneerBaseUrl",
+    "pioneerModel",
+    "hfToken",
+}
+
+
+def developer_settings_for_email(email: str) -> dict:
+    normalized_email = email.strip().lower()
+    settings = load_developer_keys().get("users", {}).get(normalized_email, {})
+    if not isinstance(settings, dict):
+        settings = {}
+    return {key: str(settings.get(key, "") or "") for key in DEVELOPER_KEY_FIELDS}
+
+
+def developer_settings_public(email: str) -> dict:
+    settings = developer_settings_for_email(email)
+    return {
+        key: {
+            "configured": bool(value.strip()),
+            "preview": f"...{value[-4:]}" if value.strip() and len(value) > 4 else "",
+        }
+        for key, value in settings.items()
+    }
+
+
+def developer_config_for_user(user: dict) -> dict:
+    if not user.get("developerMode"):
+        return {}
+    settings = developer_settings_for_email(str(user.get("email", "")))
+    config = {key: value.strip() for key, value in settings.items() if value.strip()}
+    if config:
+        config["_strictDeveloperMode"] = True
+    return config
+
+
+def developer_mode_ready(user: dict) -> bool:
+    config = developer_config_for_user(user)
+    return bool(
+        config.get("openrouterApiToken")
+        or config.get("replicateApiToken")
+        or config.get("pioneerApiKey")
+    )
 
 
 def week_key(now: dt.datetime | None = None) -> str:
@@ -343,6 +441,16 @@ def consume_chat_quota(user: dict) -> dict:
     with USAGE_LOCK:
         if not user.get("authorized"):
             raise HTTPException(status_code=403, detail="Your account is not authorized yet.")
+        if developer_mode_ready(user):
+            return {
+                "limited": False,
+                "limit": None,
+                "used": 0,
+                "remaining": None,
+                "period": week_key(),
+                "resetAt": next_week_reset_at(),
+                "developerMode": True,
+            }
         quota = chat_quota_for_user(user)
         if not quota["limited"]:
             return quota
@@ -484,6 +592,8 @@ def upsert_auth_user(email: str, name: str, picture: str) -> dict:
             "picture": picture or existing.get("picture", ""),
             "authorized": bool(existing.get("authorized")) or is_bootstrap_admin,
             "isAdmin": bool(existing.get("isAdmin")) or is_bootstrap_admin,
+            "developerMode": bool(existing.get("developerMode")),
+            "developerRequested": bool(existing.get("developerRequested")),
             "createdAt": existing.get("createdAt") or now,
             "lastLoginAt": now,
         }
@@ -856,6 +966,7 @@ async def chat_audio(
                 "context": best_chat_context(parse_context_payload(context), chatId, user["email"]),
                 "tool_context": tool_context_for_user(user),
                 "synthesize_audio": synthesizeAudio,
+                "config_overrides": developer_config_for_user(user),
             },
         )
         output_name = Path(result["audio_path"]).name if result.get("audio_path") else ""
@@ -889,6 +1000,7 @@ async def chat_text(payload: TextRequest, authorization: str | None = Header(def
                 "context": best_chat_context(payload.context, payload.chatId, user["email"]),
                 "tool_context": tool_context_for_user(user),
                 "synthesize_audio": payload.synthesizeAudio,
+                "config_overrides": developer_config_for_user(user),
             },
         )
         output_name = Path(result["audio_path"]).name if result.get("audio_path") else ""
@@ -1033,6 +1145,73 @@ async def disconnect_google_calendar(authorization: str | None = Header(default=
         return error_response(str(error.detail), status_code=error.status_code)
 
 
+@app.get("/api/developer-mode")
+async def get_developer_mode(authorization: str | None = Header(default=None)) -> JSONResponse:
+    try:
+        user = current_auth_user(authorization)
+        return JSONResponse(
+            content={
+                "developerMode": bool(user.get("developerMode")),
+                "developerRequested": bool(user.get("developerRequested")),
+                "ready": developer_mode_ready(user),
+                "settings": developer_settings_public(user["email"]),
+            }
+        )
+    except HTTPException as error:
+        return error_response(str(error.detail), status_code=error.status_code)
+
+
+@app.post("/api/developer-mode/request")
+async def request_developer_mode(authorization: str | None = Header(default=None)) -> JSONResponse:
+    try:
+        user = current_auth_user(authorization)
+        with AUTH_USERS_LOCK:
+            data = load_auth_users()
+            stored_user = data.setdefault("users", {}).get(user["email"])
+            if not stored_user:
+                raise HTTPException(status_code=404, detail="User not found.")
+            stored_user["developerRequested"] = True
+            data["users"][user["email"]] = stored_user
+            save_auth_users(data)
+        return JSONResponse(content={"user": public_user(stored_user)})
+    except HTTPException as error:
+        return error_response(str(error.detail), status_code=error.status_code)
+
+
+@app.post("/api/developer-mode/settings")
+async def save_developer_mode_settings(
+    payload: DeveloperSettingsRequest,
+    authorization: str | None = Header(default=None),
+) -> JSONResponse:
+    try:
+        user = current_auth_user(authorization)
+        if not user.get("developerMode"):
+            raise HTTPException(status_code=403, detail="Developer mode must be approved by an admin first.")
+        settings = {
+            key: str(value or "").strip()
+            for key, value in payload.model_dump().items()
+            if key in DEVELOPER_KEY_FIELDS and str(value or "").strip()
+        }
+        with DEVELOPER_KEYS_LOCK:
+            data = load_developer_keys()
+            users = data.setdefault("users", {})
+            current_settings = users.setdefault(user["email"], {})
+            current_settings.update(settings)
+            users[user["email"]] = {key: value for key, value in current_settings.items() if str(value or "").strip()}
+            save_developer_keys(data)
+        return JSONResponse(
+            content={
+                "ok": True,
+                "ready": developer_mode_ready(user),
+                "settings": developer_settings_public(user["email"]),
+            }
+        )
+    except HTTPException as error:
+        return error_response(str(error.detail), status_code=error.status_code)
+    except Exception as error:
+        return error_response(str(error), status_code=500)
+
+
 @app.get("/api/admin/users")
 async def admin_list_users(authorization: str | None = Header(default=None)) -> JSONResponse:
     try:
@@ -1152,6 +1331,10 @@ async def admin_update_user(
                 user["isAdmin"] = bool(payload.isAdmin)
                 if payload.isAdmin:
                     user["authorized"] = True
+            if payload.developerMode is not None:
+                user["developerMode"] = bool(payload.developerMode)
+                if payload.developerMode:
+                    user["developerRequested"] = False
             users[normalized_email] = user
             save_auth_users(data)
         return JSONResponse(content={"user": public_user(user)})

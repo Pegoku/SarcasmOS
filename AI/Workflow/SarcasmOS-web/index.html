@@ -61,6 +61,7 @@
         </div>
         <div class="console-nav-actions">
           <button id="languageToggle" class="ghost" type="button">Traducir</button>
+          <button id="openDeveloperMode" class="ghost" type="button">Developer</button>
           <button id="openAdminConsole" class="ghost hidden" type="button">Admin</button>
           <button id="signOutBtn" class="ghost" type="button">Sign out</button>
         </div>
@@ -244,6 +245,71 @@
 
     </main>
 
+    <main id="developerView" class="app view developer-view hidden" aria-hidden="true">
+      <nav class="console-nav" aria-label="Developer mode navigation">
+        <div>
+          <p class="console-brand">SarcasmOS</p>
+          <span>Developer Mode</span>
+        </div>
+        <div class="console-nav-actions">
+          <button id="developerLanguageToggle" class="ghost" type="button">Traducir</button>
+          <button id="closeDeveloperMode" class="accent" type="button">Back to home</button>
+        </div>
+      </nav>
+
+      <section id="developerModePanel" class="panel developer-mode-panel slim-panel" aria-label="Developer mode">
+        <div class="developer-panel-head">
+          <div class="developer-title-block">
+            <p class="eyebrow">SarcasmOS</p>
+            <h2>Developer Mode</h2>
+            <p class="helper-text">Use your own API keys so your messages do not spend the shared weekly budget.</p>
+          </div>
+          <button id="developerModeRequest" class="ghost" type="button">Request access</button>
+        </div>
+        <div class="developer-status-card">
+          <div>
+            <p class="label">Status</p>
+            <p id="developerModeStatus" class="helper-text">Not requested.</p>
+          </div>
+        </div>
+        <form id="developerModeForm" class="developer-mode-form hidden">
+          <label>
+            <span>Completions API URL</span>
+            <input id="developerCompletionsUrl" type="text" placeholder="https://api.example.com/v1" />
+          </label>
+          <label>
+            <span>Completions API KEY</span>
+            <input id="developerCompletionsKey" type="password" placeholder="sk-..." autocomplete="off" />
+          </label>
+          <label>
+            <span>Replicate API URL</span>
+            <input id="developerReplicateUrl" type="text" placeholder="https://api.example.com/v1/replicate" />
+          </label>
+          <label>
+            <span>Replicate API Key</span>
+            <input id="developerReplicateKey" type="password" placeholder="r8_..." autocomplete="off" />
+          </label>
+          <label>
+            <span>Fallback Completions API URL</span>
+            <input id="developerFallbackUrl" type="text" placeholder="https://api.example.com/v1" />
+          </label>
+          <label>
+            <span>Fallback API Key</span>
+            <input id="developerFallbackKey" type="password" placeholder="sk-..." autocomplete="off" />
+          </label>
+          <label>
+            <span>LLM model</span>
+            <input id="developerLlmModel" type="text" placeholder="model-name" />
+          </label>
+          <label>
+            <span>TTS model</span>
+            <input id="developerTtsModel" type="text" placeholder="model-name" />
+          </label>
+          <button id="developerModeSave" class="accent" type="submit">Save developer APIs</button>
+        </form>
+      </section>
+    </main>
+
     <main id="adminView" class="app view hidden" aria-hidden="true">
       <header class="hero">
         <div class="hero-copy">
@@ -258,6 +324,7 @@
               <p id="adminUserName">Admin</p>
               <span id="adminUserEmail"></span>
             </div>
+            <button id="adminLanguageToggle" class="ghost" type="button">Traducir</button>
             <button id="openSarcasmConsole" class="accent" type="button">SarcasmOS Home</button>
             <button id="adminSignOutBtn" class="ghost" type="button">Sign out</button>
           </div>
@@ -269,6 +336,7 @@
           <div>
             <h2>Admin Panel</h2>
             <p class="helper-text">Authorize users and manage admin access.</p>
+            <p id="developerRequestsNotice" class="admin-notice hidden"></p>
           </div>
           <button id="adminRefresh" class="ghost" type="button">Refresh users</button>
         </div>

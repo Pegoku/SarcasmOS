@@ -92,7 +92,8 @@ button.ghost {
   border-color: rgba(255, 255, 255, 0.18);
 }
 
-input[type="text"] {
+input[type="text"],
+input[type="password"] {
   flex: 1 1 280px;
   min-width: 0;
   padding: 13px 14px;
@@ -103,7 +104,8 @@ input[type="text"] {
   outline: none;
 }
 
-input[type="text"]:focus {
+input[type="text"]:focus,
+input[type="password"]:focus {
   border-color: rgba(246, 196, 69, 0.55);
   box-shadow: 0 0 0 4px rgba(246, 196, 69, 0.12);
 }
@@ -350,6 +352,15 @@ audio {
 
 .console-home {
   width: min(1160px, 100%);
+}
+
+.developer-view {
+  width: min(980px, 100%);
+  padding-top: clamp(18px, 5vh, 56px);
+}
+
+.developer-view .console-nav {
+  margin-bottom: 18px;
 }
 
 .console-nav {
@@ -683,6 +694,45 @@ h2 {
   font-size: 0.82rem;
 }
 
+#adminView .user-badge {
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+}
+
+#adminView .user-badge #adminLanguageToggle,
+#adminView .user-badge #openSarcasmConsole,
+#adminView .user-badge #adminSignOutBtn {
+  grid-column: auto;
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+#adminView .user-badge #adminLanguageToggle,
+#adminView .user-badge #openSarcasmConsole,
+#adminView .user-badge #adminSignOutBtn {
+  grid-column: 1 / -1;
+  width: 100%;
+  justify-self: stretch;
+  text-align: center;
+}
+
+#adminSignOutBtn,
+#signOutBtn,
+#loginSignOutBtn {
+  color: #ffe8e8;
+  border-color: rgba(255, 107, 107, 0.38);
+  background:
+    linear-gradient(180deg, rgba(255, 107, 107, 0.18), rgba(133, 23, 32, 0.2)),
+    rgba(17, 9, 12, 0.78);
+}
+
+#adminSignOutBtn:hover:enabled,
+#signOutBtn:hover:enabled,
+#loginSignOutBtn:hover:enabled {
+  border-color: rgba(255, 107, 107, 0.68);
+  box-shadow: 0 14px 30px rgba(255, 45, 64, 0.18);
+}
+
 .status-heading {
   display: flex;
   align-items: center;
@@ -960,6 +1010,71 @@ h2 {
   margin-bottom: 0;
 }
 
+.developer-mode-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.developer-mode-panel {
+  display: grid;
+  gap: 18px;
+  padding: clamp(22px, 3vw, 32px);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(246, 196, 69, 0.1), transparent 34%),
+    linear-gradient(180deg, rgba(17, 24, 33, 0.96), rgba(8, 12, 18, 0.94));
+}
+
+.developer-panel-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: start;
+}
+
+.developer-title-block h2 {
+  margin-bottom: 8px;
+  font-size: clamp(1.45rem, 3vw, 2.1rem);
+}
+
+.developer-title-block .helper-text {
+  max-width: 680px;
+}
+
+.developer-status-card {
+  padding: 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(246, 196, 69, 0.18);
+  background:
+    linear-gradient(90deg, rgba(246, 196, 69, 0.09), transparent 45%),
+    rgba(255, 255, 255, 0.035);
+}
+
+.developer-mode-form label {
+  display: grid;
+  gap: 7px;
+}
+
+.developer-mode-form label span {
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.developer-mode-form input {
+  width: 100%;
+  flex: none;
+}
+
+.developer-mode-form button {
+  grid-column: 1 / -1;
+  min-height: 48px;
+}
+
 .tool-help-link {
   display: inline-block;
   margin-top: 8px;
@@ -974,13 +1089,56 @@ h2 {
 
 .admin-user {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto auto auto auto;
+  grid-template-columns: 42px minmax(220px, 1fr) repeat(3, max-content) 82px 132px;
   align-items: center;
   gap: 12px;
   padding: 14px;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.035);
+}
+
+.admin-user.developer-requested {
+  border-color: rgba(246, 196, 69, 0.42);
+  background:
+    linear-gradient(90deg, rgba(246, 196, 69, 0.1), transparent 46%),
+    rgba(255, 255, 255, 0.04);
+}
+
+.admin-notice,
+.developer-request-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-top: 8px;
+  padding: 6px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(246, 196, 69, 0.38);
+  background: rgba(246, 196, 69, 0.12);
+  color: #ffd765;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.developer-request-badge {
+  margin-top: 6px;
+  font-size: 0.7rem;
+}
+
+.admin-user button {
+  min-width: 0;
+  min-height: 44px;
+  padding: 9px 12px;
+  white-space: nowrap;
+}
+
+.admin-user-reset-quota {
+  width: 132px;
+}
+
+.admin-user-chats {
+  width: 82px;
 }
 
 .admin-chat-summary {
@@ -2059,8 +2217,27 @@ body.face-open {
     grid-template-columns: 1fr;
   }
 
+  .developer-mode-form {
+    grid-template-columns: 1fr;
+  }
+
+  .developer-panel-head {
+    grid-template-columns: 1fr;
+  }
+
+  .developer-panel-head button {
+    width: 100%;
+  }
+
   .admin-user label {
     grid-column: 1 / -1;
+  }
+
+  .admin-user button,
+  .admin-user-chats,
+  .admin-user-reset-quota {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 
   .face-view {

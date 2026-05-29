@@ -9060,6 +9060,12 @@
 		(uuid "257b102a-c9a5-43e0-b4cf-ce35fa3fb10c")
 	)
 	(junction
+		(at 148.59 222.25)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "269bef94-ce20-4d54-984d-af35a53f1786")
+	)
+	(junction
 		(at 293.37 336.55)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -10065,6 +10071,16 @@
 	)
 	(wire
 		(pts
+			(xy 146.05 214.63) (xy 148.59 214.63)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "50fc57d2-3e1e-4bb5-bcad-b96c3d5eb370")
+	)
+	(wire
+		(pts
 			(xy 204.47 31.75) (xy 213.36 31.75)
 		)
 		(stroke
@@ -10585,6 +10601,16 @@
 	)
 	(wire
 		(pts
+			(xy 118.11 222.25) (xy 148.59 222.25)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "98dadae3-55ac-49ad-a809-01385d8069ba")
+	)
+	(wire
+		(pts
 			(xy 275.59 261.62) (xy 287.02 261.62)
 		)
 		(stroke
@@ -10705,6 +10731,16 @@
 	)
 	(wire
 		(pts
+			(xy 142.24 218.44) (xy 146.05 218.44)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b00262db-e611-4659-8b95-989f209a6ba7")
+	)
+	(wire
+		(pts
 			(xy 266.7 363.22) (xy 266.7 364.49)
 		)
 		(stroke
@@ -10712,6 +10748,16 @@
 			(type default)
 		)
 		(uuid "b27d3cc7-c08d-4c53-87ca-75a3d3382e22")
+	)
+	(wire
+		(pts
+			(xy 146.05 218.44) (xy 146.05 214.63)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b39942ec-af6c-4a78-8f01-cd7b68f73a05")
 	)
 	(wire
 		(pts
@@ -13457,6 +13503,85 @@
 			(project "brain"
 				(path "/83b42239-7ff5-41d9-ae38-aa795807f572"
 					(reference "#PWR012")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 148.59 226.06 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "15c5a72d-2ecc-4964-b5bd-f7129ad31c64")
+		(property "Reference" "R28"
+			(at 152.4 224.79 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "22.1k"
+			(at 153.162 227.33 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
+			(at 146.812 226.06 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 148.59 226.06 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 148.59 226.06 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "2"
+			(uuid "2666db0c-925e-4a45-bc8c-72163471e427")
+		)
+		(pin "1"
+			(uuid "bb23a1db-af0b-4bbb-89f5-122e5827368a")
+		)
+		(instances
+			(project "brain"
+				(path "/83b42239-7ff5-41d9-ae38-aa795807f572"
+					(reference "R28")
 					(unit 1)
 				)
 			)
@@ -20043,7 +20168,7 @@
 				)
 			)
 		)
-		(property "Value" "L"
+		(property "Value" "3.6uH"
 			(at 138.43 215.9 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -21061,6 +21186,85 @@
 			(project "brain"
 				(path "/83b42239-7ff5-41d9-ae38-aa795807f572"
 					(reference "#PWR058")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 148.59 218.44 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "aa6b17c4-5717-48c6-8798-a07d91121888")
+		(property "Reference" "R27"
+			(at 152.4 217.17 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "115k"
+			(at 153.162 219.71 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
+			(at 146.812 218.44 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 148.59 218.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 148.59 218.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "2"
+			(uuid "c29a46d7-22cc-4933-879e-66f16640da81")
+		)
+		(pin "1"
+			(uuid "cdef2fbb-ddc5-4012-8cf0-3a3fad76d518")
+		)
+		(instances
+			(project "brain"
+				(path "/83b42239-7ff5-41d9-ae38-aa795807f572"
+					(reference "R27")
 					(unit 1)
 				)
 			)

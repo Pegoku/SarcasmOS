@@ -3,18 +3,129 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SarcasmOS Console</title>
+    <title>SarcasmOS Home</title>
     <link rel="stylesheet" href="style.css" />
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
-    <main id="mainView" class="app view">
-      <header class="hero">
+    <div id="benderWarning" class="bender-warning hidden" role="alert" aria-live="assertive"></div>
+    <section id="loginView" class="login-view" aria-label="Sign in">
+      <div class="login-shell">
+        <div id="loginBot" class="login-bot" aria-hidden="true">
+          <svg viewBox="0 0 400 400" role="img">
+            <defs>
+              <filter id="loginBotShadow" x="-20%" y="-20%" width="140%" height="150%">
+                <feDropShadow dx="12" dy="14" stdDeviation="8" flood-opacity="0.32" />
+              </filter>
+            </defs>
+            <g class="login-bot-face" filter="url(#loginBotShadow)">
+              <rect class="login-bot-visor-outer" x="30" y="50" width="340" height="150" rx="75" />
+              <rect class="login-bot-visor-inner" x="42" y="62" width="316" height="126" rx="63" />
+              <g class="login-bot-eye-group login-bot-eye-left">
+                <path class="login-bot-eye-white" d="M 60,125 C 60,90 85,75 120,75 C 160,75 190,95 190,125 C 190,160 160,175 120,175 C 80,175 60,155 60,125 Z" />
+                <rect class="login-bot-pupil" x="110" y="110" width="22" height="22" transform="rotate(8 121 121)" />
+              </g>
+              <g class="login-bot-eye-group login-bot-eye-right">
+                <path class="login-bot-eye-white" d="M 210,125 C 210,95 240,75 280,75 C 315,75 340,90 340,125 C 340,155 320,175 280,175 C 240,175 210,160 210,125 Z" />
+                <rect class="login-bot-pupil" x="270" y="108" width="22" height="22" transform="rotate(-5 281 119)" />
+              </g>
+            </g>
+            <g class="login-bot-mouth" filter="url(#loginBotShadow)">
+              <rect class="login-bot-mouth-outer" x="120" y="230" width="180" height="100" rx="45" />
+              <rect class="login-bot-mouth-inner" x="132" y="242" width="156" height="76" rx="35" />
+              <path class="login-bot-mouth-line" d="M 135,263 Q 210,265 285,263" />
+              <path class="login-bot-mouth-line" d="M 135,296 Q 210,300 285,296" />
+              <path class="login-bot-tooth" d="M 160,238 V 322 M 192,234 V 326 M 224,234 V 326 M 256,238 V 322" />
+            </g>
+          </svg>
+        </div>
+        <div class="login-panel">
+        <div class="login-copy">
+          <p class="eyebrow">SarcasmOS</p>
+          <h1>Sign in</h1>
+          <p class="subtitle">Use your Google account to unlock SarcasmOS.</p>
+          <div id="googleLoginButton" class="google-login-button"></div>
+          <p id="loginError" class="error"></p>
+          <button id="loginSignOutBtn" class="ghost hidden" type="button">Sign out</button>
+          <p class="login-note">Google login requires GOOGLE_CLIENT_ID in backend/.env.</p>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <main id="mainView" class="app view console-home hidden" aria-hidden="true">
+      <nav class="console-nav" aria-label="SarcasmOS navigation">
+        <div>
+          <p class="console-brand">SarcasmOS</p>
+          <span>Home</span>
+        </div>
+        <div class="console-nav-actions">
+          <button id="languageToggle" class="ghost" type="button">Traducir</button>
+          <button id="openDeveloperMode" class="ghost" type="button">Developer</button>
+          <button id="openAdminConsole" class="ghost hidden" type="button">Admin</button>
+          <button id="signOutBtn" class="ghost" type="button">Sign out</button>
+        </div>
+      </nav>
+
+      <header class="hero console-hero">
         <div class="hero-copy">
           <p class="eyebrow">SarcasmOS</p>
-          <h1>SarcasmOS Console</h1>
-          <p class="subtitle">Talk to Bender by voice, upload audio, or type a message.</p>
+          <h1>Meet Bender at home.</h1>
+          <p class="subtitle">A sharper way to talk, ask, listen, and get things done without opening six different tabs like a tired accountant.</p>
+          <div class="hero-actions">
+            <button id="heroVoiceChatBtn" class="accent" type="button">Start voice chat</button>
+            <button id="heroFaceViewBtn" class="ghost" type="button">Open face view</button>
+          </div>
+          <div class="home-metrics" aria-label="SarcasmOS status">
+            <div>
+              <strong>Voice</strong>
+              <span>Ready</span>
+            </div>
+            <div>
+              <strong>Text</strong>
+              <span>Ready</span>
+            </div>
+            <div>
+              <strong>Calendar</strong>
+              <span>Optional</span>
+            </div>
+          </div>
         </div>
         <div class="status-card">
+          <button id="homeBenderButton" class="home-visual" type="button" aria-label="Do not annoy Bender">
+            <svg class="home-bender-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%" aria-hidden="true">
+              <defs>
+                <filter id="homeBenderShadow" x="-10%" y="-10%" width="120%" height="120%">
+                  <feDropShadow dx="3" dy="5" stdDeviation="3" flood-opacity="0.3"/>
+                </filter>
+              </defs>
+              <g>
+                <rect x="30" y="50" width="340" height="150" rx="75" fill="#FFFFFF" stroke="#000000" stroke-width="8" filter="url(#homeBenderShadow)" />
+                <rect x="42" y="62" width="316" height="126" rx="63" fill="#000000" />
+                <path d="M 60,125 C 60,90 85,75 120,75 C 160,75 190,95 190,125 C 190,160 160,175 120,175 C 80,175 60,155 60,125 Z" fill="#FFFFFF" />
+                <rect class="home-bender-pupil" x="110" y="110" width="22" height="22" fill="#000000" transform="rotate(8 121 121)" />
+                <path d="M 210,125 C 210,95 240,75 280,75 C 315,75 340,90 340,125 C 340,155 320,175 280,175 C 240,175 210,160 210,125 Z" fill="#FFFFFF" />
+                <rect class="home-bender-pupil" x="270" y="108" width="22" height="22" fill="#000000" transform="rotate(-5 281 119)" />
+                <g class="home-bender-mouth-group">
+                  <rect x="120" y="230" width="180" height="100" rx="45" fill="#FFFFFF" stroke="#000000" stroke-width="9" filter="url(#homeBenderShadow)" />
+                  <path d="M 125,263 Q 210,265 295,263" stroke="#000000" stroke-width="6" fill="none" />
+                  <path d="M 125,296 Q 210,300 295,296" stroke="#000000" stroke-width="6" fill="none" />
+                  <path d="M 153,237 V 323" stroke="#000000" stroke-width="5" />
+                  <path d="M 185,232 V 328" stroke="#000000" stroke-width="5" />
+                  <path d="M 217,231 V 329" stroke="#000000" stroke-width="5" />
+                  <path d="M 249,232 V 328" stroke="#000000" stroke-width="5" />
+                  <path d="M 279,239 V 321" stroke="#000000" stroke-width="5" />
+                </g>
+              </g>
+            </svg>
+          </button>
+          <div id="userBadge" class="user-badge hidden">
+            <img id="userAvatar" alt="" />
+            <div>
+              <p id="userName">Signed in</p>
+              <span id="userEmail"></span>
+            </div>
+          </div>
           <div class="status-heading">
             <p class="status-label">Robot status</p>
             <span class="status-dot" aria-hidden="true"></span>
@@ -24,11 +135,11 @@
         </div>
       </header>
 
-      <section class="quick-actions" aria-label="Bender views">
+      <section class="quick-actions feature-strip" aria-label="Bender views">
         <div class="face-callout face-callout--top">
           <div>
-            <p class="label">Face view</p>
-            <p class="subtitle">Show the animated face while Bender speaks.</p>
+            <p class="label">Live face</p>
+            <p class="subtitle">Big screen mode for Bender.</p>
           </div>
           <button id="openFaceView" class="accent">Open face view</button>
         </div>
@@ -36,13 +147,50 @@
         <div class="face-callout face-callout--top">
           <div>
             <p class="label">Voice chat</p>
-            <p class="subtitle">Use saved chats with context and audio replies.</p>
+            <p class="subtitle">Conversation mode with memory.</p>
           </div>
           <button id="openVoiceChatView" class="accent">Open voice chat</button>
         </div>
       </section>
 
-      <div class="console-grid">
+      <section class="panel chat-settings-panel slim-panel" aria-label="Chat settings">
+        <label class="toggle-row">
+          <span>
+            <span class="label">Audio reply</span>
+            <span class="helper-text">Generate Bender voice audio after each answer.</span>
+          </span>
+          <input id="audioReplyToggle" type="checkbox" checked />
+        </label>
+      </section>
+
+      <section id="googleToolsPanel" class="panel google-tools-panel slim-panel" aria-label="Google tools">
+        <div class="history-header">
+          <div>
+            <h2>Google Tools</h2>
+            <p class="helper-text">Connect read-only Google tools Bender can use when answering.</p>
+          </div>
+          <button id="googleToolsRefresh" class="ghost" type="button">Refresh</button>
+        </div>
+        <div class="google-tool-row">
+          <div>
+            <p class="label">Calendar</p>
+            <p id="googleCalendarStatus" class="helper-text">Not connected.</p>
+            <a id="googleCalendarHelp" class="tool-help-link hidden" href="#" target="_blank" rel="noreferrer">Enable Calendar API</a>
+          </div>
+          <div class="controls">
+            <button id="connectGoogleCalendar" class="accent" type="button">Connect Calendar</button>
+            <button id="disconnectGoogleCalendar" class="ghost" type="button">Disconnect</button>
+          </div>
+        </div>
+        <p id="googleToolsError" class="error"></p>
+      </section>
+
+      <section class="section-heading">
+        <p class="eyebrow">Talk to Bender</p>
+        <h2>Send the next message</h2>
+      </section>
+
+      <div class="console-grid console-input-grid">
         <section class="panel input-panel">
           <div class="panel-title-row">
             <h2>Audio Input</h2>
@@ -95,6 +243,106 @@
         <p id="errorOutput" class="error"></p>
       </section>
 
+    </main>
+
+    <main id="developerView" class="app view developer-view hidden" aria-hidden="true">
+      <nav class="console-nav" aria-label="Developer mode navigation">
+        <div>
+          <p class="console-brand">SarcasmOS</p>
+          <span>Developer Mode</span>
+        </div>
+        <div class="console-nav-actions">
+          <button id="developerLanguageToggle" class="ghost" type="button">Traducir</button>
+          <button id="closeDeveloperMode" class="accent" type="button">Back to home</button>
+        </div>
+      </nav>
+
+      <section id="developerModePanel" class="panel developer-mode-panel slim-panel" aria-label="Developer mode">
+        <div class="developer-panel-head">
+          <div class="developer-title-block">
+            <p class="eyebrow">SarcasmOS</p>
+            <h2>Developer Mode</h2>
+            <p class="helper-text">Use your own API keys so your messages do not spend the shared weekly budget.</p>
+          </div>
+          <button id="developerModeRequest" class="ghost" type="button">Request access</button>
+        </div>
+        <div class="developer-status-card">
+          <div>
+            <p class="label">Status</p>
+            <p id="developerModeStatus" class="helper-text">Not requested.</p>
+          </div>
+        </div>
+        <form id="developerModeForm" class="developer-mode-form hidden">
+          <label>
+            <span>Completions API URL</span>
+            <input id="developerCompletionsUrl" type="text" placeholder="https://api.example.com/v1" />
+          </label>
+          <label>
+            <span>Completions API KEY</span>
+            <input id="developerCompletionsKey" type="password" placeholder="sk-..." autocomplete="off" />
+          </label>
+          <label>
+            <span>Replicate API URL</span>
+            <input id="developerReplicateUrl" type="text" placeholder="https://api.example.com/v1/replicate" />
+          </label>
+          <label>
+            <span>Replicate API Key</span>
+            <input id="developerReplicateKey" type="password" placeholder="r8_..." autocomplete="off" />
+          </label>
+          <label>
+            <span>Fallback Completions API URL</span>
+            <input id="developerFallbackUrl" type="text" placeholder="https://api.example.com/v1" />
+          </label>
+          <label>
+            <span>Fallback API Key</span>
+            <input id="developerFallbackKey" type="password" placeholder="sk-..." autocomplete="off" />
+          </label>
+          <label>
+            <span>LLM model</span>
+            <input id="developerLlmModel" type="text" placeholder="model-name" />
+          </label>
+          <label>
+            <span>TTS model</span>
+            <input id="developerTtsModel" type="text" placeholder="model-name" />
+          </label>
+          <button id="developerModeSave" class="accent" type="submit">Save developer APIs</button>
+        </form>
+      </section>
+    </main>
+
+    <main id="adminView" class="app view hidden" aria-hidden="true">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">SarcasmOS</p>
+          <h1>Admin Console</h1>
+          <p class="subtitle">Manage users, inspect chat history, and check API health.</p>
+        </div>
+        <div class="status-card">
+          <div class="user-badge">
+            <img id="adminUserAvatar" alt="" />
+            <div>
+              <p id="adminUserName">Admin</p>
+              <span id="adminUserEmail"></span>
+            </div>
+            <button id="adminLanguageToggle" class="ghost" type="button">Traducir</button>
+            <button id="openSarcasmConsole" class="accent" type="button">SarcasmOS Home</button>
+            <button id="adminSignOutBtn" class="ghost" type="button">Sign out</button>
+          </div>
+        </div>
+      </header>
+
+      <section id="adminPanel" class="panel admin-panel" aria-label="Admin panel">
+        <div class="history-header">
+          <div>
+            <h2>Admin Panel</h2>
+            <p class="helper-text">Authorize users and manage admin access.</p>
+            <p id="developerRequestsNotice" class="admin-notice hidden"></p>
+          </div>
+          <button id="adminRefresh" class="ghost" type="button">Refresh users</button>
+        </div>
+        <div id="adminUsersList" class="admin-users-list"></div>
+      </section>
+
       <section class="panel api-health-panel">
         <div class="history-header">
           <div>
@@ -115,21 +363,6 @@
           <button id="clearHistory" class="ghost">Clear history</button>
         </div>
         <div id="historyList" class="history-list"></div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-title-row">
-          <h2>Commands</h2>
-          <span class="step-pill">Robot</span>
-        </div>
-        <div class="controls">
-          <button data-command="eye.look.left">Look left</button>
-          <button data-command="eye.look.center">Look center</button>
-          <button data-command="eye.look.right">Look right</button>
-          <button data-command="expression.happy_fake">Expression: happy</button>
-          <button data-command="expression.sarcastic">Expression: sarcastic</button>
-          <button data-command="expression.angry">Expression: angry</button>
-        </div>
       </section>
     </main>
 
@@ -226,7 +459,7 @@
           <div id="faceHistoryList" class="history-list"></div>
         </div>
       </div>
-      <button id="closeFaceView" class="accent">Back to console</button>
+      <button id="closeFaceView" class="accent">Back to home</button>
     </section>
 
     <section id="voiceChatView" class="voice-chat-view hidden" aria-hidden="true">
@@ -247,11 +480,15 @@
         <div class="voice-chat-messages" id="voiceChatList"></div>
         <div class="voice-chat-input">
           <div class="controls">
-            <button id="voiceChatRecordBtn" class="accent">Record</button>
-            <button id="voiceChatStopBtn" disabled>Stop</button>
-            <input id="voiceChatTextInput" type="text" placeholder="Type a message for Bender" />
-            <button id="voiceChatTextSend" class="accent">Send</button>
-          </div>
+          <button id="voiceChatRecordBtn" class="accent">Record</button>
+          <button id="voiceChatStopBtn" disabled>Stop</button>
+          <input id="voiceChatTextInput" type="text" placeholder="Type a message for Bender" />
+          <label class="compact-toggle">
+            <input id="voiceChatAudioReplyToggle" type="checkbox" checked />
+            <span>Audio</span>
+          </label>
+          <button id="voiceChatTextSend" class="accent">Send</button>
+        </div>
           <div class="meter">
             <span id="voiceChatRecordState">Idle</span>
           </div>
@@ -266,7 +503,7 @@
         <span>Eh...</span>
         <span>Ah...</span>
       </div>
-      <button id="closeVoiceChatView" class="accent">Back to console</button>
+      <button id="closeVoiceChatView" class="accent">Back to home</button>
     </section>
 
     <script src="app.js"></script>

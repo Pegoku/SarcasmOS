@@ -1,5 +1,55 @@
-const API_BASE = "http://localhost:8000";
+let API_BASE = "";
+let GOOGLE_CLIENT_ID = "";
 
+const loginView = document.getElementById("loginView");
+const loginBot = document.getElementById("loginBot");
+const benderWarning = document.getElementById("benderWarning");
+const homeBenderButton = document.getElementById("homeBenderButton");
+const homeBenderSvg = document.querySelector(".home-bender-svg");
+const googleLoginButton = document.getElementById("googleLoginButton");
+const loginError = document.getElementById("loginError");
+const loginSignOutBtn = document.getElementById("loginSignOutBtn");
+const userBadge = document.getElementById("userBadge");
+const userAvatar = document.getElementById("userAvatar");
+const userName = document.getElementById("userName");
+const userEmail = document.getElementById("userEmail");
+const signOutBtn = document.getElementById("signOutBtn");
+const languageToggle = document.getElementById("languageToggle");
+const openAdminConsole = document.getElementById("openAdminConsole");
+const adminView = document.getElementById("adminView");
+const developerView = document.getElementById("developerView");
+const openDeveloperMode = document.getElementById("openDeveloperMode");
+const closeDeveloperMode = document.getElementById("closeDeveloperMode");
+const developerLanguageToggle = document.getElementById("developerLanguageToggle");
+const adminUserAvatar = document.getElementById("adminUserAvatar");
+const adminUserName = document.getElementById("adminUserName");
+const adminUserEmail = document.getElementById("adminUserEmail");
+const adminSignOutBtn = document.getElementById("adminSignOutBtn");
+const adminLanguageToggle = document.getElementById("adminLanguageToggle");
+const openSarcasmConsole = document.getElementById("openSarcasmConsole");
+const adminPanel = document.getElementById("adminPanel");
+const adminRefresh = document.getElementById("adminRefresh");
+const adminUsersList = document.getElementById("adminUsersList");
+const developerRequestsNotice = document.getElementById("developerRequestsNotice");
+const googleToolsPanel = document.getElementById("googleToolsPanel");
+const developerModePanel = document.getElementById("developerModePanel");
+const developerModeRequest = document.getElementById("developerModeRequest");
+const developerModeStatus = document.getElementById("developerModeStatus");
+const developerModeForm = document.getElementById("developerModeForm");
+const developerCompletionsUrl = document.getElementById("developerCompletionsUrl");
+const developerCompletionsKey = document.getElementById("developerCompletionsKey");
+const developerReplicateUrl = document.getElementById("developerReplicateUrl");
+const developerReplicateKey = document.getElementById("developerReplicateKey");
+const developerFallbackUrl = document.getElementById("developerFallbackUrl");
+const developerFallbackKey = document.getElementById("developerFallbackKey");
+const developerLlmModel = document.getElementById("developerLlmModel");
+const developerTtsModel = document.getElementById("developerTtsModel");
+const googleToolsRefresh = document.getElementById("googleToolsRefresh");
+const googleCalendarStatus = document.getElementById("googleCalendarStatus");
+const googleCalendarHelp = document.getElementById("googleCalendarHelp");
+const connectGoogleCalendar = document.getElementById("connectGoogleCalendar");
+const disconnectGoogleCalendar = document.getElementById("disconnectGoogleCalendar");
+const googleToolsError = document.getElementById("googleToolsError");
 const uploadInput = document.getElementById("uploadInput");
 const uploadSend = document.getElementById("uploadSend");
 const recordBtn = document.getElementById("recordBtn");
@@ -15,11 +65,14 @@ const statusBtn = document.getElementById("statusBtn");
 const statusOutput = document.getElementById("statusOutput");
 const apiHealthRefresh = document.getElementById("apiHealthRefresh");
 const apiHealthList = document.getElementById("apiHealthList");
+const audioReplyToggle = document.getElementById("audioReplyToggle");
 const mainView = document.getElementById("mainView");
 const faceView = document.getElementById("faceView");
 const voiceChatView = document.getElementById("voiceChatView");
 const openFaceView = document.getElementById("openFaceView");
 const openVoiceChatView = document.getElementById("openVoiceChatView");
+const heroFaceViewBtn = document.getElementById("heroFaceViewBtn");
+const heroVoiceChatBtn = document.getElementById("heroVoiceChatBtn");
 const closeFaceView = document.getElementById("closeFaceView");
 const closeVoiceChatView = document.getElementById("closeVoiceChatView");
 const faceUploadInput = document.getElementById("faceUploadInput");
@@ -36,6 +89,7 @@ const voiceChatList = document.getElementById("voiceChatList");
 const voiceChatRecordBtn = document.getElementById("voiceChatRecordBtn");
 const voiceChatStopBtn = document.getElementById("voiceChatStopBtn");
 const voiceChatTextInput = document.getElementById("voiceChatTextInput");
+const voiceChatAudioReplyToggle = document.getElementById("voiceChatAudioReplyToggle");
 const voiceChatTextSend = document.getElementById("voiceChatTextSend");
 const voiceChatRecordState = document.getElementById("voiceChatRecordState");
 const voiceChatNewChat = document.getElementById("voiceChatNewChat");
@@ -53,6 +107,87 @@ let svgMouthGroup = null;
 
 const HISTORY_STORAGE_KEY = "sarcasmos.chatHistory";
 const CHAT_FONT_STORAGE_KEY = "sarcasmos.voiceChatFontScale";
+const AUTH_STORAGE_KEY = "sarcasmos.googleUser";
+const LANGUAGE_STORAGE_KEY = "sarcasmos.language";
+const HISTORY_STORAGE_VERSION = "v2";
+const AUDIO_REPLY_STORAGE_KEY = "sarcasmos.audioReplyEnabled";
+const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+const GOOGLE_TOOLS_CHECK_INTERVAL_MS = 30000;
+const BENDER_WARNING_AUDIO = [
+  "/api/audio/easteregg-warning-1.wav",
+  "/api/audio/easteregg-warning-2.wav",
+  "/api/audio/easteregg-warning-3.wav",
+];
+const HOME_HERO_SUBTITLES = {
+  en: [
+    "A sharper way to talk, ask, listen, and get things done without opening six different tabs like a tired accountant.",
+    "Your mildly judgemental robot assistant for voice, text, tasks, and the occasional reality check.",
+    "Ask by voice, type like a civilized menace, or upload audio and let Bender do the heavy lifting.",
+    "A home base for quick answers, saved conversations, and robotic sarcasm with surprisingly useful timing.",
+    "Talk to Bender, connect your tools, and pretend this was your plan all along.",
+    "One place for voice, text, memory, and a robot face that is absolutely judging your cursor.",
+    "Productivity, but with the emotional warmth of a vending machine in a basement.",
+    "For when your brain has too many tabs open and none of them are paying rent.",
+    "Ask Bender anything. The answer may help, hurt, or both, which is basically efficiency.",
+    "A digital assistant for people who want answers faster than their motivation disappears.",
+    "Bring your questions. Bender will bring the confidence of someone who has never had a human body.",
+    "Less chaos, more answers, and just enough sarcasm to keep everyone legally awake.",
+    "Because doing everything manually builds character, and character is overrated.",
+    "Voice, text, memory, and the comforting sense that at least one robot is disappointed in you.",
+    "A home for tasks, questions, and tiny existential crises with better formatting.",
+    "The assistant that helps before your todo list becomes archaeological evidence.",
+    "For when your calendar, inbox, and motivation all died in the same meeting.",
+    "Answers fast enough to outrun your bad decisions. Almost.",
+    "A robot assistant for days when common sense called in sick.",
+    "Voice, text, and memory, because apparently suffering also needs version control.",
+    "Bender helps you organize life, or at least makes the chaos sound intentional.",
+    "Built for questions, reminders, and emotional damage with decent latency.",
+    "Less therapy, more automation. Results may vary, dignity not included.",
+    "A friendly home for your prompts, unless your prompts deserve consequences.",
+    "Bender organizes your day with the empathy of a tax audit and the charm of a stolen wallet.",
+    "Ask Bender for help and he will answer like your problems are bugs he would delete with pleasure.",
+    "A robot assistant that remembers your tasks, your chaos, and probably where you buried your motivation.",
+    "Bender cannot fix your life, but he can label the wreckage with impressive confidence.",
+    "For questions, plans, reminders, and the kind of honesty your friends wisely avoid.",
+    "Bender brings answers, sarcasm, and the emotional support of a locked fire exit.",
+    "Your personal robot for turning tiny disasters into scheduled events.",
+    "Bender is here to help, judge, and make your bad decisions feel professionally documented.",
+  ],
+  es: [
+    "Una forma más directa de hablar, preguntar, escuchar y resolver cosas sin abrir seis pestañas como un contable derrotado.",
+    "Tu asistente robótico ligeramente borde para voz, texto, tareas y alguna dosis saludable de realidad.",
+    "Pregunta por voz, escribe como una amenaza civilizada o sube audio y deja que Bender cargue con el marrón.",
+    "Un punto de partida para respuestas rápidas, conversaciones guardadas y sarcasmo robótico sorprendentemente útil.",
+    "Habla con Bender, conecta tus herramientas y finge que este era tu plan desde el principio.",
+    "Un solo sitio para voz, texto, memoria y una cara robótica que juzga tu cursor con bastante precisión.",
+    "Productividad, pero con el calor emocional de una máquina expendedora en un sótano.",
+    "Para cuando tu cerebro tiene demasiadas pestañas abiertas y ninguna paga alquiler.",
+    "Pregúntale a Bender lo que quieras. La respuesta puede ayudar, doler, o ambas cosas, que eso también es eficiencia.",
+    "Un asistente digital para quien quiere respuestas antes de que desaparezca su motivación.",
+    "Trae tus preguntas. Bender trae la confianza de alguien que nunca ha tenido cuerpo humano.",
+    "Menos caos, más respuestas y el sarcasmo justo para mantener a todos legalmente despiertos.",
+    "Porque hacerlo todo a mano forja carácter, y el carácter está sobrevalorado.",
+    "Voz, texto, memoria y la tranquilidad de que al menos un robot está decepcionado contigo.",
+    "Un hogar para tareas, preguntas y pequeñas crisis existenciales con mejor formato.",
+    "El asistente que ayuda antes de que tu lista de tareas se convierta en prueba arqueologica.",
+    "Para cuando tu calendario, tu bandeja de entrada y tus ganas murieron en la misma reunión.",
+    "Respuestas lo bastante rápidas como para adelantar a tus malas decisiones. Casi.",
+    "Un asistente robótico para esos días en los que el sentido común se dio de baja.",
+    "Voz, texto y memoria, porque al parecer el sufrimiento también necesita control de versiones.",
+    "Bender te ayuda a ordenar la vida, o al menos a que el caos parezca intencionado.",
+    "Hecho para preguntas, recordatorios y daño emocional con una latencia decente.",
+    "Menos terapia, más automatización. Resultados variables, dignidad no incluida.",
+    "Un hogar amable para tus prompts, salvo que tus prompts merezcan consecuencias.",
+    "Bender organiza tu día con la empatía de una inspección de Hacienda y el encanto de una cartera robada.",
+    "Pídele ayuda a Bender y responderá como si tus problemas fueran bugs que borraría con gusto.",
+    "Un asistente robótico que recuerda tus tareas, tu caos y probablemente dónde enterraste tu motivación.",
+    "Bender no puede arreglar tu vida, pero puede etiquetar el desastre con una confianza admirable.",
+    "Para preguntas, planes, recordatorios y esa honestidad que tus amigos evitan por supervivencia.",
+    "Bender trae respuestas, sarcasmo y el apoyo emocional de una salida de emergencia cerrada.",
+    "Tu robot personal para convertir pequeños desastres en eventos programados.",
+    "Bender está aquí para ayudar, juzgar y documentar profesionalmente tus malas decisiones.",
+  ],
+};
 const DEFAULT_CHAT_ID = "default";
 let mediaRecorder = null;
 let audioChunks = [];
@@ -68,8 +203,23 @@ let thinkTimer = null;
 let thinkLongTimer = null;
 let isBusy = false;
 let voiceChatFontScale = 1;
+let audioReplyEnabled = true;
+let googleToolsState = null;
+let developerModeState = null;
+let googleToolsMonitor = null;
+let currentQuota = null;
+let lastAdminUsers = [];
+let adminConsoleOverride = false;
+let developerViewOverride = false;
+let currentLanguage = "en";
+let homeSubtitleIndex = 0;
+let homeBenderAnnoyance = 0;
+let benderWarningTimer = null;
+let homeBenderMoodTimer = null;
+let benderWarningAudio = null;
 const audioSyncMap = new Map();
 let audioSyncEnabled = false;
+let currentUser = null;
 
 audioPlayer.crossOrigin = "anonymous";
 faceAudioPlayer.crossOrigin = "anonymous";
@@ -188,6 +338,8 @@ function getAudioSyncState(audioEl) {
     data: new Uint8Array(analyser.fftSize),
     rafId: null,
     smoothed: 0,
+    isAudible: false,
+    lastVoiceAt: 0,
   };
   audioSyncMap.set(audioEl, state);
   return state;
@@ -215,19 +367,25 @@ function enableAudioSync() {
 
 function startMouthSync(audioEl) {
   if (!svgMouthGroup) {
-    return;
+    return false;
   }
   const state = getAudioSyncState(audioEl);
   if (!state || state.rafId) {
-    return;
+    return Boolean(state);
   }
   if (state.context.state === "suspended") {
     state.context.resume().catch(() => {});
   }
-  const minScale = 0.72;
-  const maxScale = 1.05;
-  const silenceThreshold = 0.025;
+  setSpeaking(false);
+  const voiceStartThreshold = 0.028;
+  const voiceStopThreshold = 0.014;
+  const pauseHoldMs = 180;
   const tick = () => {
+    if (audioEl.paused || audioEl.ended) {
+      stopMouthSync(audioEl);
+      setSpeaking(false);
+      return;
+    }
     state.analyser.getByteTimeDomainData(state.data);
     let sum = 0;
     for (let i = 0; i < state.data.length; i += 1) {
@@ -235,14 +393,27 @@ function startMouthSync(audioEl) {
       sum += v * v;
     }
     const rms = Math.sqrt(sum / state.data.length);
-    state.smoothed = state.smoothed * 0.85 + rms * 0.15;
-    const level = Math.max(0, state.smoothed - silenceThreshold) / (0.25 - silenceThreshold);
-    const clamped = Math.min(Math.max(level, 0), 1);
-    const scale = clamped === 0 ? 1 : minScale + (maxScale - minScale) * clamped;
-    svgMouthGroup.style.transform = `scaleY(${scale.toFixed(3)})`;
+    const smoothing = rms > state.smoothed ? 0.35 : 0.82;
+    state.smoothed = state.smoothed * smoothing + rms * (1 - smoothing);
+
+    const now = performance.now();
+    const hasVoice = rms >= voiceStartThreshold || state.smoothed >= voiceStartThreshold;
+    const isSilence = rms <= voiceStopThreshold && state.smoothed <= voiceStopThreshold;
+    if (hasVoice) {
+      state.lastVoiceAt = now;
+    }
+    const isAudible = hasVoice || (!isSilence && state.isAudible) || now - state.lastVoiceAt < pauseHoldMs;
+    if (state.isAudible !== isAudible) {
+      state.isAudible = isAudible;
+      setSpeaking(isAudible);
+    }
+    if (!isAudible) {
+      svgMouthGroup.style.transform = "scaleY(1)";
+    }
     state.rafId = requestAnimationFrame(tick);
   };
   state.rafId = requestAnimationFrame(tick);
+  return true;
 }
 
 function stopMouthSync(audioEl) {
@@ -250,6 +421,9 @@ function stopMouthSync(audioEl) {
   if (state && state.rafId) {
     cancelAnimationFrame(state.rafId);
     state.rafId = null;
+    state.smoothed = 0;
+    state.isAudible = false;
+    state.lastVoiceAt = 0;
   }
   if (svgMouthGroup) {
     svgMouthGroup.style.transform = "scaleY(1)";
@@ -375,12 +549,1201 @@ function setLoading(isLoading, label, mode = "") {
   voiceChatRecordBtn.disabled = isLoading;
   voiceChatStopBtn.disabled = !mediaRecorder || !mediaRecorder.state || mediaRecorder.state === "inactive";
   voiceChatTextSend.disabled = isLoading;
-  setRecordingState(label || (isLoading ? "Thinking..." : "Idle"));
+  setRecordingState(label || (isLoading ? tr("thinking") : tr("idle")));
   setThinking(isLoading, mode);
 }
 
 function showError(message) {
   errorOutput.textContent = message || "";
+}
+
+function showBenderWarning(message) {
+  if (!benderWarning) {
+    return;
+  }
+  window.clearTimeout(benderWarningTimer);
+  benderWarning.textContent = message;
+  benderWarning.classList.remove("hidden");
+  benderWarningTimer = window.setTimeout(() => {
+    benderWarning.classList.add("hidden");
+    benderWarning.textContent = "";
+  }, 10000);
+}
+
+function animateHomeBenderAnger() {
+  if (!homeBenderButton) {
+    return;
+  }
+  window.clearTimeout(homeBenderMoodTimer);
+  homeBenderButton.classList.remove("home-bender-angry", "home-bender-blink");
+  void homeBenderButton.offsetWidth;
+  homeBenderButton.classList.add("home-bender-angry", "home-bender-blink");
+  homeBenderMoodTimer = window.setTimeout(() => {
+    homeBenderButton.classList.remove("home-bender-angry", "home-bender-blink");
+  }, 1400);
+}
+
+function playBenderWarningAudio(index) {
+  const src = BENDER_WARNING_AUDIO[index];
+  if (!src) {
+    return;
+  }
+  try {
+    if (benderWarningAudio) {
+      benderWarningAudio.pause();
+      benderWarningAudio.currentTime = 0;
+    }
+    benderWarningAudio = new Audio(`${API_BASE}${src}`);
+    homeBenderButton?.classList.add("home-bender-speaking");
+    const stopSpeaking = () => {
+      homeBenderButton?.classList.remove("home-bender-speaking");
+    };
+    benderWarningAudio.addEventListener("ended", stopSpeaking, { once: true });
+    benderWarningAudio.addEventListener("pause", () => {
+      if (benderWarningAudio?.ended || benderWarningAudio?.currentTime === 0) {
+        stopSpeaking();
+      }
+    });
+    benderWarningAudio.play().catch((error) => {
+      stopSpeaking();
+      console.warn("Bender warning audio playback failed.", error);
+    });
+  } catch (error) {
+    homeBenderButton?.classList.remove("home-bender-speaking");
+    console.warn("Bender warning audio setup failed.", error);
+  }
+}
+
+function annoyHomeBender() {
+  if (!currentUser?.token) {
+    return;
+  }
+  homeBenderAnnoyance += 1;
+  animateHomeBenderAnger();
+  if (homeBenderAnnoyance === 1) {
+    showBenderWarning("Si vuelves a hacerlo, te echo de la página");
+    playBenderWarningAudio(0);
+    return;
+  }
+  if (homeBenderAnnoyance === 2) {
+    showBenderWarning("Última vez que te lo digo. ¡Para ya!");
+    playBenderWarningAudio(1);
+    return;
+  }
+  showBenderWarning("Tú mismo te lo has buscado");
+  playBenderWarningAudio(2);
+  clearUserSession();
+  homeBenderAnnoyance = 0;
+}
+
+function friendlyRequestError(response, data, fallback) {
+  if (response?.status === 429) {
+    return "Se te han acabado los mensajes hasta la próxima semana. Pide a un admin que te reactive 5 mensajes desde el panel si necesitas seguir ahora.";
+  }
+  return data?.error || fallback;
+}
+
+function showLoginError(message) {
+  if (loginError) {
+    loginError.textContent = message || "";
+  }
+}
+
+function authHeaders() {
+  return currentUser?.token ? { Authorization: `Bearer ${currentUser.token}` } : {};
+}
+
+function userHistoryStorageKey() {
+  const email = String(currentUser?.email || "anonymous").trim().toLowerCase();
+  return `${HISTORY_STORAGE_KEY}.${HISTORY_STORAGE_VERSION}.${email}`;
+}
+
+function chooseHomeSubtitleIndex() {
+  const subtitles = HOME_HERO_SUBTITLES.en;
+  let nextIndex = Math.floor(Math.random() * subtitles.length);
+  try {
+    const lastIndex = Number(sessionStorage.getItem("sarcasmos.lastHomeSubtitle"));
+    if (subtitles.length > 1 && nextIndex === lastIndex) {
+      nextIndex = (nextIndex + 1) % subtitles.length;
+    }
+    sessionStorage.setItem("sarcasmos.lastHomeSubtitle", String(nextIndex));
+  } catch (error) {
+    console.warn("Failed to remember home subtitle.", error);
+  }
+  homeSubtitleIndex = nextIndex;
+}
+
+function setHomeSubtitleText() {
+  setText(
+    ".console-hero .hero-copy > .subtitle",
+    HOME_HERO_SUBTITLES[currentLanguage][homeSubtitleIndex] || HOME_HERO_SUBTITLES[currentLanguage][0],
+  );
+}
+
+function rotateHomeSubtitle() {
+  chooseHomeSubtitleIndex();
+  setHomeSubtitleText();
+}
+
+const HOME_TRANSLATIONS = {
+  en: {
+    documentTitle: "SarcasmOS Home",
+    navKicker: "Home",
+    translate: "Traducir",
+    admin: "Admin",
+    signOut: "Sign out",
+    eyebrow: "SarcasmOS",
+    heroTitle: "Meet Bender at home.",
+    heroSubtitle: "",
+    startVoice: "Start voice chat",
+    openFace: "Open face view",
+    voice: "Voice",
+    text: "Text",
+    calendar: "Calendar",
+    ready: "Ready",
+    optional: "Optional",
+    robotStatus: "Robot status",
+    statusIdle: "Click refresh to check.",
+    refreshStatus: "Refresh status",
+    liveFace: "Live face",
+    faceSubtitle: "Big screen mode for Bender.",
+    voiceChat: "Voice chat",
+    voiceSubtitle: "Conversation mode with memory.",
+    openVoiceChat: "Open voice chat",
+    audioReply: "Audio reply",
+    audioReplyHelp: "Generate Bender voice audio after each answer.",
+    googleTools: "Google Tools",
+    googleToolsHelp: "Connect read-only Google tools Bender can use when answering.",
+    refresh: "Refresh",
+    connectCalendar: "Connect Calendar",
+    reconnectCalendar: "Reconnect Calendar",
+    disconnect: "Disconnect",
+    notConnected: "Not connected.",
+    enableCalendar: "Enable Calendar API",
+    talkEyebrow: "Talk to Bender",
+    nextMessage: "Send the next message",
+    audioInput: "Audio Input",
+    voicePill: "Voice",
+    audioHelp: "Record directly or send an existing audio file.",
+    chooseAudio: "Choose audio file",
+    sendUpload: "Send upload",
+    record: "Record",
+    stop: "Stop",
+    idle: "Idle",
+    textInput: "Text Input",
+    textPill: "Text",
+    textHelp: "Fast path for prompts, tests, and follow-up questions.",
+    textPlaceholder: "Type a message for Bender",
+    sendText: "Send text",
+    send: "Send",
+    result: "Result",
+    output: "Output",
+    transcript: "Transcript",
+    answer: "Answer",
+    waitingAudio: "Waiting for audio...",
+    waitingResponse: "Waiting for response...",
+    backHome: "Back to home",
+    adminConsoleTitle: "Admin Console",
+    adminConsoleSubtitle: "Manage users, inspect chat history, and check API health.",
+    sarcasmosHome: "SarcasmOS Home",
+    adminPanelTitle: "Admin Panel",
+    adminPanelHelp: "Authorize users and manage admin access.",
+    refreshUsers: "Refresh users",
+    apiHealthTitle: "API Health",
+    apiHealthHelp: "Endpoint checks for the backend services used by this console.",
+    checkApis: "Check APIs",
+    chatHistoryTitle: "Chat History",
+    chatHistoryHelp: "Recent messages saved by the backend.",
+    clearHistory: "Clear history",
+    loadingUsers: "Loading users...",
+    noUsers: "No users have signed in yet.",
+    authorized: "Authorized",
+    adminRole: "Admin",
+    chats: "Chats",
+    resetFiveChats: "Reset 5 chats",
+    loadingChatSummary: "Loading chat summary...",
+    chatSingular: "chat",
+    chatPlural: "chats",
+    messageSingular: "message",
+    messagePlural: "messages",
+    newChat: "New chat",
+    delete: "Delete",
+    user: "User",
+    none: "None",
+    lastQuestion: "Last question",
+    lastAnswer: "Last answer",
+    noChatsYet: "No chats yet.",
+    you: "You",
+    emptyTranscript: "(empty transcript)",
+    emptyAnswer: "(empty answer)",
+    audioReady: "Audio ready (click play).",
+    textAnswerReady: "Text answer ready.",
+    thinking: "Thinking...",
+    sendingAudio: "Sending audio...",
+    sendingText: "Sending text...",
+    recording: "Recording...",
+    processingRecording: "Processing recording...",
+    chooseAudioFirst: "Choose an audio file first.",
+    typeMessageFirst: "Type a message first.",
+    microphoneDenied: "Microphone permission denied or unavailable.",
+    failedStatus: "Failed to load status",
+    pendingAuthorization: "Your Google account is signed in, but an admin must authorize access.",
+    googleClientMissing: "Set GOOGLE_CLIENT_ID in backend/.env to enable Google sign-in.",
+    sessionExpired: "Session expired. Sign in again.",
+    apiDescBackend: "Main backend reachability",
+    apiDescRobot: "Bender runtime status",
+    apiDescHistory: "Saved conversations",
+    apiDescSchema: "Backend route registry",
+    apiDescConfig: "Google Sign-In configuration",
+    apiDescServices: "STT, LLM, and TTS configuration",
+    checking: "Checking...",
+    notChecked: "Not checked yet",
+    respondingIn: "Responding in",
+    failedFetch: "Failed to fetch",
+    configured: "Configured",
+    noBaseUrl: "No base URL shown",
+    serviceNotConfigured: "Service is not configured correctly",
+    developerMode: "Developer Mode",
+    developer: "Developer",
+    developerModeHelp: "Use your own API keys so your messages do not spend the shared weekly budget.",
+    requestAccess: "Request access",
+    requestedAccess: "Access requested",
+    developerApproved: "Approved. Add at least one API key to use your own budget.",
+    developerReady: "Active. Your chats use your API keys and do not consume weekly shared messages.",
+    developerNotRequested: "Not requested.",
+    developerWaiting: "Waiting for admin approval.",
+    saveDeveloperApis: "Save developer APIs",
+    developerModeLabel: "Developer",
+    developerRequestNotice: "developer mode request pending",
+    developerRequestsNotice: "developer mode requests pending",
+    approveDeveloper: "Approve developer mode",
+  },
+  es: {
+    documentTitle: "Inicio de SarcasmOS",
+    navKicker: "Inicio",
+    translate: "Translate",
+    admin: "Admin",
+    signOut: "Cerrar sesión",
+    eyebrow: "SarcasmOS",
+    heroTitle: "Bender, en casa.",
+    heroSubtitle: "",
+    startVoice: "Iniciar chat de voz",
+    openFace: "Abrir cara",
+    voice: "Voz",
+    text: "Texto",
+    calendar: "Calendario",
+    ready: "Listo",
+    optional: "Opcional",
+    robotStatus: "Estado del robot",
+    statusIdle: "Pulsa refrescar para comprobar.",
+    refreshStatus: "Refrescar estado",
+    liveFace: "Cara en directo",
+    faceSubtitle: "Modo pantalla grande para Bender.",
+    voiceChat: "Chat de voz",
+    voiceSubtitle: "Modo conversación con memoria.",
+    openVoiceChat: "Abrir chat de voz",
+    audioReply: "Respuesta con audio",
+    audioReplyHelp: "Genera la voz de Bender después de cada respuesta.",
+    googleTools: "Herramientas de Google",
+    googleToolsHelp: "Conecta herramientas de solo lectura que Bender puede usar al responder.",
+    refresh: "Refrescar",
+    connectCalendar: "Conectar calendario",
+    reconnectCalendar: "Reconectar calendario",
+    disconnect: "Desconectar",
+    notConnected: "No conectado.",
+    enableCalendar: "Activar API de Calendar",
+    talkEyebrow: "Habla con Bender",
+    nextMessage: "Envía el siguiente mensaje",
+    audioInput: "Entrada de audio",
+    voicePill: "Voz",
+    audioHelp: "Graba directamente o envía un archivo de audio.",
+    chooseAudio: "Elegir audio",
+    sendUpload: "Enviar archivo",
+    record: "Grabar",
+    stop: "Parar",
+    idle: "En espera",
+    textInput: "Entrada de texto",
+    textPill: "Texto",
+    textHelp: "La vía rápida para prompts, pruebas y preguntas de seguimiento.",
+    textPlaceholder: "Escribe un mensaje para Bender",
+    sendText: "Enviar texto",
+    send: "Enviar",
+    result: "Resultado",
+    output: "Salida",
+    transcript: "Transcripción",
+    answer: "Respuesta",
+    waitingAudio: "Esperando audio...",
+    waitingResponse: "Esperando respuesta...",
+    backHome: "Volver al inicio",
+    adminConsoleTitle: "Panel de Admin",
+    adminConsoleSubtitle: "Gestiona usuarios, revisa historiales de chat y comprueba la salud de la API.",
+    sarcasmosHome: "Inicio de SarcasmOS",
+    adminPanelTitle: "Panel de Administración",
+    adminPanelHelp: "Autoriza usuarios y gestiona el acceso de administradores.",
+    refreshUsers: "Refrescar usuarios",
+    apiHealthTitle: "Salud de la API",
+    apiHealthHelp: "Comprobaciones de endpoints para los servicios del backend usados por esta consola.",
+    checkApis: "Comprobar APIs",
+    chatHistoryTitle: "Historial de Chats",
+    chatHistoryHelp: "Mensajes recientes guardados por el backend.",
+    clearHistory: "Borrar historial",
+    loadingUsers: "Cargando usuarios...",
+    noUsers: "Todavía no ha iniciado sesión ningún usuario.",
+    authorized: "Autorizado",
+    adminRole: "Admin",
+    chats: "Chats",
+    resetFiveChats: "Resetear 5 chats",
+    loadingChatSummary: "Cargando resumen de chats...",
+    chatSingular: "chat",
+    chatPlural: "chats",
+    messageSingular: "mensaje",
+    messagePlural: "mensajes",
+    newChat: "Chat nuevo",
+    delete: "Borrar",
+    user: "Usuario",
+    none: "Nada",
+    lastQuestion: "Última pregunta",
+    lastAnswer: "Última respuesta",
+    noChatsYet: "Todavía no hay chats.",
+    you: "Tú",
+    emptyTranscript: "(transcripción vacía)",
+    emptyAnswer: "(respuesta vacía)",
+    audioReady: "Audio listo (pulsa play).",
+    textAnswerReady: "Respuesta de texto lista.",
+    thinking: "Pensando...",
+    sendingAudio: "Enviando audio...",
+    sendingText: "Enviando texto...",
+    recording: "Grabando...",
+    processingRecording: "Procesando grabación...",
+    chooseAudioFirst: "Elige un archivo de audio primero.",
+    typeMessageFirst: "Escribe un mensaje primero.",
+    microphoneDenied: "Permiso de micrófono denegado o no disponible.",
+    failedStatus: "No se pudo cargar el estado",
+    pendingAuthorization: "Has iniciado sesión con Google, pero un admin debe autorizar el acceso.",
+    googleClientMissing: "Configura GOOGLE_CLIENT_ID en backend/.env para activar Google Sign-In.",
+    sessionExpired: "Sesión caducada. Inicia sesión otra vez.",
+    apiDescBackend: "Conectividad principal del backend",
+    apiDescRobot: "Estado de ejecución de Bender",
+    apiDescHistory: "Conversaciones guardadas",
+    apiDescSchema: "Registro de rutas del backend",
+    apiDescConfig: "Configuración de Google Sign-In",
+    apiDescServices: "Configuración de STT, LLM y TTS",
+    checking: "Comprobando...",
+    notChecked: "Sin comprobar todavía",
+    respondingIn: "Responde en",
+    failedFetch: "No se pudo consultar",
+    configured: "Configurado",
+    noBaseUrl: "URL base no mostrada",
+    serviceNotConfigured: "El servicio no está configurado correctamente",
+    developerMode: "Modo Desarrollador",
+    developer: "Desarrollador",
+    developerModeHelp: "Usa tus propias API keys para que tus mensajes no gasten el presupuesto semanal compartido.",
+    requestAccess: "Solicitar acceso",
+    requestedAccess: "Acceso solicitado",
+    developerApproved: "Aprobado. Añade al menos una API key para usar tu propio presupuesto.",
+    developerReady: "Activo. Tus chats usan tus API keys y no consumen mensajes semanales compartidos.",
+    developerNotRequested: "No solicitado.",
+    developerWaiting: "Esperando aprobación de un admin.",
+    saveDeveloperApis: "Guardar APIs de desarrollador",
+    developerModeLabel: "Desarrollador",
+    developerRequestNotice: "solicitud de modo desarrollador pendiente",
+    developerRequestsNotice: "solicitudes de modo desarrollador pendientes",
+    approveDeveloper: "Aprobar modo desarrollador",
+  },
+};
+
+function setText(selector, value) {
+  const element = document.querySelector(selector);
+  if (element) {
+    element.textContent = value;
+  }
+}
+
+function setAllText(selector, value) {
+  for (const element of document.querySelectorAll(selector)) {
+    element.textContent = value;
+  }
+}
+
+function tr(key) {
+  return (HOME_TRANSLATIONS[currentLanguage] || HOME_TRANSLATIONS.en)[key] || HOME_TRANSLATIONS.en[key] || key;
+}
+
+function plural(count, singularKey, pluralKey) {
+  return Number(count) === 1 ? tr(singularKey) : tr(pluralKey);
+}
+
+function applyLanguage(language) {
+  currentLanguage = HOME_TRANSLATIONS[language] ? language : "en";
+  const t = HOME_TRANSLATIONS[currentLanguage];
+  document.documentElement.lang = currentLanguage;
+  document.title = t.documentTitle;
+  setText(".console-nav span", t.navKicker);
+  setText("#languageToggle", t.translate);
+  setText("#adminLanguageToggle", t.translate);
+  setText("#developerLanguageToggle", t.translate);
+  setText("#openAdminConsole", t.admin);
+  setText("#openDeveloperMode", t.developer);
+  setText("#closeDeveloperMode", t.backHome);
+  setText("#signOutBtn", t.signOut);
+  setText("#loginSignOutBtn", t.signOut);
+  setText("#adminSignOutBtn", t.signOut);
+  setText("#openSarcasmConsole", t.sarcasmosHome);
+  setText(".console-hero .eyebrow", t.eyebrow);
+  setText(".console-hero h1", t.heroTitle);
+  setHomeSubtitleText();
+  setText("#heroVoiceChatBtn", t.startVoice);
+  setText("#heroFaceViewBtn", t.openFace);
+  setText(".home-metrics div:nth-child(1) strong", t.voice);
+  setText(".home-metrics div:nth-child(2) strong", t.text);
+  setText(".home-metrics div:nth-child(3) strong", t.calendar);
+  setText(".home-metrics div:nth-child(1) span", t.ready);
+  setText(".home-metrics div:nth-child(2) span", t.ready);
+  setText(".home-metrics div:nth-child(3) span", t.optional);
+  setText(".status-card .status-label", t.robotStatus);
+  if (statusOutput?.textContent === HOME_TRANSLATIONS.en.statusIdle || statusOutput?.textContent === HOME_TRANSLATIONS.es.statusIdle) {
+    statusOutput.textContent = t.statusIdle;
+  }
+  setText("#statusBtn", t.refreshStatus);
+  setText(".feature-strip .face-callout:nth-child(1) .label", t.liveFace);
+  setText(".feature-strip .face-callout:nth-child(1) .subtitle", t.faceSubtitle);
+  setText(".feature-strip .face-callout:nth-child(2) .label", t.voiceChat);
+  setText(".feature-strip .face-callout:nth-child(2) .subtitle", t.voiceSubtitle);
+  setText("#openFaceView", t.openFace);
+  setText("#openVoiceChatView", t.openVoiceChat);
+  setText(".chat-settings-panel .label", t.audioReply);
+  setText(".chat-settings-panel .helper-text", t.audioReplyHelp);
+  setText("#googleToolsPanel h2", t.googleTools);
+  setText("#googleToolsPanel .history-header .helper-text", t.googleToolsHelp);
+  setText("#googleToolsRefresh", t.refresh);
+  setText("#disconnectGoogleCalendar", t.disconnect);
+  setText("#googleCalendarHelp", t.enableCalendar);
+  setText("#developerModePanel h2", t.developerMode);
+  setText("#developerView .console-nav span", t.developerMode);
+  setText("#developerModePanel .history-header .helper-text", t.developerModeHelp);
+  setText("#developerModeRequest", developerModeState?.developerRequested ? t.requestedAccess : t.requestAccess);
+  setText("#developerModeSave", t.saveDeveloperApis);
+  setText(".section-heading .eyebrow", t.talkEyebrow);
+  setText(".section-heading h2", t.nextMessage);
+  setText(".console-input-grid .input-panel:nth-child(1) h2", t.audioInput);
+  setText(".console-input-grid .input-panel:nth-child(1) .step-pill", t.voicePill);
+  setText(".console-input-grid .input-panel:nth-child(1) .helper-text", t.audioHelp);
+  setAllText(".file-input span", t.chooseAudio);
+  setText("#uploadSend", t.sendUpload);
+  setText("#recordBtn", t.record);
+  setText("#stopBtn", t.stop);
+  setText("#faceUploadSend", t.sendUpload);
+  setText("#faceRecordBtn", t.record);
+  setText("#faceStopBtn", t.stop);
+  setText("#voiceChatRecordBtn", t.record);
+  setText("#voiceChatStopBtn", t.stop);
+  setText("#voiceChatTextSend", t.send);
+  if (recordState?.textContent === HOME_TRANSLATIONS.en.idle || recordState?.textContent === HOME_TRANSLATIONS.es.idle) {
+    setRecordingState(t.idle);
+  }
+  setText(".console-input-grid .input-panel:nth-child(2) h2", t.textInput);
+  setText(".console-input-grid .input-panel:nth-child(2) .step-pill", t.textPill);
+  setText(".console-input-grid .input-panel:nth-child(2) .helper-text", t.textHelp);
+  if (textInput) {
+    textInput.placeholder = t.textPlaceholder;
+  }
+  if (faceTextInput) {
+    faceTextInput.placeholder = t.textPlaceholder;
+  }
+  if (voiceChatTextInput) {
+    voiceChatTextInput.placeholder = t.textPlaceholder;
+  }
+  setText("#textSend", t.sendText);
+  setText("#faceTextSend", t.sendText);
+  setText("#mainView > .panel:last-of-type h2", t.result);
+  setText("#mainView > .panel:last-of-type .step-pill", t.output);
+  setText("#mainView > .panel:last-of-type .grid > div:nth-child(1) .label", t.transcript);
+  setText("#mainView > .panel:last-of-type .grid > div:nth-child(2) .label", t.answer);
+  if (transcriptOutput?.textContent === HOME_TRANSLATIONS.en.waitingAudio || transcriptOutput?.textContent === HOME_TRANSLATIONS.es.waitingAudio) {
+    transcriptOutput.textContent = t.waitingAudio;
+  }
+  if (answerOutput?.textContent === HOME_TRANSLATIONS.en.waitingResponse || answerOutput?.textContent === HOME_TRANSLATIONS.es.waitingResponse) {
+    answerOutput.textContent = t.waitingResponse;
+  }
+  setText("#closeFaceView", t.backHome);
+  setText("#closeVoiceChatView", t.backHome);
+  setText("#adminView .hero-copy h1", t.adminConsoleTitle);
+  setText("#adminView .hero-copy .subtitle", t.adminConsoleSubtitle);
+  setText("#adminPanel h2", t.adminPanelTitle);
+  setText("#adminPanel .helper-text", t.adminPanelHelp);
+  setText("#adminRefresh", t.refreshUsers);
+  setText(".api-health-panel h2", t.apiHealthTitle);
+  setText(".api-health-panel .helper-text", t.apiHealthHelp);
+  setText("#apiHealthRefresh", t.checkApis);
+  setText("#adminView > .panel:last-of-type h2", t.chatHistoryTitle);
+  setText("#adminView > .panel:last-of-type .helper-text", t.chatHistoryHelp);
+  setText("#clearHistory", t.clearHistory);
+  renderGoogleToolsStatus(googleToolsState);
+  renderDeveloperModeStatus(developerModeState);
+  if (lastAdminUsers.length) {
+    renderAdminUsers(lastAdminUsers);
+  }
+  renderAllHistoryViews();
+}
+
+function loadLanguagePreference() {
+  try {
+    const saved = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    applyLanguage(saved || "en");
+  } catch (error) {
+    console.warn("Failed to load language preference.", error);
+    applyLanguage("en");
+  }
+}
+
+function toggleLanguage() {
+  const nextLanguage = currentLanguage === "en" ? "es" : "en";
+  try {
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, nextLanguage);
+  } catch (error) {
+    console.warn("Failed to save language preference.", error);
+  }
+  applyLanguage(nextLanguage);
+}
+
+async function loadPublicConfig() {
+  const errors = [];
+  for (const baseUrl of apiBaseCandidates()) {
+    try {
+      const response = await fetch(`${baseUrl}/api/config`, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`${response.status} ${response.statusText}`);
+      }
+      API_BASE = baseUrl;
+      const config = await response.json();
+      GOOGLE_CLIENT_ID = String(config.googleClientId || "").trim();
+      return config;
+    } catch (error) {
+      errors.push(`${baseUrl}: ${error.message || "unreachable"}`);
+    }
+  }
+  throw new Error(`Backend config unavailable. ${errors.join(" | ")}`);
+}
+
+function apiBaseCandidates() {
+  const sameOrigin = "";
+  const localBackends = ["http://localhost:8000", "http://localhost:8001"];
+  const isLocalhost = ["localhost", "127.0.0.1", ""].includes(window.location.hostname);
+  if (!isLocalhost || window.location.port === "9000") {
+    return [sameOrigin, ...localBackends];
+  }
+  return [...localBackends, sameOrigin];
+}
+
+function saveUserSession(user) {
+  currentUser = user;
+  try {
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+  } catch (error) {
+    console.warn("Failed to save auth session.", error);
+  }
+  renderAuthState();
+}
+
+function loadUserSession() {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const user = JSON.parse(raw);
+    if (!user || !user.email || !user.token) {
+      return null;
+    }
+    return user;
+  } catch (error) {
+    console.warn("Failed to load auth session.", error);
+    return null;
+  }
+}
+
+function clearUserSession() {
+  const token = currentUser?.token;
+  currentUser = null;
+  currentQuota = null;
+  adminConsoleOverride = false;
+  developerViewOverride = false;
+  stopGoogleToolsMonitor();
+  renderGoogleToolsStatus(null);
+  try {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch (error) {
+    console.warn("Failed to clear auth session.", error);
+  }
+  renderAuthState();
+  if (token) {
+    fetch(`${API_BASE}/api/auth/logout`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => {});
+  }
+}
+
+function renderAuthState() {
+  const isSignedIn = Boolean(currentUser?.email && currentUser?.token);
+  const isAuthorized = Boolean(currentUser?.authorized);
+  const isAdmin = Boolean(currentUser?.isAdmin);
+  const canUseDeveloper = isSignedIn && isAuthorized && developerViewOverride;
+  const canUseApp = isSignedIn && isAuthorized && !developerViewOverride && (!isAdmin || !adminConsoleOverride);
+  const canUseAdmin = isSignedIn && isAuthorized && isAdmin && adminConsoleOverride && !developerViewOverride;
+  if (!canUseApp) {
+    closeFacePanel();
+    closeVoiceChatPanel();
+  }
+  loginView?.classList.toggle("hidden", canUseApp || canUseAdmin || canUseDeveloper);
+  mainView?.classList.toggle("hidden", !canUseApp);
+  mainView?.setAttribute("aria-hidden", canUseApp ? "false" : "true");
+  developerView?.classList.toggle("hidden", !canUseDeveloper);
+  developerView?.setAttribute("aria-hidden", canUseDeveloper ? "false" : "true");
+  adminView?.classList.toggle("hidden", !canUseAdmin);
+  adminView?.setAttribute("aria-hidden", canUseAdmin ? "false" : "true");
+  adminPanel?.classList.toggle("hidden", !canUseAdmin);
+  googleToolsPanel?.classList.toggle("hidden", !canUseApp);
+  developerModePanel?.classList.toggle("hidden", !canUseDeveloper);
+  loginSignOutBtn?.classList.toggle("hidden", !isSignedIn);
+  googleLoginButton?.classList.toggle("hidden", isSignedIn);
+  openAdminConsole?.classList.toggle("hidden", !isAdmin);
+  if (canUseApp || canUseDeveloper) {
+    startGoogleToolsMonitor();
+    loadDeveloperModeStatus();
+  } else {
+    stopGoogleToolsMonitor();
+  }
+
+  if (userBadge) {
+    userBadge.classList.toggle("hidden", !canUseApp);
+  }
+  if (userName) {
+    userName.textContent = currentUser?.name || "Signed in";
+  }
+  if (userEmail) {
+    const role = currentUser?.isAdmin ? "admin" : currentUser?.authorized ? "authorized" : "pending";
+    userEmail.textContent = currentUser?.email ? `${currentUser.email} - ${role}` : "";
+  }
+  if (userAvatar) {
+    userAvatar.src = currentUser?.picture || "";
+    userAvatar.classList.toggle("hidden", !currentUser?.picture);
+  }
+  if (adminUserName) {
+    adminUserName.textContent = currentUser?.name || "Admin";
+  }
+  if (adminUserEmail) {
+    adminUserEmail.textContent = currentUser?.email || "";
+  }
+  if (adminUserAvatar) {
+    adminUserAvatar.src = currentUser?.picture || "";
+    adminUserAvatar.classList.toggle("hidden", !currentUser?.picture);
+  }
+}
+
+function handleGoogleCredential(response) {
+  loginWithGoogle(response.credential || "");
+}
+
+async function loginWithGoogle(credential) {
+  showLoginError("");
+  try {
+    const response = await fetch(`${API_BASE}/api/auth/google`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ credential }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Google sign-in failed.");
+    }
+    saveUserSession({ ...data.user, token: data.token, sessionExpiresAt: data.expiresAt || "" });
+    currentQuota = data.quota || null;
+    await loadHistory();
+    renderAllHistoryViews();
+    if (!data.user.authorized) {
+      showLoginError(tr("pendingAuthorization"));
+    }
+    if (data.user.isAdmin) {
+      loadAdminUsers();
+    }
+  } catch (error) {
+    showLoginError(error.message || "Google sign-in failed.");
+  }
+}
+
+function renderGoogleButton() {
+  if (!googleLoginButton) {
+    return;
+  }
+  googleLoginButton.innerHTML = "";
+  if (!GOOGLE_CLIENT_ID) {
+    showLoginError(tr("googleClientMissing"));
+    return;
+  }
+  if (!window.google?.accounts?.id) {
+    setTimeout(renderGoogleButton, 250);
+    return;
+  }
+  window.google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: handleGoogleCredential,
+  });
+  window.google.accounts.id.renderButton(googleLoginButton, {
+    theme: "filled_black",
+    size: "large",
+    type: "standard",
+    shape: "pill",
+    text: "signin_with",
+    logo_alignment: "left",
+    width: 280,
+  });
+}
+
+function setGoogleToolsError(message) {
+  if (googleToolsError) {
+    googleToolsError.textContent = message || "";
+  }
+}
+
+function formatGoogleToolCheckTime(value) {
+  if (!value) {
+    return "";
+  }
+  const checkedAt = new Date(value);
+  if (Number.isNaN(checkedAt.getTime())) {
+    return "";
+  }
+  return checkedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function renderGoogleToolsStatus(status) {
+  googleToolsState = status || null;
+  const calendar = status?.calendar || {};
+  const t = HOME_TRANSLATIONS[currentLanguage] || HOME_TRANSLATIONS.en;
+  const connected = Boolean(calendar.connected);
+  const configured = Boolean(calendar.configured || calendar.expiresAt || calendar.error);
+  const needsReconnect = Boolean(calendar.needsReconnect || (configured && !connected));
+  const checkedLabel = formatGoogleToolCheckTime(calendar.lastCheckedAt);
+  if (googleCalendarStatus) {
+    if (connected) {
+      const suffix = checkedLabel ? ` - checked ${checkedLabel}` : "";
+      googleCalendarStatus.textContent = `Connected until ${new Date(calendar.expiresAt).toLocaleString()}${suffix}`;
+    } else if (calendar.error) {
+      googleCalendarStatus.textContent = calendar.error;
+    } else if (calendar.expiresAt) {
+      googleCalendarStatus.textContent = "Permission expired. Reconnect Calendar.";
+    } else {
+      googleCalendarStatus.textContent = t.notConnected;
+    }
+  }
+  if (googleCalendarHelp) {
+    googleCalendarHelp.href = calendar.helpUrl || "#";
+    googleCalendarHelp.classList.toggle("hidden", !calendar.helpUrl);
+  }
+  if (connectGoogleCalendar) {
+    connectGoogleCalendar.textContent = connected || needsReconnect ? t.reconnectCalendar : t.connectCalendar;
+  }
+  if (disconnectGoogleCalendar) {
+    disconnectGoogleCalendar.disabled = !configured;
+  }
+}
+
+
+function renderDeveloperModeStatus(status) {
+  developerModeState = status || null;
+  if (!developerModeStatus || !developerModeRequest || !developerModeForm) {
+    return;
+  }
+  const approved = Boolean(status?.developerMode);
+  const requested = Boolean(status?.developerRequested);
+  const ready = Boolean(status?.ready);
+  developerModeForm.classList.toggle("hidden", !approved);
+  developerModeRequest.disabled = requested || approved;
+  developerModeRequest.textContent = requested || approved ? tr("requestedAccess") : tr("requestAccess");
+  if (ready) {
+    developerModeStatus.textContent = tr("developerReady");
+  } else if (approved) {
+    developerModeStatus.textContent = tr("developerApproved");
+  } else if (requested) {
+    developerModeStatus.textContent = tr("developerWaiting");
+  } else {
+    developerModeStatus.textContent = tr("developerNotRequested");
+  }
+}
+
+
+async function loadDeveloperModeStatus() {
+  if (!currentUser?.token) {
+    return;
+  }
+  try {
+    const response = await fetch(`${API_BASE}/api/developer-mode`, { headers: authHeaders() });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to load developer mode.");
+    }
+    renderDeveloperModeStatus(data);
+  } catch (error) {
+    console.warn("Failed to load developer mode.", error);
+  }
+}
+
+
+async function requestDeveloperMode() {
+  try {
+    const response = await fetch(`${API_BASE}/api/developer-mode/request`, {
+      method: "POST",
+      headers: authHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to request developer mode.");
+    }
+    if (data.user) {
+      saveUserSession({ ...data.user, token: currentUser.token, sessionExpiresAt: currentUser.sessionExpiresAt || "" });
+    }
+    await loadDeveloperModeStatus();
+  } catch (error) {
+    showError(error.message || "Failed to request developer mode.");
+  }
+}
+
+
+async function saveDeveloperModeSettings(event) {
+  event.preventDefault();
+  try {
+    const payload = {
+      openrouterBaseUrl: developerCompletionsUrl.value.trim(),
+      openrouterApiToken: developerCompletionsKey.value.trim(),
+      replicateBaseUrl: developerReplicateUrl.value.trim(),
+      replicateApiToken: developerReplicateKey.value.trim(),
+      pioneerBaseUrl: developerFallbackUrl.value.trim(),
+      pioneerApiKey: developerFallbackKey.value.trim(),
+      llmModel: developerLlmModel.value.trim(),
+      ttsModel: developerTtsModel.value.trim(),
+    };
+    const response = await fetch(`${API_BASE}/api/developer-mode/settings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to save developer APIs.");
+    }
+    developerCompletionsUrl.value = "";
+    developerCompletionsKey.value = "";
+    developerReplicateUrl.value = "";
+    developerReplicateKey.value = "";
+    developerFallbackUrl.value = "";
+    developerFallbackKey.value = "";
+    developerLlmModel.value = "";
+    developerTtsModel.value = "";
+    await loadDeveloperModeStatus();
+  } catch (error) {
+    showError(error.message || "Failed to save developer APIs.");
+  }
+}
+
+async function loadGoogleToolsStatus(options = {}) {
+  if (!currentUser?.authorized) {
+    return;
+  }
+  const check = Boolean(options.check);
+  const quiet = Boolean(options.quiet);
+  if (!quiet) {
+    setGoogleToolsError("");
+  }
+  try {
+    const suffix = check ? "?check=1" : "";
+    const response = await fetch(`${API_BASE}/api/google-tools${suffix}`, {
+      headers: authHeaders(),
+      cache: "no-store",
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to load Google tools.");
+    }
+    renderGoogleToolsStatus(data);
+    if (!quiet && data?.calendar?.error) {
+      setGoogleToolsError(data.calendar.error);
+    }
+    return data;
+  } catch (error) {
+    if (!quiet) {
+      setGoogleToolsError(error.message || "Failed to load Google tools.");
+    }
+    return null;
+  }
+}
+
+function startGoogleToolsMonitor() {
+  if (googleToolsMonitor || !currentUser?.authorized) {
+    return;
+  }
+  checkGoogleToolsConnection({ quiet: true });
+  googleToolsMonitor = window.setInterval(() => {
+    checkGoogleToolsConnection({ quiet: true });
+  }, GOOGLE_TOOLS_CHECK_INTERVAL_MS);
+}
+
+function stopGoogleToolsMonitor() {
+  if (!googleToolsMonitor) {
+    return;
+  }
+  window.clearInterval(googleToolsMonitor);
+  googleToolsMonitor = null;
+}
+
+function requestGoogleCalendarToken(prompt = "consent") {
+  return new Promise((resolve, reject) => {
+    if (!GOOGLE_CLIENT_ID) {
+      reject(new Error("GOOGLE_CLIENT_ID is not configured."));
+      return;
+    }
+    if (!window.google?.accounts?.oauth2) {
+      reject(new Error("Google OAuth client is not loaded yet."));
+      return;
+    }
+    const tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: GOOGLE_CALENDAR_SCOPE,
+      prompt,
+      callback: (response) => {
+        if (response.error) {
+          reject(new Error(response.error_description || response.error));
+          return;
+        }
+        resolve(response);
+      },
+    });
+    tokenClient.requestAccessToken();
+  });
+}
+
+async function connectCalendarTool() {
+  setGoogleToolsError("");
+  if (connectGoogleCalendar) {
+    connectGoogleCalendar.disabled = true;
+  }
+  try {
+    const token = await requestGoogleCalendarToken("consent");
+    const response = await fetch(`${API_BASE}/api/google-tools/calendar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({
+        accessToken: token.access_token,
+        expiresIn: Number(token.expires_in || 3600),
+        scope: token.scope || GOOGLE_CALENDAR_SCOPE,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to connect Google Calendar.");
+    }
+    renderGoogleToolsStatus(data);
+  } catch (error) {
+    setGoogleToolsError(error.message || "Failed to connect Google Calendar.");
+  } finally {
+    if (connectGoogleCalendar) {
+      connectGoogleCalendar.disabled = false;
+    }
+  }
+}
+
+async function refreshCalendarToolIfNeeded() {
+  const calendar = googleToolsState?.calendar;
+  if (!calendar?.expiresAt) {
+    return;
+  }
+  const expiresAt = new Date(calendar.expiresAt).getTime();
+  if (Number.isNaN(expiresAt) || expiresAt - Date.now() > 120000) {
+    return;
+  }
+  try {
+    const token = await requestGoogleCalendarToken("");
+    const response = await fetch(`${API_BASE}/api/google-tools/calendar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({
+        accessToken: token.access_token,
+        expiresIn: Number(token.expires_in || 3600),
+        scope: token.scope || GOOGLE_CALENDAR_SCOPE,
+      }),
+    });
+    const data = await response.json();
+    if (response.ok) {
+      renderGoogleToolsStatus(data);
+    }
+  } catch (error) {
+    console.warn("Google Calendar silent refresh failed.", error);
+    renderGoogleToolsStatus({
+      calendar: {
+        connected: false,
+        expiresAt: calendar.expiresAt,
+        scope: calendar.scope || GOOGLE_CALENDAR_SCOPE,
+      },
+    });
+  }
+}
+
+async function checkGoogleToolsConnection(options = {}) {
+  await refreshCalendarToolIfNeeded();
+  if (googleToolsState?.calendar?.needsReconnect) {
+    return googleToolsState;
+  }
+  return loadGoogleToolsStatus({ check: true, quiet: Boolean(options.quiet) });
+}
+
+async function disconnectCalendarTool() {
+  setGoogleToolsError("");
+  try {
+    const response = await fetch(`${API_BASE}/api/google-tools/calendar`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to disconnect Google Calendar.");
+    }
+    renderGoogleToolsStatus(data);
+  } catch (error) {
+    setGoogleToolsError(error.message || "Failed to disconnect Google Calendar.");
+  }
+}
+
+function initLoginBotLook() {
+  if (!loginBot) {
+    return;
+  }
+  const pupils = Array.from(loginBot.querySelectorAll(".login-bot-pupil"));
+  if (!pupils.length) {
+    return;
+  }
+  const pupilStates = pupils.map((pupil) => {
+    const baseTransform = pupil.getAttribute("transform") || "";
+    const centerX = Number(pupil.getAttribute("x") || 0) + Number(pupil.getAttribute("width") || 0) / 2;
+    const centerY = Number(pupil.getAttribute("y") || 0) + Number(pupil.getAttribute("height") || 0) / 2;
+    return { pupil, baseTransform, centerX, centerY };
+  });
+  const setPupils = (x, y) => {
+    for (const state of pupilStates) {
+      state.pupil.setAttribute(
+        "transform",
+        `translate(${x} ${y}) ${state.baseTransform}`
+      );
+    }
+  };
+  document.addEventListener("pointermove", (event) => {
+    if (loginView?.classList.contains("hidden")) {
+      return;
+    }
+    const svg = loginBot.querySelector("svg");
+    const point = svg?.createSVGPoint();
+    if (!svg || !point) {
+      return;
+    }
+    point.x = event.clientX;
+    point.y = event.clientY;
+    const cursor = point.matrixTransform(svg.getScreenCTM().inverse());
+    let totalX = 0;
+    let totalY = 0;
+    for (const state of pupilStates) {
+      totalX += cursor.x - state.centerX;
+      totalY += cursor.y - state.centerY;
+    }
+    const avgX = totalX / pupilStates.length;
+    const avgY = totalY / pupilStates.length;
+    const angle = Math.atan2(avgY, avgX);
+    const distance = Math.min(1, Math.hypot(avgX, avgY) / 170);
+    const x = Math.round(Math.cos(angle) * distance * 15);
+    const y = Math.round(Math.sin(angle) * distance * 10);
+    setPupils(x, y);
+  });
+  document.addEventListener("pointerleave", () => setPupils(0, 0));
+}
+
+function initHomeBenderLook() {
+  if (!homeBenderSvg) {
+    return;
+  }
+  const pupils = Array.from(homeBenderSvg.querySelectorAll(".home-bender-pupil"));
+  if (!pupils.length) {
+    return;
+  }
+  const pupilStates = pupils.map((pupil) => {
+    const baseTransform = pupil.getAttribute("transform") || "";
+    const centerX = Number(pupil.getAttribute("x") || 0) + Number(pupil.getAttribute("width") || 0) / 2;
+    const centerY = Number(pupil.getAttribute("y") || 0) + Number(pupil.getAttribute("height") || 0) / 2;
+    return { pupil, baseTransform, centerX, centerY };
+  });
+  const setPupils = (x, y) => {
+    for (const state of pupilStates) {
+      state.pupil.setAttribute("transform", `translate(${x} ${y}) ${state.baseTransform}`);
+    }
+  };
+  document.addEventListener("pointermove", (event) => {
+    if (mainView?.classList.contains("hidden")) {
+      return;
+    }
+    const point = homeBenderSvg.createSVGPoint();
+    point.x = event.clientX;
+    point.y = event.clientY;
+    const matrix = homeBenderSvg.getScreenCTM();
+    if (!matrix) {
+      return;
+    }
+    const cursor = point.matrixTransform(matrix.inverse());
+    let totalX = 0;
+    let totalY = 0;
+    for (const state of pupilStates) {
+      totalX += cursor.x - state.centerX;
+      totalY += cursor.y - state.centerY;
+    }
+    const avgX = totalX / pupilStates.length;
+    const avgY = totalY / pupilStates.length;
+    const angle = Math.atan2(avgY, avgX);
+    const distance = Math.min(1, Math.hypot(avgX, avgY) / 170);
+    const x = Math.round(Math.cos(angle) * distance * 14);
+    const y = Math.round(Math.sin(angle) * distance * 9);
+    setPupils(x, y);
+  });
+  document.addEventListener("pointerleave", () => setPupils(0, 0));
+}
+
+async function initAuth() {
+  currentUser = loadUserSession();
+  try {
+    await loadPublicConfig();
+  } catch (error) {
+    showLoginError(error.message || "Could not load login configuration.");
+    renderAuthState();
+    return;
+  }
+  if (currentUser?.token) {
+    try {
+      const response = await fetch(`${API_BASE}/api/auth/me`, { headers: authHeaders() });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Session expired.");
+      }
+      saveUserSession({ ...data.user, token: currentUser.token, sessionExpiresAt: currentUser.sessionExpiresAt || "" });
+      currentQuota = data.quota || null;
+    } catch (error) {
+      currentUser = null;
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      showLoginError(tr("sessionExpired"));
+    }
+  }
+  renderAuthState();
+  renderGoogleButton();
+  if (currentUser?.isAdmin) {
+    loadAdminUsers();
+  }
+  if (currentUser?.authorized) {
+    loadGoogleToolsStatus({ check: true, quiet: true });
+  }
 }
 
 const API_HEALTH_CHECKS = [
@@ -389,30 +1752,42 @@ const API_HEALTH_CHECKS = [
     path: "/api/status",
     method: "GET",
     description: "Main backend reachability",
+    descriptionKey: "apiDescBackend",
   },
   {
     name: "Robot status",
     path: "/api/status",
     method: "GET",
     description: "Bender runtime status",
+    descriptionKey: "apiDescRobot",
   },
   {
     name: "Chat history",
     path: "/api/history",
     method: "GET",
     description: "Saved conversations",
+    descriptionKey: "apiDescHistory",
   },
   {
     name: "API schema",
     path: "/openapi.json",
     method: "GET",
     description: "Backend route registry",
+    descriptionKey: "apiDescSchema",
+  },
+  {
+    name: "Public config",
+    path: "/api/config",
+    method: "GET",
+    description: "Google Sign-In configuration",
+    descriptionKey: "apiDescConfig",
   },
   {
     name: "AI services",
     path: "/api/services/status",
     method: "GET",
     description: "STT, LLM, and TTS configuration",
+    descriptionKey: "apiDescServices",
     expandServices: true,
   },
 ];
@@ -425,7 +1800,7 @@ function renderApiHealth(items, isChecking = false) {
   const checks = items.length ? items : API_HEALTH_CHECKS.map((item) => ({
     ...item,
     status: isChecking ? "checking" : "unknown",
-    detail: isChecking ? "Checking..." : "Not checked yet",
+    detail: isChecking ? tr("checking") : tr("notChecked"),
   }));
 
   for (const item of checks) {
@@ -438,7 +1813,7 @@ function renderApiHealth(items, isChecking = false) {
     title.textContent = item.name;
     const meta = document.createElement("p");
     meta.className = "api-health-meta";
-    meta.textContent = `${item.method} ${item.path} - ${item.description}`;
+    meta.textContent = `${item.method} ${item.path} - ${item.descriptionKey ? tr(item.descriptionKey) : item.description}`;
     const detail = document.createElement("p");
     detail.className = "api-health-detail";
     detail.textContent = item.detail;
@@ -465,6 +1840,7 @@ async function checkApiHealth() {
     try {
       const response = await fetch(`${API_BASE}${check.path}`, {
         method: check.method,
+        headers: authHeaders(),
         cache: "no-store",
       });
       const elapsed = Math.round(performance.now() - started);
@@ -483,8 +1859,8 @@ async function checkApiHealth() {
             description: service.model ? `Model: ${service.model}` : `${key.toUpperCase()} service`,
             status: service.ok ? "ok" : "fail",
             detail: service.ok
-              ? `${service.detail || "Configured"} - ${service.base_url || "No base URL shown"}`
-              : service.detail || data.error || "Service is not configured correctly",
+              ? `${service.detail || tr("configured")} - ${service.base_url || tr("noBaseUrl")}`
+              : service.detail || data.error || tr("serviceNotConfigured"),
           });
         }
         continue;
@@ -492,18 +1868,250 @@ async function checkApiHealth() {
       results.push({
         ...check,
         status: "ok",
-        detail: `Responding in ${elapsed} ms`,
+        detail: `${tr("respondingIn")} ${elapsed} ms`,
       });
     } catch (error) {
       results.push({
         ...check,
         status: "fail",
-        detail: error.message || "Failed to fetch",
+        detail: error.message || tr("failedFetch"),
       });
     }
   }
   renderApiHealth(results);
   apiHealthRefresh.disabled = false;
+}
+
+async function loadAdminUsers() {
+  if (!adminUsersList || !currentUser?.isAdmin) {
+    return;
+  }
+  adminUsersList.innerHTML = `<p class="helper-text">${escapeHtml(tr("loadingUsers"))}</p>`;
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/users`, { headers: authHeaders() });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to load users.");
+    }
+    lastAdminUsers = data.users || [];
+    renderAdminUsers(lastAdminUsers);
+  } catch (error) {
+    adminUsersList.innerHTML = `<p class="error">${escapeHtml(error.message || "Failed to load users.")}</p>`;
+  }
+}
+
+function renderAdminUsers(users) {
+  if (!adminUsersList) {
+    return;
+  }
+  const pendingDeveloperRequests = users.filter((user) => user.developerRequested && !user.developerMode).length;
+  if (developerRequestsNotice) {
+    developerRequestsNotice.classList.toggle("hidden", pendingDeveloperRequests === 0);
+    developerRequestsNotice.textContent = pendingDeveloperRequests
+      ? `${pendingDeveloperRequests} ${pendingDeveloperRequests === 1 ? tr("developerRequestNotice") : tr("developerRequestsNotice")}`
+      : "";
+  }
+  if (!users.length) {
+    adminUsersList.innerHTML = `<p class="helper-text">${escapeHtml(tr("noUsers"))}</p>`;
+    return;
+  }
+  adminUsersList.innerHTML = users
+    .sort((a, b) => {
+      const requestDelta = Number(Boolean(b.developerRequested && !b.developerMode)) - Number(Boolean(a.developerRequested && !a.developerMode));
+      return requestDelta || String(a.email).localeCompare(String(b.email));
+    })
+    .map((user) => `
+      <div class="admin-user${user.developerRequested && !user.developerMode ? " developer-requested" : ""}" data-email="${escapeHtml(user.email)}">
+        <img src="${escapeHtml(user.picture || "")}" alt="" class="${user.picture ? "" : "hidden"}" />
+        <div>
+          <p>${escapeHtml(user.name || user.email)}</p>
+          <span>${escapeHtml(user.email)}</span>
+          ${user.developerRequested && !user.developerMode ? `<span class="developer-request-badge">${escapeHtml(tr("approveDeveloper"))}</span>` : ""}
+        </div>
+        <label>
+          <input class="admin-user-authorized" type="checkbox" ${user.authorized ? "checked" : ""} />
+          ${escapeHtml(tr("authorized"))}
+        </label>
+        <label>
+          <input class="admin-user-admin" type="checkbox" ${user.isAdmin ? "checked" : ""} />
+          ${escapeHtml(tr("adminRole"))}
+        </label>
+        <label class="developer-admin-toggle" title="${user.developerRequested ? escapeHtml(tr("approveDeveloper")) : ""}">
+          <input class="admin-user-developer" type="checkbox" ${user.developerMode ? "checked" : ""} />
+          ${escapeHtml(tr("developerModeLabel"))}
+        </label>
+        <button class="admin-user-chats ghost" type="button">${escapeHtml(tr("chats"))}</button>
+        <button class="admin-user-reset-quota ghost" type="button">${escapeHtml(tr("resetFiveChats"))}</button>
+      </div>
+    `)
+    .join("");
+  bindAdminUserControls();
+}
+
+function bindAdminUserControls() {
+  for (const row of adminUsersList.querySelectorAll(".admin-user")) {
+    const email = row.dataset.email;
+    const authorized = row.querySelector(".admin-user-authorized");
+    const isAdmin = row.querySelector(".admin-user-admin");
+    const developerMode = row.querySelector(".admin-user-developer");
+    const chatsButton = row.querySelector(".admin-user-chats");
+    const resetQuotaButton = row.querySelector(".admin-user-reset-quota");
+    authorized?.addEventListener("change", () => updateAdminUser(email, { authorized: authorized.checked }));
+    isAdmin?.addEventListener("change", () => updateAdminUser(email, { isAdmin: isAdmin.checked }));
+    developerMode?.addEventListener("change", () => updateAdminUser(email, { developerMode: developerMode.checked }));
+    chatsButton?.addEventListener("click", () => loadAdminUserChats(email, row));
+    resetQuotaButton?.addEventListener("click", () => resetAdminUserQuota(email, resetQuotaButton));
+  }
+}
+
+async function loadAdminUserChats(email, row) {
+  const existing = row.querySelector(".admin-chat-summary");
+  if (existing) {
+    existing.remove();
+    return;
+  }
+  const panel = document.createElement("div");
+  panel.className = "admin-chat-summary";
+  panel.innerHTML = `<p class="helper-text">${escapeHtml(tr("loadingChatSummary"))}</p>`;
+  row.appendChild(panel);
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/users/${encodeURIComponent(email)}/chats`, {
+      headers: authHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to load chats.");
+    }
+    const chats = Array.isArray(data.chats) ? data.chats : [];
+    panel.innerHTML = `
+      <p><strong>${data.chatCount || 0}</strong> ${escapeHtml(plural(data.chatCount || 0, "chatSingular", "chatPlural"))}, <strong>${data.messageCount || 0}</strong> ${escapeHtml(plural(data.messageCount || 0, "messageSingular", "messagePlural"))}</p>
+      ${chats.length ? chats.map((chat) => `
+        <div class="admin-chat-item" data-chat-id="${escapeHtml(chat.id || "")}">
+          <div class="admin-chat-head">
+            <p>${escapeHtml(chat.title || tr("newChat"))} <span>${escapeHtml(chat.updatedAt || "")}</span></p>
+            <button class="admin-chat-delete ghost" type="button">${escapeHtml(tr("delete"))}</button>
+          </div>
+          <small>${Number(chat.messageCount || 0)} ${escapeHtml(plural(chat.messageCount || 0, "messageSingular", "messagePlural"))}</small>
+          ${Array.isArray(chat.items) && chat.items.length ? chat.items.map((item) => `
+            <div class="admin-chat-turn" data-item-index="${Number(item.index || 0)}">
+              <div class="admin-chat-turn-head">
+                <small>${escapeHtml(item.timestamp || "")}</small>
+                <button class="admin-chat-turn-delete ghost" type="button">${escapeHtml(tr("delete"))}</button>
+              </div>
+              <p><strong>${escapeHtml(tr("user"))}:</strong> ${escapeHtml(item.question || tr("none"))}</p>
+              <p><strong>Bender:</strong> ${escapeHtml(item.answer || tr("none"))}</p>
+            </div>
+          `).join("") : `
+            <small>${escapeHtml(tr("lastQuestion"))}: ${escapeHtml(chat.lastQuestion || tr("none"))}</small>
+            <small>${escapeHtml(tr("lastAnswer"))}: ${escapeHtml(chat.lastAnswer || tr("none"))}</small>
+          `}
+        </div>
+      `).join("") : `<p class="helper-text">${escapeHtml(tr("noChatsYet"))}</p>`}
+    `;
+    for (const button of panel.querySelectorAll(".admin-chat-delete")) {
+      button.addEventListener("click", () => deleteAdminUserChat(email, button.closest(".admin-chat-item")?.dataset.chatId, row));
+    }
+    for (const button of panel.querySelectorAll(".admin-chat-turn-delete")) {
+      button.addEventListener("click", () => {
+        const chatItem = button.closest(".admin-chat-item");
+        const turn = button.closest(".admin-chat-turn");
+        deleteAdminUserChatTurn(email, chatItem?.dataset.chatId, turn?.dataset.itemIndex, row);
+      });
+    }
+  } catch (error) {
+    panel.innerHTML = `<p class="error">${escapeHtml(error.message || "Failed to load chats.")}</p>`;
+  }
+}
+
+async function deleteAdminUserChatTurn(email, chatId, itemIndex, row) {
+  if (!chatId || itemIndex === undefined) {
+    return;
+  }
+  try {
+    const response = await fetch(
+      `${API_BASE}/api/admin/users/${encodeURIComponent(email)}/chats/${encodeURIComponent(chatId)}/items/${encodeURIComponent(itemIndex)}`,
+      {
+        method: "DELETE",
+        headers: authHeaders(),
+      }
+    );
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to delete message.");
+    }
+    row.querySelector(".admin-chat-summary")?.remove();
+    await loadAdminUserChats(email, row);
+  } catch (error) {
+    showError(error.message || "Failed to delete message.");
+  }
+}
+
+async function deleteAdminUserChat(email, chatId, row) {
+  if (!chatId) {
+    return;
+  }
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/users/${encodeURIComponent(email)}/chats/${encodeURIComponent(chatId)}`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to delete chat.");
+    }
+    row.querySelector(".admin-chat-summary")?.remove();
+    await loadAdminUserChats(email, row);
+  } catch (error) {
+    showError(error.message || "Failed to delete chat.");
+  }
+}
+
+async function resetAdminUserQuota(email, button) {
+  if (button) {
+    button.disabled = true;
+  }
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/users/${encodeURIComponent(email)}/quota/reset`, {
+      method: "POST",
+      headers: authHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to reset quota.");
+    }
+    await loadAdminUsers();
+  } catch (error) {
+    showError(error.message || "Failed to reset quota.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+    }
+  }
+}
+
+async function updateAdminUser(email, patch) {
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/users/${encodeURIComponent(email)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(patch),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to update user.");
+    }
+    if (data.user?.email === currentUser?.email) {
+      saveUserSession({
+        ...data.user,
+        token: currentUser.token,
+        sessionExpiresAt: currentUser.sessionExpiresAt || "",
+      });
+    }
+    await loadAdminUsers();
+  } catch (error) {
+    showError(error.message || "Failed to update user.");
+    await loadAdminUsers();
+  }
 }
 
 function applyVoiceChatFontScale() {
@@ -534,6 +2142,37 @@ function loadVoiceChatFontScale() {
     console.warn("Failed to load chat font size.", error);
   }
   applyVoiceChatFontScale();
+}
+
+function applyAudioReplyPreference() {
+  if (audioReplyToggle) {
+    audioReplyToggle.checked = audioReplyEnabled;
+  }
+  if (voiceChatAudioReplyToggle) {
+    voiceChatAudioReplyToggle.checked = audioReplyEnabled;
+  }
+  try {
+    localStorage.setItem(AUDIO_REPLY_STORAGE_KEY, audioReplyEnabled ? "1" : "0");
+  } catch (error) {
+    console.warn("Failed to save audio reply preference.", error);
+  }
+}
+
+function loadAudioReplyPreference() {
+  try {
+    const raw = localStorage.getItem(AUDIO_REPLY_STORAGE_KEY);
+    if (raw === "0") {
+      audioReplyEnabled = false;
+    }
+  } catch (error) {
+    console.warn("Failed to load audio reply preference.", error);
+  }
+  applyAudioReplyPreference();
+}
+
+function setAudioReplyPreference(enabled) {
+  audioReplyEnabled = Boolean(enabled);
+  applyAudioReplyPreference();
 }
 
 function changeVoiceChatFontScale(delta) {
@@ -605,12 +2244,15 @@ function renderAllHistoryViews() {
 }
 
 function updateResult(data) {
+  if (data?.quota) {
+    currentQuota = data.quota;
+  }
   if (data.transcript !== undefined) {
-    transcriptOutput.textContent = data.transcript || "(empty transcript)";
+    transcriptOutput.textContent = data.transcript || tr("emptyTranscript");
     faceTranscriptOutput.textContent = transcriptOutput.textContent;
   }
   if (data.answer !== undefined) {
-    answerOutput.textContent = data.answer || "(empty answer)";
+    answerOutput.textContent = data.answer || tr("emptyAnswer");
     faceAnswerOutput.textContent = answerOutput.textContent;
   }
   if (data.answer || data.transcript) {
@@ -639,24 +2281,35 @@ function updateResult(data) {
       if (voiceAudio) {
         pauseAllAudio(voiceAudio);
         voiceAudio.play().catch(() => {
-          setRecordingState("Audio ready (click play)." );
+          setRecordingState(tr("audioReady"));
         });
-        setSpeaking(true);
-        startMouthSync(voiceAudio);
+        if (!startMouthSync(voiceAudio)) {
+          setSpeaking(true);
+        }
       }
     } else if (activePlaybackTarget === "face") {
       pauseAllAudio(faceAudioPlayer);
       faceAudioPlayer.play().catch(() => {
-        setRecordingState("Audio ready (click play)." );
+        setRecordingState(tr("audioReady"));
       });
-      setSpeaking(true);
+      if (!startMouthSync(faceAudioPlayer)) {
+        setSpeaking(true);
+      }
     } else {
       pauseAllAudio(audioPlayer);
       audioPlayer.play().catch(() => {
-        setRecordingState("Audio ready (click play)." );
+        setRecordingState(tr("audioReady"));
       });
-      setSpeaking(true);
+      if (!startMouthSync(audioPlayer)) {
+        setSpeaking(true);
+      }
     }
+  } else {
+    audioPlayer.removeAttribute("src");
+    faceAudioPlayer.removeAttribute("src");
+    audioPlayer.load();
+    faceAudioPlayer.load();
+    setRecordingState(tr("textAnswerReady"));
   }
 }
 
@@ -666,7 +2319,7 @@ function renderHistory() {
       <div class="history-item" data-history-index="${index}">
         <div class="history-meta">
           <div class="label">${escapeHtml(entry.timestamp)}</div>
-          <button class="history-delete" type="button" aria-label="Delete this chat">Delete</button>
+          <button class="history-delete" type="button" aria-label="${escapeHtml(tr("delete"))}">${escapeHtml(tr("delete"))}</button>
         </div>
         <button class="history-open" type="button">
           <p>${escapeHtml(entry.question)}</p>
@@ -692,10 +2345,10 @@ function renderChatSessions() {
       return `
         <div class="voice-chat-session" data-chat-id="${escapeHtml(chat.id)}">
           <button class="voice-chat-session-open${activeClass}" type="button">
-            <span class="voice-chat-session-title">${escapeHtml(chat.title || "New chat")}</span>
-            <span class="voice-chat-session-meta">${count} messages</span>
+            <span class="voice-chat-session-title">${escapeHtml(chat.title || tr("newChat"))}</span>
+            <span class="voice-chat-session-meta">${count} ${escapeHtml(plural(count, "messageSingular", "messagePlural"))}</span>
           </button>
-          <button class="voice-chat-session-delete" type="button" aria-label="Delete chat">Delete</button>
+          <button class="voice-chat-session-delete" type="button" aria-label="${escapeHtml(tr("delete"))}">${escapeHtml(tr("delete"))}</button>
         </div>
       `;
     })
@@ -716,13 +2369,13 @@ function renderVoiceChat() {
         : "";
       return `
         <div class="voice-chat-message user">
-          <div class="label">You</div>
+          <div class="label">${escapeHtml(tr("you"))}</div>
           <p>${escapeHtml(question)}</p>
         </div>
         <div class="voice-chat-message assistant" data-history-index="${index}">
           <div class="voice-chat-message-top">
             <div class="label">Bender</div>
-            <button class="voice-chat-message-delete" type="button">Delete</button>
+            <button class="voice-chat-message-delete" type="button">${escapeHtml(tr("delete"))}</button>
           </div>
           <p>${escapeHtml(answer)}</p>
           ${audio}
@@ -741,8 +2394,9 @@ function bindVoiceChatAudio() {
     player.crossOrigin = "anonymous";
     player.addEventListener("play", () => {
       pauseAllAudio(player);
-      setSpeaking(true);
-      startMouthSync(player);
+      if (!startMouthSync(player)) {
+        setSpeaking(true);
+      }
     });
     player.addEventListener("pause", () => {
       setSpeaking(false);
@@ -915,14 +2569,14 @@ async function persistHistory() {
     items: getAllHistoryItems(),
   };
   try {
-    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(payload));
+    localStorage.setItem(userHistoryStorageKey(), JSON.stringify(payload));
   } catch (error) {
     console.warn("Failed to save chat history locally.", error);
   }
   try {
     await fetch(`${API_BASE}/api/history`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify(payload),
     });
   } catch (error) {
@@ -960,7 +2614,7 @@ async function loadHistory() {
   };
 
   try {
-    const response = await fetch(`${API_BASE}/api/history`);
+    const response = await fetch(`${API_BASE}/api/history`, { headers: authHeaders() });
     if (response.ok) {
       const data = await response.json();
       loaded = applyHistoryData(data);
@@ -971,7 +2625,7 @@ async function loadHistory() {
 
   if (!loaded) {
     try {
-      const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+      const raw = localStorage.getItem(userHistoryStorageKey());
       if (!raw) {
         throw new Error("No local history.");
       }
@@ -991,49 +2645,58 @@ async function loadHistory() {
 }
 
 async function sendAudioBlob(blob, filename) {
+  await refreshCalendarToolIfNeeded();
   const formData = new FormData();
   formData.append("audio", blob, filename);
   formData.append("context", JSON.stringify(getActiveChatContext()));
   formData.append("chatId", activeChatId);
-  setLoading(true, "Sending audio...", "audio");
+  formData.append("synthesizeAudio", audioReplyEnabled ? "true" : "false");
+  setLoading(true, tr("sendingAudio"), "audio");
   showError("");
 
   try {
     const response = await fetch(`${API_BASE}/api/chat/audio`, {
       method: "POST",
+      headers: authHeaders(),
       body: formData,
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.error || "Audio request failed");
+      throw new Error(friendlyRequestError(response, data, "Audio request failed"));
     }
     updateResult(data);
   } catch (error) {
     showError(error.message || "Audio request failed");
   } finally {
-    setLoading(false, "Idle");
+    setLoading(false, tr("idle"));
   }
 }
 
 async function sendTextMessage(message) {
-  setLoading(true, "Sending text...");
+  await refreshCalendarToolIfNeeded();
+  setLoading(true, tr("sendingText"));
   showError("");
 
   try {
     const response = await fetch(`${API_BASE}/api/chat/text`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, context: getActiveChatContext(), chatId: activeChatId }),
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({
+        message,
+        context: getActiveChatContext(),
+        chatId: activeChatId,
+        synthesizeAudio: audioReplyEnabled,
+      }),
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.error || "Text request failed");
+      throw new Error(friendlyRequestError(response, data, "Text request failed"));
     }
     updateResult(data);
   } catch (error) {
     showError(error.message || "Text request failed");
   } finally {
-    setLoading(false, "Idle");
+    setLoading(false, tr("idle"));
   }
 }
 
@@ -1044,7 +2707,7 @@ async function refreshStatus() {
     const data = await response.json();
     statusOutput.textContent = JSON.stringify(data, null, 2);
   } catch (error) {
-    showError("Failed to load status");
+    showError(tr("failedStatus"));
   }
 }
 
@@ -1065,7 +2728,7 @@ async function startRecording() {
       stream.getTracks().forEach((track) => track.stop());
     });
     mediaRecorder.start();
-    setRecordingState("Recording...");
+    setRecordingState(tr("recording"));
     recordBtn.disabled = true;
     faceRecordBtn.disabled = true;
     voiceChatRecordBtn.disabled = true;
@@ -1073,7 +2736,7 @@ async function startRecording() {
     faceStopBtn.disabled = false;
     voiceChatStopBtn.disabled = false;
   } catch (error) {
-    showError("Microphone permission denied or unavailable.");
+    showError(tr("microphoneDenied"));
   }
 }
 
@@ -1086,7 +2749,7 @@ function stopRecording() {
     recordBtn.disabled = false;
     faceRecordBtn.disabled = false;
     voiceChatRecordBtn.disabled = false;
-    setRecordingState("Processing recording...");
+    setRecordingState(tr("processingRecording"));
   }
 }
 
@@ -1094,7 +2757,7 @@ uploadSend.addEventListener("click", () => {
   activePlaybackTarget = "main";
   const file = uploadInput.files[0];
   if (!file) {
-    showError("Choose an audio file first.");
+    showError(tr("chooseAudioFirst"));
     return;
   }
   pendingQuestion = "";
@@ -1105,7 +2768,7 @@ faceUploadSend.addEventListener("click", () => {
   activePlaybackTarget = "face";
   const file = faceUploadInput.files[0];
   if (!file) {
-    showError("Choose an audio file first.");
+    showError(tr("chooseAudioFirst"));
     return;
   }
   pendingQuestion = "";
@@ -1135,7 +2798,7 @@ textSend.addEventListener("click", () => {
   activePlaybackTarget = "main";
   const message = textInput.value.trim();
   if (!message) {
-    showError("Type a message first.");
+    showError(tr("typeMessageFirst"));
     return;
   }
   pendingQuestion = message;
@@ -1146,7 +2809,7 @@ faceTextSend.addEventListener("click", () => {
   activePlaybackTarget = "face";
   const message = faceTextInput.value.trim();
   if (!message) {
-    showError("Type a message first.");
+    showError(tr("typeMessageFirst"));
     return;
   }
   pendingQuestion = message;
@@ -1157,7 +2820,7 @@ voiceChatTextSend.addEventListener("click", () => {
   activePlaybackTarget = "voice";
   const message = voiceChatTextInput.value.trim();
   if (!message) {
-    showError("Type a message first.");
+    showError(tr("typeMessageFirst"));
     return;
   }
   pendingQuestion = message;
@@ -1166,6 +2829,41 @@ voiceChatTextSend.addEventListener("click", () => {
 
 statusBtn.addEventListener("click", refreshStatus);
 apiHealthRefresh.addEventListener("click", checkApiHealth);
+signOutBtn.addEventListener("click", clearUserSession);
+loginSignOutBtn.addEventListener("click", clearUserSession);
+adminSignOutBtn.addEventListener("click", clearUserSession);
+languageToggle?.addEventListener("click", toggleLanguage);
+adminLanguageToggle?.addEventListener("click", toggleLanguage);
+developerLanguageToggle?.addEventListener("click", toggleLanguage);
+homeBenderButton.addEventListener("click", annoyHomeBender);
+openSarcasmConsole.addEventListener("click", () => {
+  rotateHomeSubtitle();
+  developerViewOverride = false;
+  adminConsoleOverride = false;
+  renderAuthState();
+});
+openDeveloperMode?.addEventListener("click", () => {
+  adminConsoleOverride = false;
+  developerViewOverride = true;
+  renderAuthState();
+  loadDeveloperModeStatus();
+});
+closeDeveloperMode?.addEventListener("click", () => {
+  developerViewOverride = false;
+  renderAuthState();
+});
+openAdminConsole.addEventListener("click", () => {
+  rotateHomeSubtitle();
+  developerViewOverride = false;
+  adminConsoleOverride = true;
+  renderAuthState();
+});
+adminRefresh.addEventListener("click", loadAdminUsers);
+googleToolsRefresh.addEventListener("click", () => loadGoogleToolsStatus({ check: true }));
+connectGoogleCalendar.addEventListener("click", connectCalendarTool);
+disconnectGoogleCalendar.addEventListener("click", disconnectCalendarTool);
+developerModeRequest?.addEventListener("click", requestDeveloperMode);
+developerModeForm?.addEventListener("submit", saveDeveloperModeSettings);
 
 clearHistory.addEventListener("click", async () => {
   const filenames = Array.from(new Set(chatHistory.map((entry) => getAudioFilename(entry.audioUrl)).filter(Boolean)));
@@ -1196,8 +2894,11 @@ clearFaceHistory.addEventListener("click", async () => {
 voiceChatNewChat.addEventListener("click", createNewVoiceChat);
 voiceChatFontSmall.addEventListener("click", () => changeVoiceChatFontScale(-0.1));
 voiceChatFontLarge.addEventListener("click", () => changeVoiceChatFontScale(0.1));
+audioReplyToggle.addEventListener("change", () => setAudioReplyPreference(audioReplyToggle.checked));
+voiceChatAudioReplyToggle.addEventListener("change", () => setAudioReplyPreference(voiceChatAudioReplyToggle.checked));
 
 openFaceView.addEventListener("click", () => {
+  rotateHomeSubtitle();
   mainView.classList.add("hidden");
   faceView.classList.remove("hidden");
   faceView.setAttribute("aria-hidden", "false");
@@ -1207,7 +2908,10 @@ openFaceView.addEventListener("click", () => {
   startBlinkLoop();
 });
 
+heroFaceViewBtn.addEventListener("click", () => openFaceView.click());
+
 openVoiceChatView.addEventListener("click", () => {
+  rotateHomeSubtitle();
   mainView.classList.add("hidden");
   voiceChatView.classList.remove("hidden");
   voiceChatView.setAttribute("aria-hidden", "false");
@@ -1216,6 +2920,8 @@ openVoiceChatView.addEventListener("click", () => {
   startBlinkLoop();
   renderAllHistoryViews();
 });
+
+heroVoiceChatBtn.addEventListener("click", () => openVoiceChatView.click());
 
 closeFaceView.addEventListener("click", closeFacePanel);
 closeVoiceChatView.addEventListener("click", closeVoiceChatPanel);
@@ -1237,8 +2943,9 @@ document.addEventListener("keydown", (event) => {
 
 for (const player of [audioPlayer, faceAudioPlayer]) {
   player.addEventListener("play", () => {
-    setSpeaking(true);
-    startMouthSync(player);
+    if (!startMouthSync(player)) {
+      setSpeaking(true);
+    }
   });
   player.addEventListener("pause", () => {
     setSpeaking(false);
@@ -1250,39 +2957,8 @@ for (const player of [audioPlayer, faceAudioPlayer]) {
   });
 }
 
-for (const button of document.querySelectorAll("button[data-command]")) {
-  button.addEventListener("click", async () => {
-    const command = button.dataset.command;
-    showError("");
-    try {
-      const response = await fetch(`${API_BASE}/api/command`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ command }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Command failed");
-      }
-      answerOutput.textContent = JSON.stringify(data, null, 2);
-      if (command.startsWith("eye.look.")) {
-        const direction = command.split(".").pop();
-        const map = {
-          left: "look-left",
-          right: "look-right",
-          up: "look-up",
-          down: "look-down",
-          center: "look-center",
-        };
-        setLookDirection(map[direction] || "look-center");
-      }
-    } catch (error) {
-      showError(error.message || "Command failed");
-    }
-  });
-}
-
 function closeFacePanel() {
+  rotateHomeSubtitle();
   stopBlinkLoop();
   faceView.classList.remove("speaking");
   faceView.classList.remove("blinking");
@@ -1297,6 +2973,7 @@ function closeFacePanel() {
 }
 
 function closeVoiceChatPanel() {
+  rotateHomeSubtitle();
   stopBlinkLoop();
   voiceChatView.classList.remove("speaking");
   setLookDirection("look-center");
@@ -1307,7 +2984,7 @@ function closeVoiceChatPanel() {
   mainView.classList.remove("hidden");
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   const faceSvg = faceView.querySelector(".face-svg");
   const voiceFaceHead = document.getElementById("voiceChatFace");
   if (faceSvg && voiceFaceHead) {
@@ -1318,9 +2995,21 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   initSvgRefs();
   setLookDirection("look-center");
+  initLoginBotLook();
+  initHomeBenderLook();
+  chooseHomeSubtitleIndex();
+  loadLanguagePreference();
+  await initAuth();
   loadVoiceChatFontScale();
+  loadAudioReplyPreference();
   loadHistory().then(() => renderAllHistoryViews());
   checkApiHealth();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && currentUser?.authorized) {
+    checkGoogleToolsConnection({ quiet: true });
+  }
 });
 
 document.addEventListener("pointerdown", enableAudioSync, { once: true });

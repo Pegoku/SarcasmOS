@@ -1,65 +1,153 @@
-# sarcasmos
+# SarcasmOS
 
-Personal assistant characterized by Bender from Futurama (In spanish)
+SarcasmOS is a personality-driven voice assistant built as a Hack Club / Fallout project. The core idea is simple: take a smart assistant like Alexa or Google Home, then give it a face, a voice, and an attitude. Instead of answering like a neutral corporate box, SarcasmOS replies in Spanish with dry humor, sarcasm, and animated expressions inspired by Bender.
 
-SascarmOS is a personality-driven operating system that blends artificial intelligence with expressive hardware to create a truly interactive assistant.
+The project combines software, AI, mechanical design, and electronics: a robotic head with displays for the eyes and mouth, a local web interface for testing conversations, a FastAPI backend for voice/text processing, and custom PCBs for the visual hardware.
 
-The name reflects its core idea: “sarcasm” defines the character, while “OS” represents the intelligent system behind it. Instead of a neutral assistant, SarcasmOS delivers responses with attitude,humor, and a distinct personality inspired by Bender.
+## Language Scope
 
-The device takes the form of a robotic head with built-in displays in the eyes and the mouth, allowing real-time animations and expressions. This gives the illusion that the character is alive, reacting visually and emotionally to every interaction.
+SarcasmOS is designed to work in Spanish only.
 
-Functionally, it works like a smart assistant similar to Google Home or Alexa handling voice commands, answering questions, and controlling smart devices. The difference is in how it communicates: SarcasmOS doesn’t just respond, it reacts.
+The language model prompt, personality, expected user input, and generated responses are all tuned for Spanish. Other languages may work accidentally depending on the upstream model, but they are outside the intended behavior of this project.
 
-In Short, SarcasmOS turns a standard AI assistant into an engaging character where technology meets personality.
+## What It Does
 
-## Web App
+- Listens to audio or accepts text from a local web interface.
+- Transcribes speech to text.
+- Generates Spanish answers with a sarcastic character voice.
+- Converts the answer back to speech.
+- Syncs audio playback with an animated face.
+- Stores chat history locally.
+- Includes command/status hooks intended for expressions, eye movement, and robot behavior.
 
-This workspace includes a lightweight web UI plus FastAPI backend for audio upload, recording, and TTS playback.
+## Current State
 
-### Setup
+SarcasmOS already has a working software demo:
 
-```bash
-python -m venv .venv
-# Windows
-.venv\Scripts\activate
-# macOS/Linux
-source .venv/bin/activate
-pip install -r backend/requirements.txt
+- Static web UI in `AI/Workflow/SarcasmOS-web`.
+- Local FastAPI backend with chat, audio, history, and status endpoints.
+- STT, LLM, and TTS pipeline using configurable external services.
+- Console view, full face view, and voice chat view.
+- CAD files for the head/body.
+- KiCad designs for the eye and mouth boards.
+- Voice synthesis/cloning experiments and clip preparation tools.
+
+The hardware is still in development. This repository contains design, fabrication, and test files, but it should not be treated as a finished product yet.
+
+## Repository Structure
+
+```text
+AI/
+  Workflow/SarcasmOS-web/   Main web app + backend
+  Piannote/                 Voice clip separation and preparation
+  Qwen3-TTS-Bender/         TTS / voice experiments
+  xtts/                     Alternative TTS tests
+
+CAD/                        FreeCAD models for the head, base, and parts
+PCB/
+  eye/                      Eye PCB
+  mouth/                    Mouth PCB
+
+animationVisualizer/        Animation prototype
+README.md                   This document
 ```
 
-Create a `.env` file in `backend/` based on the example:
+## Web Demo
 
-```bash
-copy backend\.env.example backend\.env
+The quickest way to try SarcasmOS is to run the local web app.
+
+From `AI/Workflow/SarcasmOS-web`:
+
+```bat
+start-all.bat
 ```
 
-### Required environment variables
-
-- `HACK_CLUB_AI_KEY` or `REPLICATE_API_TOKEN` / `OPENROUTER_API_TOKEN`
-- `MINIMAX_VOICE_ID`
-- Optional: `OPENROUTER_BASE_URL`, `REPLICATE_BASE_URL`, `HF_TOKEN`
-
-### Run the backend
+On macOS/Linux:
 
 ```bash
-uvicorn backend.app:app --reload --host 0.0.0.0 --port 8000
+./start-all.sh
 ```
 
-### Run the frontend
+This starts:
 
-Open `AI/Workflow/SarcasmOS-web/index.html` directly in the browser, or serve it locally:
+- Frontend: `http://localhost:5173`
+- Backend: `http://localhost:8001`
+
+You can also start them separately:
 
 ```bash
-python -m http.server 5173 -d AI/Workflow/SarcasmOS-web
+python -m http.server 5173
+python -m uvicorn backend.app:app --host 0.0.0.0 --port 8001
 ```
 
-### Audio conversion
+## Configuration
 
-If you record in the browser, the audio is often `webm/opus`. If the STT model rejects it, the backend will convert to wav. Install `ffmpeg` and ensure it is on your PATH.
+The backend reads environment variables from `.env` files, especially:
 
-### Notes
+- `AI/Workflow/SarcasmOS-web/backend/.env`
+- `AI/Workflow/.env`
 
-- Uploaded audio is stored in `backend/uploads/`.
-- Generated TTS audio is stored in `backend/outputs/`.
-- API keys remain in the backend only.
+Important variables:
 
+- `HACK_CLUB_AI_KEY`, or separate provider keys.
+- `OPENROUTER_API_TOKEN` for the language model.
+- `REPLICATE_API_TOKEN` for STT/TTS if using Replicate.
+- `MINIMAX_VOICE_ID` for the TTS voice.
+- `FFMPEG_PATH` if `ffmpeg` is not available on PATH.
+
+More technical detail:
+
+- `AI/Workflow/SarcasmOS-web/README.md`
+- `AI/Workflow/SarcasmOS-web/PROJECT_OVERVIEW.md`
+
+## Architecture
+
+```text
+Microphone / text
+      |
+      v
+Web frontend
+      |
+      v
+FastAPI backend
+      |
+      +--> STT: speech to text
+      +--> LLM: Spanish personality response
+      +--> TTS: spoken answer
+      +--> Local JSON history
+      |
+      v
+Audio + animated face + future hardware expressions
+```
+
+## Hardware
+
+The physical goal is an expressive robotic head:
+
+- Eyes using round displays or dedicated visual modules.
+- Mouth with a separate display/board for animation.
+- Enclosure designed in FreeCAD.
+- KiCad PCBs for splitting the visual system into manufacturable modules.
+
+PCB production files live in `PCB/*/production`, including BOMs, placement files, netlists, and fabrication ZIPs.
+
+## Development Notes
+
+- The main web app does not use a frontend framework; it is static HTML, CSS, and JS.
+- The backend uses Python + FastAPI.
+- Generated audio and history are stored locally in `backend/outputs`.
+- Uploaded audio is stored in `backend/uploads`.
+- Some folders contain experiments, generated audio, and process artifacts rather than stable APIs.
+
+## Roadmap
+
+- Integrate real display control for the eyes and mouth.
+- Polish the Spanish personality prompt.
+- Improve generated audio and history cleanup.
+- Document the hardware assembly.
+- Separate source files, generated artifacts, and fabrication backups more cleanly.
+- Prepare a reproducible presentation demo.
+
+## Credits
+
+Built as a physical AI assistant experiment for Hack Club / Fallout. SarcasmOS is not trying to be polite. It is trying to be memorable.

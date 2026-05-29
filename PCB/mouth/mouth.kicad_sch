@@ -8697,6 +8697,17 @@
 				)
 			)
 		)
+		(property "LCSC Part" "C30734"
+			(at 231.14 111.76 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "13"
 			(uuid "d4d01f0a-9075-4adf-82a7-0021b6873425")
 		)
@@ -14432,6 +14443,17 @@
 			)
 		)
 		(property "Description" "Generic screw terminal, single row, 01x02, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(at 193.04 102.87 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part" "C474881"
 			(at 193.04 102.87 0)
 			(hide yes)
 			(show_name no)

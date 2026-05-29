@@ -24,7 +24,7 @@ DEFAULT_STT_MODEL = (
     "3ab86df6c8f54c11309d4d1f930ac292bad43ace52d10c80d87eb258b3c9f79c"
 )
 DEFAULT_LLM_MODEL = "~anthropic/claude-sonnet-latest"
-DEFAULT_TTS_MODEL = "minimax/speech-02-turbo"
+DEFAULT_TTS_MODEL = "minimax/speech-2.8-turbo"
 DEFAULT_POLL_INTERVAL = 1.0
 MAX_TOOL_ROUNDS = 6
 

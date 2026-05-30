@@ -3,6 +3,7 @@ import datetime as dt
 import json
 import mimetypes
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -18,7 +19,7 @@ import requests
 DEFAULT_OPENROUTER_BASE_URL = "https://ai.hackclub.com/proxy/v1"
 DEFAULT_REPLICATE_BASE_URL = "https://ai.hackclub.com/proxy/v1/replicate"
 DEFAULT_FALLBACK_LLM_BASE_URL = "https://api.pioneer.ai/v1"
-DEFAULT_FALLBACK_LLM_MODEL = "claude-opus-4-7"
+DEFAULT_FALLBACK_LLM_MODEL = "claude-sonnet-4-6"
 DEFAULT_STT_MODEL = (
     "vaibhavs10/incredibly-fast-whisper:"
     "3ab86df6c8f54c11309d4d1f930ac292bad43ace52d10c80d87eb258b3c9f79c"
@@ -27,6 +28,13 @@ DEFAULT_LLM_MODEL = "~anthropic/claude-sonnet-latest"
 DEFAULT_TTS_MODEL = "minimax/speech-2.8-turbo"
 DEFAULT_POLL_INTERVAL = 1.0
 MAX_TOOL_ROUNDS = 6
+TTS_EXPRESSION_TAG_RE = re.compile(
+    r"\((?:laughs|chuckle|coughs|clear-throat|groans|breath|pant|inhale|exhale|gasps|sniffs|sighs|snorts|burps|lip-smacking|humming|hissing|emm|whistles|sneezes|crying|applause)\)",
+    re.IGNORECASE,
+)
+TTS_PAUSE_TAG_RE = re.compile(r"<#\s*\d+(?:\.\d+)?\s*#>")
+MULTISPACE_RE = re.compile(r"[ \t]{2,}")
+MULTILINE_SPACE_RE = re.compile(r"\n{3,}")
 
 SUPPORTED_INPUT_EXTENSIONS = {
     ".wav",
@@ -1120,6 +1128,15 @@ def generate_text_answer(
     return answer
 
 
+def strip_tts_markup(text: str) -> str:
+    cleaned = TTS_EXPRESSION_TAG_RE.sub("", str(text or ""))
+    cleaned = TTS_PAUSE_TAG_RE.sub("", cleaned)
+    cleaned = MULTISPACE_RE.sub(" ", cleaned)
+    cleaned = re.sub(r"\s+([,.!?;:])", r"\1", cleaned)
+    cleaned = MULTILINE_SPACE_RE.sub("\n\n", cleaned)
+    return cleaned.strip()
+
+
 def synthesize_speech(text: str, config: BenderConfig) -> Path:
     if not config.replicate_token:
         raise RuntimeError("Replicate API key is required for TTS audio.")
@@ -1175,7 +1192,8 @@ def process_audio_file(audio_path: str, options: dict | None = None) -> dict:
     output_path = synthesize_speech(answer, config) if options.get("synthesize_audio", True) else None
     return {
         "transcript": transcript,
-        "answer": answer,
+        "answer": strip_tts_markup(answer),
+        "tts_answer": answer,
         "audio_path": str(output_path) if output_path else "",
     }
 
@@ -1186,6 +1204,7 @@ def process_text_message(message: str, options: dict | None = None) -> dict:
     answer = generate_text_answer(message, config, options.get("context"), options.get("tool_context"))
     output_path = synthesize_speech(answer, config) if options.get("synthesize_audio", True) else None
     return {
-        "answer": answer,
+        "answer": strip_tts_markup(answer),
+        "tts_answer": answer,
         "audio_path": str(output_path) if output_path else "",
     }

@@ -699,6 +699,18 @@ h2 {
   align-items: center;
 }
 
+#adminView .user-badge .credit-chip {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+#adminView .user-badge .credit-chip span,
+#adminView .user-badge .credit-chip small {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 #adminView .user-badge #adminLanguageToggle,
 #adminView .user-badge #openSarcasmConsole,
 #adminView .user-badge #adminSignOutBtn {
@@ -1075,6 +1087,18 @@ h2 {
   min-height: 48px;
 }
 
+.developer-mode-form .danger-button {
+  color: #ffd8d8;
+  border-color: rgba(255, 91, 91, 0.5);
+  background: rgba(115, 26, 32, 0.42);
+  box-shadow: none;
+}
+
+.developer-mode-form .danger-button:hover:not(:disabled) {
+  border-color: rgba(255, 91, 91, 0.85);
+  background: rgba(160, 37, 45, 0.58);
+}
+
 .tool-help-link {
   display: inline-block;
   margin-top: 8px;
@@ -1087,15 +1111,91 @@ h2 {
   text-decoration: underline;
 }
 
+.credit-meter {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(246, 196, 69, 0.22);
+  background: rgba(246, 196, 69, 0.08);
+}
+
+.credit-meter strong {
+  color: #ffe08a;
+  font-size: 1.1rem;
+}
+
+.credit-chip {
+  display: grid;
+  gap: 2px;
+  min-width: 168px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(246, 196, 69, 0.28);
+  background: rgba(246, 196, 69, 0.1);
+}
+
+.credit-chip .credit-status {
+  color: #ffe08a;
+  font-weight: 900;
+  line-height: 1.05;
+  white-space: normal;
+}
+
+.credit-chip .credit-detail {
+  max-width: 210px;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.68rem;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.floating-credit {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 30;
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 36px));
+  backdrop-filter: blur(12px);
+}
+
+.floating-credit .credit-detail {
+  max-width: none;
+}
+
+.voice-credit {
+  width: 100%;
+  min-width: 0;
+}
+
+.voice-credit .credit-detail {
+  max-width: none;
+}
+
 .admin-user {
   display: grid;
-  grid-template-columns: 42px minmax(220px, 1fr) repeat(3, max-content) 82px 132px;
+  grid-template-columns: 42px minmax(280px, 1fr) minmax(270px, auto) 82px 146px 224px;
   align-items: center;
   gap: 12px;
   padding: 14px;
+  max-width: 100%;
+  box-sizing: border-box;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.035);
+}
+
+.admin-user-roles {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .admin-user.developer-requested {
@@ -1126,6 +1226,15 @@ h2 {
   font-size: 0.7rem;
 }
 
+.admin-user-credits {
+  display: block;
+  margin-top: 5px;
+  color: #ffd765;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .admin-user button {
   min-width: 0;
   min-height: 44px;
@@ -1134,7 +1243,41 @@ h2 {
 }
 
 .admin-user-reset-quota {
-  width: 132px;
+  width: 154px;
+}
+
+.admin-credit-grant {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  width: 224px;
+  min-width: 224px;
+}
+
+.admin-credit-grant input {
+  flex: 1 1 auto;
+  width: 112px;
+  min-width: 112px;
+  height: 44px;
+  padding: 8px 10px;
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(4, 8, 13, 0.72);
+  color: var(--text);
+}
+
+.admin-credit-grant input::placeholder {
+  color: rgba(232, 240, 248, 0.45);
+}
+
+.admin-user-add-credits,
+.admin-user-remove-credits {
+  flex: 0 0 44px;
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
+  padding-inline: 0;
+  font-size: 1.15rem;
 }
 
 .admin-user-chats {
@@ -2229,13 +2372,16 @@ body.face-open {
     width: 100%;
   }
 
+  .admin-user-roles,
   .admin-user label {
     grid-column: 1 / -1;
+    justify-content: flex-start;
   }
 
   .admin-user button,
   .admin-user-chats,
-  .admin-user-reset-quota {
+  .admin-user-reset-quota,
+  .admin-credit-grant {
     grid-column: 1 / -1;
     width: 100%;
   }

@@ -44,6 +44,7 @@ const developerFallbackUrl = document.getElementById("developerFallbackUrl");
 const developerFallbackKey = document.getElementById("developerFallbackKey");
 const developerLlmModel = document.getElementById("developerLlmModel");
 const developerTtsModel = document.getElementById("developerTtsModel");
+const developerModeReset = document.getElementById("developerModeReset");
 const googleToolsRefresh = document.getElementById("googleToolsRefresh");
 const googleCalendarStatus = document.getElementById("googleCalendarStatus");
 const googleCalendarHelp = document.getElementById("googleCalendarHelp");
@@ -66,6 +67,8 @@ const statusOutput = document.getElementById("statusOutput");
 const apiHealthRefresh = document.getElementById("apiHealthRefresh");
 const apiHealthList = document.getElementById("apiHealthList");
 const audioReplyToggle = document.getElementById("audioReplyToggle");
+const aiCreditsStatus = document.getElementById("aiCreditsStatus");
+const aiCreditsDetail = document.getElementById("aiCreditsDetail");
 const mainView = document.getElementById("mainView");
 const faceView = document.getElementById("faceView");
 const voiceChatView = document.getElementById("voiceChatView");
@@ -191,6 +194,7 @@ const HOME_HERO_SUBTITLES = {
 const DEFAULT_CHAT_ID = "default";
 let mediaRecorder = null;
 let audioChunks = [];
+let recordingStartedAt = 0;
 let activePlaybackTarget = "main";
 const chatSessions = [];
 let activeChatId = DEFAULT_CHAT_ID;
@@ -638,7 +642,7 @@ function annoyHomeBender() {
 
 function friendlyRequestError(response, data, fallback) {
   if (response?.status === 429) {
-    return "Se te han acabado los mensajes hasta la próxima semana. Pide a un admin que te reactive 5 mensajes desde el panel si necesitas seguir ahora.";
+    return "Se te han acabado los créditos IA de esta semana. Hasta la semana que viene no tendrás más, salvo que un admin te añada créditos desde el panel.";
   }
   return data?.error || fallback;
 }
@@ -760,7 +764,7 @@ const HOME_TRANSLATIONS = {
     authorized: "Authorized",
     adminRole: "Admin",
     chats: "Chats",
-    resetFiveChats: "Reset 5 chats",
+    resetFiveChats: "Reset credits",
     loadingChatSummary: "Loading chat summary...",
     chatSingular: "chat",
     chatPlural: "chats",
@@ -805,18 +809,32 @@ const HOME_TRANSLATIONS = {
     serviceNotConfigured: "Service is not configured correctly",
     developerMode: "Developer Mode",
     developer: "Developer",
-    developerModeHelp: "Use your own API keys so your messages do not spend the shared weekly budget.",
+    developerModeHelp: "Use your own API keys so your actions do not spend the shared weekly credits.",
     requestAccess: "Request access",
     requestedAccess: "Access requested",
     developerApproved: "Approved. Add at least one API key to use your own budget.",
-    developerReady: "Active. Your chats use your API keys and do not consume weekly shared messages.",
+    developerReady: "Active. Your chats use your API keys and do not consume shared weekly credits.",
     developerNotRequested: "Not requested.",
     developerWaiting: "Waiting for admin approval.",
     saveDeveloperApis: "Save developer APIs",
+    resetDeveloperApis: "Reset to factory APIs",
+    resetDeveloperApisConfirm: "Reset your developer API keys and return to the shared weekly limit?",
     developerModeLabel: "Developer",
     developerRequestNotice: "developer mode request pending",
     developerRequestsNotice: "developer mode requests pending",
     approveDeveloper: "Approve developer mode",
+    aiCredits: "AI credits",
+    aiCreditsLoading: "Loading...",
+    aiCreditsUnlimited: "Unlimited credits",
+    aiCreditsReady: "{remaining} credits available",
+    adminCreditsLine: "{remaining} credits available",
+    aiCreditsDetail: "Credits renew every week.",
+    aiCreditsLastCost: "Last use: {cost} credits.",
+    addCredits: "+",
+    removeCredits: "-",
+    addCreditsLabel: "Add credits",
+    removeCreditsLabel: "Remove credits",
+    creditAmountPlaceholder: "+ credits",
   },
   es: {
     documentTitle: "Inicio de SarcasmOS",
@@ -892,7 +910,7 @@ const HOME_TRANSLATIONS = {
     authorized: "Autorizado",
     adminRole: "Admin",
     chats: "Chats",
-    resetFiveChats: "Resetear 5 chats",
+    resetFiveChats: "Resetear créditos",
     loadingChatSummary: "Cargando resumen de chats...",
     chatSingular: "chat",
     chatPlural: "chats",
@@ -937,18 +955,32 @@ const HOME_TRANSLATIONS = {
     serviceNotConfigured: "El servicio no está configurado correctamente",
     developerMode: "Modo Desarrollador",
     developer: "Desarrollador",
-    developerModeHelp: "Usa tus propias API keys para que tus mensajes no gasten el presupuesto semanal compartido.",
+    developerModeHelp: "Usa tus propias API keys para que tus acciones no gasten créditos semanales compartidos.",
     requestAccess: "Solicitar acceso",
     requestedAccess: "Acceso solicitado",
     developerApproved: "Aprobado. Añade al menos una API key para usar tu propio presupuesto.",
-    developerReady: "Activo. Tus chats usan tus API keys y no consumen mensajes semanales compartidos.",
+    developerReady: "Activo. Tus chats usan tus API keys y no consumen créditos semanales compartidos.",
     developerNotRequested: "No solicitado.",
     developerWaiting: "Esperando aprobación de un admin.",
     saveDeveloperApis: "Guardar APIs de desarrollador",
+    resetDeveloperApis: "Volver a APIs de fábrica",
+    resetDeveloperApisConfirm: "¿Resetear tus APIs de desarrollador y volver al límite semanal compartido?",
     developerModeLabel: "Desarrollador",
     developerRequestNotice: "solicitud de modo desarrollador pendiente",
     developerRequestsNotice: "solicitudes de modo desarrollador pendientes",
     approveDeveloper: "Aprobar modo desarrollador",
+    aiCredits: "Créditos IA",
+    aiCreditsLoading: "Cargando...",
+    aiCreditsUnlimited: "Créditos ilimitados",
+    aiCreditsReady: "{remaining} créditos disponibles",
+    adminCreditsLine: "{remaining} créditos disponibles",
+    aiCreditsDetail: "Los créditos se renuevan cada semana.",
+    aiCreditsLastCost: "Último uso: {cost} créditos.",
+    addCredits: "+",
+    removeCredits: "-",
+    addCreditsLabel: "Añadir créditos",
+    removeCreditsLabel: "Quitar créditos",
+    creditAmountPlaceholder: "+ créditos",
   },
 };
 
@@ -1023,6 +1055,9 @@ function applyLanguage(language) {
   setText("#developerModePanel .history-header .helper-text", t.developerModeHelp);
   setText("#developerModeRequest", developerModeState?.developerRequested ? t.requestedAccess : t.requestAccess);
   setText("#developerModeSave", t.saveDeveloperApis);
+  setText("#developerModeReset", t.resetDeveloperApis);
+  setText(".credit-meter .label", t.aiCredits);
+  renderCreditMeter();
   setText(".section-heading .eyebrow", t.talkEyebrow);
   setText(".section-heading h2", t.nextMessage);
   setText(".console-input-grid .input-panel:nth-child(1) h2", t.audioInput);
@@ -1166,6 +1201,7 @@ function clearUserSession() {
   const token = currentUser?.token;
   currentUser = null;
   currentQuota = null;
+  renderCreditMeter();
   adminConsoleOverride = false;
   developerViewOverride = false;
   stopGoogleToolsMonitor();
@@ -1259,6 +1295,7 @@ async function loginWithGoogle(credential) {
     }
     saveUserSession({ ...data.user, token: data.token, sessionExpiresAt: data.expiresAt || "" });
     currentQuota = data.quota || null;
+    renderCreditMeter();
     await loadHistory();
     renderAllHistoryViews();
     if (!data.user.authorized) {
@@ -1373,6 +1410,52 @@ function renderDeveloperModeStatus(status) {
 }
 
 
+function formatTemplate(template, values) {
+  return Object.entries(values).reduce(
+    (text, [key, value]) => text.replaceAll(`{${key}}`, String(value)),
+    template
+  );
+}
+
+
+function renderCreditMeter() {
+  const statusTargets = Array.from(document.querySelectorAll(".credit-status"));
+  const detailTargets = Array.from(document.querySelectorAll(".credit-detail"));
+  const setCredits = (status, detail) => {
+    for (const target of statusTargets) {
+      target.textContent = status;
+    }
+    for (const target of detailTargets) {
+      target.textContent = detail;
+    }
+  };
+  if (!currentQuota) {
+    setCredits(tr("aiCreditsLoading"), tr("aiCreditsDetail"));
+    return;
+  }
+  if (!currentQuota.limited) {
+    setCredits(tr("aiCreditsUnlimited"), currentQuota.developerMode ? tr("developerReady") : tr("aiCreditsDetail"));
+    return;
+  }
+  const status = formatTemplate(tr("aiCreditsReady"), {
+    remaining: currentQuota.remaining ?? 0,
+  });
+  setCredits(status, tr("aiCreditsDetail"));
+}
+
+
+function clearDeveloperModeInputs() {
+  developerCompletionsUrl.value = "";
+  developerCompletionsKey.value = "";
+  developerReplicateUrl.value = "";
+  developerReplicateKey.value = "";
+  developerFallbackUrl.value = "";
+  developerFallbackKey.value = "";
+  developerLlmModel.value = "";
+  developerTtsModel.value = "";
+}
+
+
 async function loadDeveloperModeStatus() {
   if (!currentUser?.token) {
     return;
@@ -1432,19 +1515,41 @@ async function saveDeveloperModeSettings(event) {
     if (!response.ok) {
       throw new Error(data.error || "Failed to save developer APIs.");
     }
-    developerCompletionsUrl.value = "";
-    developerCompletionsKey.value = "";
-    developerReplicateUrl.value = "";
-    developerReplicateKey.value = "";
-    developerFallbackUrl.value = "";
-    developerFallbackKey.value = "";
-    developerLlmModel.value = "";
-    developerTtsModel.value = "";
+    clearDeveloperModeInputs();
     await loadDeveloperModeStatus();
   } catch (error) {
     showError(error.message || "Failed to save developer APIs.");
   }
 }
+
+async function resetDeveloperModeSettings() {
+  if (!window.confirm(tr("resetDeveloperApisConfirm"))) {
+    return;
+  }
+  developerModeReset.disabled = true;
+  try {
+    const response = await fetch(`${API_BASE}/api/developer-mode/settings`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to reset developer APIs.");
+    }
+    clearDeveloperModeInputs();
+    renderDeveloperModeStatus({
+      ...(developerModeState || {}),
+      ready: false,
+      settings: data.settings || {},
+    });
+    await loadDeveloperModeStatus();
+  } catch (error) {
+    showError(error.message || "Failed to reset developer APIs.");
+  } finally {
+    developerModeReset.disabled = false;
+  }
+}
+
 
 async function loadGoogleToolsStatus(options = {}) {
   if (!currentUser?.authorized) {
@@ -1730,6 +1835,7 @@ async function initAuth() {
       }
       saveUserSession({ ...data.user, token: currentUser.token, sessionExpiresAt: currentUser.sessionExpiresAt || "" });
       currentQuota = data.quota || null;
+      renderCreditMeter();
     } catch (error) {
       currentUser = null;
       localStorage.removeItem(AUTH_STORAGE_KEY);
@@ -1920,30 +2026,48 @@ function renderAdminUsers(users) {
       const requestDelta = Number(Boolean(b.developerRequested && !b.developerMode)) - Number(Boolean(a.developerRequested && !a.developerMode));
       return requestDelta || String(a.email).localeCompare(String(b.email));
     })
-    .map((user) => `
+    .map((user) => {
+      const quota = user.quota || {};
+      const creditText = user.isAdmin
+        ? `∞ ${tr("aiCredits")}`
+        : quota.limited
+        ? `${formatTemplate(tr("adminCreditsLine"), {
+            remaining: quota.remaining ?? 0,
+          })}`
+        : tr("aiCreditsUnlimited");
+      return `
       <div class="admin-user${user.developerRequested && !user.developerMode ? " developer-requested" : ""}" data-email="${escapeHtml(user.email)}">
         <img src="${escapeHtml(user.picture || "")}" alt="" class="${user.picture ? "" : "hidden"}" />
         <div>
           <p>${escapeHtml(user.name || user.email)}</p>
           <span>${escapeHtml(user.email)}</span>
           ${user.developerRequested && !user.developerMode ? `<span class="developer-request-badge">${escapeHtml(tr("approveDeveloper"))}</span>` : ""}
+          <span class="admin-user-credits">${escapeHtml(creditText)}</span>
         </div>
-        <label>
-          <input class="admin-user-authorized" type="checkbox" ${user.authorized ? "checked" : ""} />
-          ${escapeHtml(tr("authorized"))}
-        </label>
-        <label>
-          <input class="admin-user-admin" type="checkbox" ${user.isAdmin ? "checked" : ""} />
-          ${escapeHtml(tr("adminRole"))}
-        </label>
-        <label class="developer-admin-toggle" title="${user.developerRequested ? escapeHtml(tr("approveDeveloper")) : ""}">
-          <input class="admin-user-developer" type="checkbox" ${user.developerMode ? "checked" : ""} />
-          ${escapeHtml(tr("developerModeLabel"))}
-        </label>
+        <div class="admin-user-roles">
+          <label>
+            <input class="admin-user-authorized" type="checkbox" ${user.authorized ? "checked" : ""} />
+            ${escapeHtml(tr("authorized"))}
+          </label>
+          <label>
+            <input class="admin-user-admin" type="checkbox" ${user.isAdmin ? "checked" : ""} />
+            ${escapeHtml(tr("adminRole"))}
+          </label>
+          <label class="developer-admin-toggle" title="${user.developerRequested ? escapeHtml(tr("approveDeveloper")) : ""}">
+            <input class="admin-user-developer" type="checkbox" ${user.developerMode ? "checked" : ""} />
+            ${escapeHtml(tr("developerModeLabel"))}
+          </label>
+        </div>
         <button class="admin-user-chats ghost" type="button">${escapeHtml(tr("chats"))}</button>
         <button class="admin-user-reset-quota ghost" type="button">${escapeHtml(tr("resetFiveChats"))}</button>
+        <div class="admin-credit-grant">
+          <button class="admin-user-remove-credits ghost danger" type="button" title="${escapeHtml(tr("removeCreditsLabel"))}" aria-label="${escapeHtml(tr("removeCreditsLabel"))}">${escapeHtml(tr("removeCredits"))}</button>
+          <input class="admin-credit-amount" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="7" placeholder="${escapeHtml(tr("creditAmountPlaceholder"))}" />
+          <button class="admin-user-add-credits ghost" type="button" title="${escapeHtml(tr("addCreditsLabel"))}" aria-label="${escapeHtml(tr("addCreditsLabel"))}">${escapeHtml(tr("addCredits"))}</button>
+        </div>
       </div>
-    `)
+    `;
+    })
     .join("");
   bindAdminUserControls();
 }
@@ -1956,11 +2080,16 @@ function bindAdminUserControls() {
     const developerMode = row.querySelector(".admin-user-developer");
     const chatsButton = row.querySelector(".admin-user-chats");
     const resetQuotaButton = row.querySelector(".admin-user-reset-quota");
+    const creditAmount = row.querySelector(".admin-credit-amount");
+    const addCreditsButton = row.querySelector(".admin-user-add-credits");
+    const removeCreditsButton = row.querySelector(".admin-user-remove-credits");
     authorized?.addEventListener("change", () => updateAdminUser(email, { authorized: authorized.checked }));
     isAdmin?.addEventListener("change", () => updateAdminUser(email, { isAdmin: isAdmin.checked }));
     developerMode?.addEventListener("change", () => updateAdminUser(email, { developerMode: developerMode.checked }));
     chatsButton?.addEventListener("click", () => loadAdminUserChats(email, row));
     resetQuotaButton?.addEventListener("click", () => resetAdminUserQuota(email, resetQuotaButton));
+    addCreditsButton?.addEventListener("click", () => addAdminUserCredits(email, creditAmount, addCreditsButton));
+    removeCreditsButton?.addEventListener("click", () => changeAdminUserCredits(email, creditAmount, removeCreditsButton, "remove"));
   }
 }
 
@@ -2082,6 +2211,42 @@ async function resetAdminUserQuota(email, button) {
     await loadAdminUsers();
   } catch (error) {
     showError(error.message || "Failed to reset quota.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+    }
+  }
+}
+
+async function addAdminUserCredits(email, input, button) {
+  await changeAdminUserCredits(email, input, button, "add");
+}
+
+async function changeAdminUserCredits(email, input, button, action) {
+  const amount = Number(String(input?.value || "").replace(/[^\d]/g, ""));
+  if (!Number.isFinite(amount) || amount <= 0) {
+    showError("Credit amount must be greater than 0.");
+    return;
+  }
+  if (button) {
+    button.disabled = true;
+  }
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/users/${encodeURIComponent(email)}/credits/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ amount: Math.floor(amount) }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to update credits.");
+    }
+    if (input) {
+      input.value = "";
+    }
+    await loadAdminUsers();
+  } catch (error) {
+    showError(error.message || "Failed to update credits.");
   } finally {
     if (button) {
       button.disabled = false;
@@ -2246,6 +2411,12 @@ function renderAllHistoryViews() {
 function updateResult(data) {
   if (data?.quota) {
     currentQuota = data.quota;
+    renderCreditMeter();
+  }
+  if (data?.credit_notice && aiCreditsDetail) {
+    for (const target of document.querySelectorAll(".credit-detail")) {
+      target.textContent = data.credit_notice;
+    }
   }
   if (data.transcript !== undefined) {
     transcriptOutput.textContent = data.transcript || tr("emptyTranscript");
@@ -2651,6 +2822,9 @@ async function sendAudioBlob(blob, filename) {
   formData.append("context", JSON.stringify(getActiveChatContext()));
   formData.append("chatId", activeChatId);
   formData.append("synthesizeAudio", audioReplyEnabled ? "true" : "false");
+  if (blob.durationSeconds) {
+    formData.append("audioDurationSeconds", String(blob.durationSeconds));
+  }
   setLoading(true, tr("sendingAudio"), "audio");
   showError("");
 
@@ -2724,10 +2898,13 @@ async function startRecording() {
     });
     mediaRecorder.addEventListener("stop", () => {
       const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || "audio/webm" });
+      blob.durationSeconds = recordingStartedAt ? Math.max(1, (Date.now() - recordingStartedAt) / 1000) : 0;
+      recordingStartedAt = 0;
       sendAudioBlob(blob, "recording.webm");
       stream.getTracks().forEach((track) => track.stop());
     });
     mediaRecorder.start();
+    recordingStartedAt = Date.now();
     setRecordingState(tr("recording"));
     recordBtn.disabled = true;
     faceRecordBtn.disabled = true;
@@ -2864,6 +3041,7 @@ connectGoogleCalendar.addEventListener("click", connectCalendarTool);
 disconnectGoogleCalendar.addEventListener("click", disconnectCalendarTool);
 developerModeRequest?.addEventListener("click", requestDeveloperMode);
 developerModeForm?.addEventListener("submit", saveDeveloperModeSettings);
+developerModeReset?.addEventListener("click", resetDeveloperModeSettings);
 
 clearHistory.addEventListener("click", async () => {
   const filenames = Array.from(new Set(chatHistory.map((entry) => getAudioFilename(entry.audioUrl)).filter(Boolean)));

@@ -60,6 +60,10 @@
           <span>Home</span>
         </div>
         <div class="console-nav-actions">
+          <div class="credit-chip" aria-live="polite">
+            <span class="credit-status">...</span>
+            <small class="credit-detail">AI credits</small>
+          </div>
           <button id="languageToggle" class="ghost" type="button">Traducir</button>
           <button id="openDeveloperMode" class="ghost" type="button">Developer</button>
           <button id="openAdminConsole" class="ghost hidden" type="button">Admin</button>
@@ -161,6 +165,11 @@
           </span>
           <input id="audioReplyToggle" type="checkbox" checked />
         </label>
+        <div class="credit-meter credit-panel" aria-live="polite">
+          <span class="label">AI credits</span>
+          <strong id="aiCreditsStatus" class="credit-status">Loading...</strong>
+          <span id="aiCreditsDetail" class="helper-text credit-detail">Text costs less; long audio costs more.</span>
+        </div>
       </section>
 
       <section id="googleToolsPanel" class="panel google-tools-panel slim-panel" aria-label="Google tools">
@@ -252,6 +261,10 @@
           <span>Developer Mode</span>
         </div>
         <div class="console-nav-actions">
+          <div class="credit-chip" aria-live="polite">
+            <span class="credit-status">...</span>
+            <small class="credit-detail">AI credits</small>
+          </div>
           <button id="developerLanguageToggle" class="ghost" type="button">Traducir</button>
           <button id="closeDeveloperMode" class="accent" type="button">Back to home</button>
         </div>
@@ -306,6 +319,7 @@
             <input id="developerTtsModel" type="text" placeholder="model-name" />
           </label>
           <button id="developerModeSave" class="accent" type="submit">Save developer APIs</button>
+          <button id="developerModeReset" class="ghost danger-button" type="button">Reset to factory APIs</button>
         </form>
       </section>
     </main>
@@ -323,6 +337,10 @@
             <div>
               <p id="adminUserName">Admin</p>
               <span id="adminUserEmail"></span>
+            </div>
+            <div class="credit-chip">
+              <span class="credit-status">...</span>
+              <small class="credit-detail">AI credits</small>
             </div>
             <button id="adminLanguageToggle" class="ghost" type="button">Traducir</button>
             <button id="openSarcasmConsole" class="accent" type="button">SarcasmOS Home</button>
@@ -459,6 +477,10 @@
           <div id="faceHistoryList" class="history-list"></div>
         </div>
       </div>
+      <div class="credit-chip floating-credit" aria-live="polite">
+        <span class="credit-status">...</span>
+        <small class="credit-detail">AI credits</small>
+      </div>
       <button id="closeFaceView" class="accent">Back to home</button>
     </section>
 
@@ -468,6 +490,10 @@
         <aside class="voice-chat-sidebar">
           <div class="voice-chat-sidebar-header">
             <p class="label">Chats</p>
+            <div class="credit-chip voice-credit" aria-live="polite">
+              <span class="credit-status">...</span>
+              <small class="credit-detail">AI credits</small>
+            </div>
             <button id="voiceChatNewChat" class="accent" type="button">New chat</button>
             <div class="voice-chat-font-controls" aria-label="Chat text size">
               <button id="voiceChatFontSmall" type="button">A-</button>

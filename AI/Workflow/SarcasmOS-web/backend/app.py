@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import datetime as dt
 import hashlib
 import json
+import math
 import mimetypes
 import os
 import secrets
@@ -65,9 +66,38 @@ class DeveloperSettingsRequest(BaseModel):
     hfToken: str | None = None
 
 
+class CreditGrantRequest(BaseModel):
+    amount: int
+
+
 DEFAULT_ADMIN_EMAILS = {"sarcasmosmail@gmail.com"}
 AUTH_SESSION_TTL = dt.timedelta(days=7)
-AUTHORIZED_WEEKLY_CHAT_LIMIT = 5
+CREDIT_DISPLAY_SCALE = 10
+CREDIT_MARGIN_MULTIPLIER = 1.2
+AUTHORIZED_WEEKLY_CREDIT_LIMIT = 100 * CREDIT_DISPLAY_SCALE
+ADMIN_WEEKLY_CREDIT_LIMIT = 999999 * CREDIT_DISPLAY_SCALE
+MINIMUM_CREDITS_TO_USE_APP = 50
+NET_TEXT_CHAT_CREDITS = 5 * CREDIT_DISPLAY_SCALE
+NET_TEXT_CHAT_WITH_AUDIO_CREDITS = 12 * CREDIT_DISPLAY_SCALE
+NET_TEXT_TO_SPEECH_CREDITS = NET_TEXT_CHAT_WITH_AUDIO_CREDITS - NET_TEXT_CHAT_CREDITS
+NET_AUDIO_CHAT_BASE_CREDITS = 12 * CREDIT_DISPLAY_SCALE
+NET_AUDIO_CHAT_WITH_REPLY_CREDITS = 20 * CREDIT_DISPLAY_SCALE
+NET_CLAUDE_SHARED_BASE_CREDITS = 9 * CREDIT_DISPLAY_SCALE
+NET_TEXT_RESPONSE_EXTRA_CREDITS_PER_STEP = 1 * CREDIT_DISPLAY_SCALE
+NET_AUDIO_CREDITS_PER_STEP = 4 * CREDIT_DISPLAY_SCALE
+TEXT_CHAT_CREDITS = math.ceil(NET_TEXT_CHAT_CREDITS * CREDIT_MARGIN_MULTIPLIER)
+TEXT_CHAT_WITH_AUDIO_CREDITS = math.ceil(NET_TEXT_CHAT_WITH_AUDIO_CREDITS * CREDIT_MARGIN_MULTIPLIER)
+TEXT_TO_SPEECH_CREDITS = math.ceil(NET_TEXT_TO_SPEECH_CREDITS * CREDIT_MARGIN_MULTIPLIER)
+AUDIO_CHAT_BASE_CREDITS = math.ceil(NET_AUDIO_CHAT_BASE_CREDITS * CREDIT_MARGIN_MULTIPLIER)
+AUDIO_CHAT_WITH_REPLY_CREDITS = math.ceil(NET_AUDIO_CHAT_WITH_REPLY_CREDITS * CREDIT_MARGIN_MULTIPLIER)
+CLAUDE_SHARED_BASE_CREDITS = math.ceil(NET_CLAUDE_SHARED_BASE_CREDITS * CREDIT_MARGIN_MULTIPLIER)
+LLM_CREDITS = CLAUDE_SHARED_BASE_CREDITS
+TTS_CREDITS = TEXT_TO_SPEECH_CREDITS
+TEXT_RESPONSE_BASE_CREDITS = CLAUDE_SHARED_BASE_CREDITS
+TEXT_RESPONSE_CHARS_PER_CREDIT = 360
+TEXT_RESPONSE_EXTRA_CREDITS_PER_STEP = math.ceil(NET_TEXT_RESPONSE_EXTRA_CREDITS_PER_STEP * CREDIT_MARGIN_MULTIPLIER)
+AUDIO_SECONDS_PER_CREDIT_STEP = 15
+AUDIO_CREDITS_PER_STEP = math.ceil(NET_AUDIO_CREDITS_PER_STEP * CREDIT_MARGIN_MULTIPLIER)
 GOOGLE_CALENDAR_CHECK_URL = "https://www.googleapis.com/calendar/v3/users/me/calendarList"
 
 AUTH_USERS_LOCK = threading.RLock()
@@ -386,8 +416,6 @@ def developer_config_for_user(user: dict) -> dict:
         return {}
     settings = developer_settings_for_email(str(user.get("email", "")))
     config = {key: value.strip() for key, value in settings.items() if value.strip()}
-    if config:
-        config["_strictDeveloperMode"] = True
     return config
 
 
@@ -413,35 +441,127 @@ def next_week_reset_at(now: dt.datetime | None = None) -> str:
     return (start_of_today + dt.timedelta(days=days_until_next_week)).isoformat(timespec="seconds")
 
 
+def credit_cost_for_text(synthesize_audio: bool) -> int:
+    return TEXT_CHAT_WITH_AUDIO_CREDITS if synthesize_audio else TEXT_CHAT_CREDITS
+
+
+def credit_cost_for_answer_text(answer: str, synthesize_audio: bool) -> int:
+    text = str(answer or "").strip()
+    extra_steps = max(0, math.ceil(len(text) / TEXT_RESPONSE_CHARS_PER_CREDIT) - 1)
+    text_cost = TEXT_RESPONSE_BASE_CREDITS + (extra_steps * TEXT_RESPONSE_EXTRA_CREDITS_PER_STEP)
+    return text_cost + (TTS_CREDITS if synthesize_audio else 0)
+
+
+def credit_cost_for_audio(duration_seconds: float | None, size_bytes: int, synthesize_audio: bool) -> int:
+    if duration_seconds is None or duration_seconds <= 0:
+        duration_seconds = max(1.0, size_bytes / 16000)
+    duration_steps = max(1, math.ceil(float(duration_seconds) / AUDIO_SECONDS_PER_CREDIT_STEP))
+    base = AUDIO_CHAT_WITH_REPLY_CREDITS if synthesize_audio else AUDIO_CHAT_BASE_CREDITS
+    return base + (duration_steps * AUDIO_CREDITS_PER_STEP)
+
+
+def credit_cost_for_audio_transcription(duration_seconds: float | None, size_bytes: int) -> int:
+    if duration_seconds is None or duration_seconds <= 0:
+        duration_seconds = max(1.0, size_bytes / 16000)
+    duration_steps = max(1, math.ceil(float(duration_seconds) / AUDIO_SECONDS_PER_CREDIT_STEP))
+    return AUDIO_CHAT_BASE_CREDITS + (duration_steps * AUDIO_CREDITS_PER_STEP)
+
+
+def developer_llm_configured(config: dict) -> bool:
+    primary_ready = bool(config.get("openrouterApiToken") and config.get("openrouterBaseUrl") and config.get("llmModel"))
+    fallback_ready = bool(config.get("pioneerApiKey") and config.get("pioneerBaseUrl") and (config.get("pioneerModel") or config.get("llmModel")))
+    return primary_ready or fallback_ready or bool(config.get("hackClubAiKey") and config.get("llmModel"))
+
+
+def developer_replicate_configured(config: dict) -> bool:
+    return bool(config.get("replicateApiToken") and config.get("replicateBaseUrl")) or bool(config.get("hackClubAiKey"))
+
+
+def shared_credit_charge_for_user(
+    user: dict,
+    kind: str,
+    synthesize_audio: bool,
+    duration_seconds: float | None = None,
+    size_bytes: int = 0,
+    answer_text: str = "",
+) -> tuple[int, str, list[str]]:
+    llm_cost = credit_cost_for_answer_text(answer_text, False) if answer_text else TEXT_RESPONSE_BASE_CREDITS
+    tts_cost = TTS_CREDITS if synthesize_audio else 0
+    transcription_cost = credit_cost_for_audio_transcription(duration_seconds, size_bytes) if kind == "audio" else 0
+    full_cost = (
+        transcription_cost + llm_cost + tts_cost
+        if kind == "audio"
+        else llm_cost + tts_cost
+    )
+    if not user.get("developerMode"):
+        return full_cost, f"{kind}_shared", []
+
+    config = developer_config_for_user(user)
+    if not config:
+        return full_cost, f"{kind}_shared_no_developer_apis", ["all"]
+
+    missing = []
+    cost = 0
+    if not developer_llm_configured(config):
+        cost += llm_cost
+        missing.append("Completions/Claude")
+    if kind == "audio" and not developer_replicate_configured(config):
+        cost += transcription_cost
+        missing.append("Replicate transcription")
+    if synthesize_audio and not developer_replicate_configured(config):
+        cost += tts_cost
+        missing.append("Replicate TTS")
+
+    detail = f"{kind}: charged shared credits because developer APIs missing: {', '.join(missing)}" if missing else f"{kind}: covered by developer APIs"
+    return min(cost, full_cost), detail, missing
+
+
+def credit_notice_for_quota(quota: dict) -> str:
+    last_cost = int(quota.get("lastCost", 0) or 0)
+    detail = str(quota.get("lastDetail", "") or "")
+    if last_cost > 0 and "developer APIs missing" in detail:
+        return f"Se han gastado {last_cost} créditos compartidos porque faltan APIs de desarrollador: {detail.split(': ', 1)[-1]}."
+    return ""
+
+
 def chat_quota_for_user(user: dict) -> dict:
+    period = week_key()
     if user.get("isAdmin"):
         return {
             "limited": False,
-            "limit": None,
+            "limit": ADMIN_WEEKLY_CREDIT_LIMIT,
             "used": 0,
-            "remaining": None,
-            "period": week_key(),
+            "remaining": ADMIN_WEEKLY_CREDIT_LIMIT,
+            "extra": ADMIN_WEEKLY_CREDIT_LIMIT,
+            "period": period,
             "resetAt": next_week_reset_at(),
+            "unit": "credits",
         }
     email = str(user.get("email", "")).strip().lower()
-    period = week_key()
     usage = load_usage().get("users", {}).get(email, {})
-    used = int(usage.get(period, 0)) if isinstance(usage, dict) else 0
+    if not isinstance(usage, dict):
+        usage = {}
+    period_usage = usage.get(period, 0)
+    used = int(period_usage.get("used", 0) if isinstance(period_usage, dict) else period_usage or 0)
+    extra = max(0, int(usage.get("extraCredits", 0) or 0))
+    limit = AUTHORIZED_WEEKLY_CREDIT_LIMIT + extra
     return {
         "limited": True,
-        "limit": AUTHORIZED_WEEKLY_CHAT_LIMIT,
+        "limit": limit,
         "used": used,
-        "remaining": max(0, AUTHORIZED_WEEKLY_CHAT_LIMIT - used),
+        "remaining": max(0, limit - used),
+        "extra": extra,
         "period": period,
         "resetAt": next_week_reset_at(),
+        "unit": "credits",
     }
 
 
-def consume_chat_quota(user: dict) -> dict:
+def consume_ai_credits(user: dict, cost: int, detail: str) -> dict:
     with USAGE_LOCK:
         if not user.get("authorized"):
             raise HTTPException(status_code=403, detail="Your account is not authorized yet.")
-        if developer_mode_ready(user):
+        if cost <= 0:
             return {
                 "limited": False,
                 "limit": None,
@@ -449,27 +569,49 @@ def consume_chat_quota(user: dict) -> dict:
                 "remaining": None,
                 "period": week_key(),
                 "resetAt": next_week_reset_at(),
-                "developerMode": True,
+                "developerMode": bool(user.get("developerMode")),
+                "unit": "credits",
+                "lastCost": 0,
+                "lastDetail": detail,
             }
         quota = chat_quota_for_user(user)
         if not quota["limited"]:
-            return quota
-        if quota["remaining"] <= 0:
+            return {**quota, "lastCost": 0}
+        cost = max(1, int(cost))
+        if quota["remaining"] < MINIMUM_CREDITS_TO_USE_APP:
             raise HTTPException(
                 status_code=429,
-                detail=(
-                    "Se te han acabado los mensajes disponibles hasta la próxima semana. "
-                    "Pide a un admin que te reactive 5 mensajes si necesitas seguir usando el chat ahora."
-                ),
+                detail="Ya no hay créditos IA suficientes para usar la web. Necesitas al menos 50 créditos disponibles. Espera a la semana que viene o pide a un admin que te añada créditos.",
             )
         email = str(user.get("email", "")).strip().lower()
         data = load_usage()
         users = data.setdefault("users", {})
         user_usage = users.setdefault(email, {})
         period = week_key()
-        user_usage[period] = int(user_usage.get(period, 0)) + 1
+        period_usage = user_usage.get(period, 0)
+        if isinstance(period_usage, dict):
+            period_data = period_usage
+        else:
+            period_data = {"used": int(period_usage or 0)}
+        period_data["used"] = int(period_data.get("used", 0) or 0) + cost
+        period_data["lastCost"] = cost
+        period_data["lastDetail"] = detail
+        period_data["updatedAt"] = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
+        user_usage[period] = period_data
         save_usage(data)
-        return chat_quota_for_user(user)
+        return {**chat_quota_for_user(user), "lastCost": cost, "lastDetail": detail, "developerMode": bool(user.get("developerMode"))}
+
+
+def assert_user_has_minimum_credits(user: dict) -> None:
+    if developer_mode_ready(user):
+        return
+    quota = chat_quota_for_user(user)
+    remaining = int(quota.get("remaining", 0) or 0)
+    if quota.get("limited") and remaining < MINIMUM_CREDITS_TO_USE_APP:
+        raise HTTPException(
+            status_code=429,
+            detail="Se te han acabado los créditos IA para esta semana. Pide a un admin que te añada más créditos.",
+        )
 
 
 def reset_chat_quota(email: str) -> dict:
@@ -477,7 +619,53 @@ def reset_chat_quota(email: str) -> dict:
         normalized_email = email.strip().lower()
         data = load_usage()
         user_usage = data.setdefault("users", {}).setdefault(normalized_email, {})
-        user_usage[week_key()] = 0
+        user_usage[week_key()] = {"used": 0}
+        save_usage(data)
+        return chat_quota_for_user({"email": normalized_email, "authorized": True, "isAdmin": False})
+
+
+def add_user_credits(email: str, amount: int) -> dict:
+    with USAGE_LOCK:
+        normalized_email = email.strip().lower()
+        amount = int(amount)
+        if amount <= 0:
+            raise HTTPException(status_code=400, detail="Credit amount must be greater than 0.")
+        if amount > 100000 * CREDIT_DISPLAY_SCALE:
+            raise HTTPException(status_code=400, detail="Credit amount is too large.")
+        data = load_usage()
+        user_usage = data.setdefault("users", {}).setdefault(normalized_email, {})
+        extra_before = max(0, int(user_usage.get("extraCredits", 0) or 0))
+        current_limit = AUTHORIZED_WEEKLY_CREDIT_LIMIT + extra_before
+        period = week_key()
+        period_usage = user_usage.get(period, 0)
+        if isinstance(period_usage, dict):
+            period_data = period_usage
+        else:
+            period_data = {"used": int(period_usage or 0)}
+        period_data["used"] = min(int(period_data.get("used", 0) or 0), current_limit)
+        user_usage[period] = period_data
+        user_usage["extraCredits"] = extra_before + amount
+        user_usage["creditsUpdatedAt"] = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
+        save_usage(data)
+        return chat_quota_for_user({"email": normalized_email, "authorized": True, "isAdmin": False})
+
+
+def remove_user_credits(email: str, amount: int) -> dict:
+    with USAGE_LOCK:
+        normalized_email = email.strip().lower()
+        amount = int(amount)
+        if amount <= 0:
+            raise HTTPException(status_code=400, detail="Credit amount must be greater than 0.")
+        if amount > 100000 * CREDIT_DISPLAY_SCALE:
+            raise HTTPException(status_code=400, detail="Credit amount is too large.")
+        data = load_usage()
+        user_usage = data.setdefault("users", {}).setdefault(normalized_email, {})
+        quota = chat_quota_for_user({"email": normalized_email, "authorized": True, "isAdmin": False})
+        current_remaining = int(quota.get("remaining", 0) or 0)
+        target_remaining = max(0, current_remaining - amount)
+        new_limit = int(quota.get("used", 0) or 0) + target_remaining
+        user_usage["extraCredits"] = max(0, new_limit - AUTHORIZED_WEEKLY_CREDIT_LIMIT)
+        user_usage["creditsUpdatedAt"] = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
         save_usage(data)
         return chat_quota_for_user({"email": normalized_email, "authorized": True, "isAdmin": False})
 
@@ -941,11 +1129,11 @@ async def chat_audio(
     context: str | None = Form(default=None),
     chatId: str | None = Form(default=None),
     synthesizeAudio: bool = Form(default=True),
+    audioDurationSeconds: float | None = Form(default=None),
     authorization: str | None = Header(default=None),
 ) -> JSONResponse:
     try:
         user = current_auth_user(authorization)
-        quota = consume_chat_quota(user)
         suffix = Path(audio.filename or "").suffix
         if not suffix:
             extension = mimetypes.guess_extension(audio.content_type or "")
@@ -955,6 +1143,7 @@ async def chat_audio(
         upload_path = uploads_dir() / upload_name
         upload_path.parent.mkdir(parents=True, exist_ok=True)
         contents = await audio.read()
+        assert_user_has_minimum_credits(user)
         await asyncio.to_thread(upload_path.write_bytes, contents)
 
         loop = asyncio.get_running_loop()
@@ -970,12 +1159,24 @@ async def chat_audio(
             },
         )
         output_name = Path(result["audio_path"]).name if result.get("audio_path") else ""
+        quota = consume_ai_credits(
+            user,
+            *shared_credit_charge_for_user(
+                user,
+                "audio",
+                synthesizeAudio,
+                audioDurationSeconds,
+                len(contents),
+                result.get("answer", ""),
+            )[:2],
+        )
         return JSONResponse(
             content={
                 "transcript": result.get("transcript", ""),
                 "answer": result.get("answer", ""),
                 "audio_url": f"/api/audio/{output_name}" if output_name else "",
                 "quota": quota,
+                "credit_notice": credit_notice_for_quota(quota),
             }
         )
     except HTTPException as error:
@@ -990,7 +1191,7 @@ async def chat_text(payload: TextRequest, authorization: str | None = Header(def
         user = current_auth_user(authorization)
         if not payload.message.strip():
             raise HTTPException(status_code=400, detail="Message cannot be empty.")
-        quota = consume_chat_quota(user)
+        assert_user_has_minimum_credits(user)
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
             CHAT_EXECUTOR,
@@ -1004,11 +1205,16 @@ async def chat_text(payload: TextRequest, authorization: str | None = Header(def
             },
         )
         output_name = Path(result["audio_path"]).name if result.get("audio_path") else ""
+        quota = consume_ai_credits(
+            user,
+            *shared_credit_charge_for_user(user, "text", payload.synthesizeAudio, answer_text=result.get("answer", ""))[:2],
+        )
         return JSONResponse(
             content={
                 "answer": result.get("answer", ""),
                 "audio_url": f"/api/audio/{output_name}" if output_name else "",
                 "quota": quota,
+                "credit_notice": credit_notice_for_quota(quota),
             }
         )
     except HTTPException as error:
@@ -1212,6 +1418,30 @@ async def save_developer_mode_settings(
         return error_response(str(error), status_code=500)
 
 
+@app.delete("/api/developer-mode/settings")
+async def reset_developer_mode_settings(authorization: str | None = Header(default=None)) -> JSONResponse:
+    try:
+        user = current_auth_user(authorization)
+        if not user.get("developerMode"):
+            raise HTTPException(status_code=403, detail="Developer mode must be approved by an admin first.")
+        with DEVELOPER_KEYS_LOCK:
+            data = load_developer_keys()
+            users = data.setdefault("users", {})
+            users.pop(user["email"], None)
+            save_developer_keys(data)
+        return JSONResponse(
+            content={
+                "ok": True,
+                "ready": False,
+                "settings": developer_settings_public(user["email"]),
+            }
+        )
+    except HTTPException as error:
+        return error_response(str(error.detail), status_code=error.status_code)
+    except Exception as error:
+        return error_response(str(error), status_code=500)
+
+
 @app.get("/api/admin/users")
 async def admin_list_users(authorization: str | None = Header(default=None)) -> JSONResponse:
     try:
@@ -1302,6 +1532,50 @@ async def admin_reset_user_quota(email: str, authorization: str | None = Header(
         if user.get("isAdmin"):
             return JSONResponse(content={"ok": True, "quota": chat_quota_for_user(user)})
         return JSONResponse(content={"ok": True, "quota": reset_chat_quota(normalized_email)})
+    except HTTPException as error:
+        return error_response(str(error.detail), status_code=error.status_code)
+    except Exception as error:
+        return error_response(str(error), status_code=500)
+
+
+@app.post("/api/admin/users/{email}/credits/add")
+async def admin_add_user_credits(
+    email: str,
+    payload: CreditGrantRequest,
+    authorization: str | None = Header(default=None),
+) -> JSONResponse:
+    try:
+        require_admin_user(authorization)
+        normalized_email = email.strip().lower()
+        users = load_auth_users().get("users", {})
+        user = users.get(normalized_email)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found.")
+        if user.get("isAdmin"):
+            return JSONResponse(content={"ok": True, "quota": chat_quota_for_user(user)})
+        return JSONResponse(content={"ok": True, "quota": add_user_credits(normalized_email, payload.amount)})
+    except HTTPException as error:
+        return error_response(str(error.detail), status_code=error.status_code)
+    except Exception as error:
+        return error_response(str(error), status_code=500)
+
+
+@app.post("/api/admin/users/{email}/credits/remove")
+async def admin_remove_user_credits(
+    email: str,
+    payload: CreditGrantRequest,
+    authorization: str | None = Header(default=None),
+) -> JSONResponse:
+    try:
+        require_admin_user(authorization)
+        normalized_email = email.strip().lower()
+        users = load_auth_users().get("users", {})
+        user = users.get(normalized_email)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found.")
+        if user.get("isAdmin"):
+            return JSONResponse(content={"ok": True, "quota": chat_quota_for_user(user)})
+        return JSONResponse(content={"ok": True, "quota": remove_user_credits(normalized_email, payload.amount)})
     except HTTPException as error:
         return error_response(str(error.detail), status_code=error.status_code)
     except Exception as error:

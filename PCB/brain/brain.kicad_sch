@@ -19274,6 +19274,30 @@
 			)
 		)
 	)
+	(global_label "OA2"
+		(shape input)
+		(at 449.58 370.84 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "37633a4c-fb05-4f0a-80d5-03948dc58f21")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 442.9662 370.84 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+	)
 	(global_label "BQINT"
 		(shape input)
 		(at 71.12 73.66 180)
@@ -20330,30 +20354,6 @@
 			)
 		)
 	)
-	(global_label "PMODE2"
-		(shape input)
-		(at 407.67 128.27 270)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "7bba2bac-20cd-4517-afb2-2ac82f1999af")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 407.67 138.9356 90)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-	)
 	(global_label "STEP"
 		(shape input)
 		(at 397.51 349.25 180)
@@ -20831,30 +20831,6 @@
 					(size 1.27 1.27)
 				)
 				(justify left)
-			)
-		)
-	)
-	(global_label "PMODE1"
-		(shape input)
-		(at 401.32 128.27 270)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "99dc0fbd-c28e-4483-86c4-1ae84e7e5b32")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 401.32 138.9356 90)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
 			)
 		)
 	)
@@ -21434,6 +21410,30 @@
 			)
 		)
 	)
+	(global_label "OA1"
+		(shape input)
+		(at 449.58 373.38 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "bf44d77f-117b-4e12-bf5c-384b1d991658")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 442.9662 373.38 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+	)
 	(global_label "VS"
 		(shape input)
 		(at 461.01 308.61 180)
@@ -21602,30 +21602,6 @@
 			)
 		)
 	)
-	(global_label "PMODE0"
-		(shape input)
-		(at 394.97 128.27 270)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "d0ca5fb4-e200-47a9-8f6a-9c1f864f7f54")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 394.97 138.9356 90)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-	)
 	(global_label "UART"
 		(shape input)
 		(at 101.6 66.04 0)
@@ -21695,30 +21671,6 @@
 					(size 1.27 1.27)
 				)
 				(justify left)
-			)
-		)
-	)
-	(global_label "OA1"
-		(shape input)
-		(at 449.58 370.84 180)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "d8d15bd7-4d38-47b7-883b-7a0ca1cf8f85")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 442.9662 370.84 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
 			)
 		)
 	)
@@ -21951,30 +21903,6 @@
 		(uuid "e714b1be-3a49-445c-bb9e-b8c1b9694609")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 223.0143 378.46 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-	)
-	(global_label "OA2"
-		(shape input)
-		(at 449.58 373.38 180)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "e7206080-ef79-4ba0-8d31-b92f2b0d8b7b")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 442.9662 373.38 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -47881,84 +47809,6 @@
 		)
 	)
 	(symbol
-		(lib_id "power:+3.3V")
-		(at 401.32 128.27 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "d518ee8a-c0e8-4076-8cc7-268002d8f7e1")
-		(property "Reference" "#PWR0152"
-			(at 401.32 132.08 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "+3.3V"
-			(at 401.32 123.19 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 401.32 128.27 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 401.32 128.27 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
-			(at 401.32 128.27 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "a54057d9-12e1-4120-8235-fafe7b8a022f")
-		)
-		(instances
-			(project "brain"
-				(path "/83b42239-7ff5-41d9-ae38-aa795807f572"
-					(reference "#PWR0152")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "Device:R_Potentiometer")
 		(at 448.31 354.33 0)
 		(mirror y)
@@ -50161,84 +50011,6 @@
 			(project "brain"
 				(path "/83b42239-7ff5-41d9-ae38-aa795807f572"
 					(reference "#PWR031")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "power:+3.3V")
-		(at 394.97 128.27 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "e72a5486-0e25-476c-886d-afc2896976d4")
-		(property "Reference" "#PWR0151"
-			(at 394.97 132.08 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "+3.3V"
-			(at 394.97 123.19 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 394.97 128.27 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 394.97 128.27 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
-			(at 394.97 128.27 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "42e2fe30-dc70-458a-b79b-1186c2ac6cfd")
-		)
-		(instances
-			(project "brain"
-				(path "/83b42239-7ff5-41d9-ae38-aa795807f572"
-					(reference "#PWR0151")
 					(unit 1)
 				)
 			)
@@ -53043,84 +52815,6 @@
 			(project "brain"
 				(path "/83b42239-7ff5-41d9-ae38-aa795807f572"
 					(reference "C53")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "power:+3.3V")
-		(at 407.67 128.27 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "f8dca254-c101-4b18-b021-c7c86bf940cb")
-		(property "Reference" "#PWR0153"
-			(at 407.67 132.08 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "+3.3V"
-			(at 407.67 123.19 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 407.67 128.27 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 407.67 128.27 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
-			(at 407.67 128.27 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "dc86aa92-4268-494c-8fab-7a0f6de7b4f4")
-		)
-		(instances
-			(project "brain"
-				(path "/83b42239-7ff5-41d9-ae38-aa795807f572"
-					(reference "#PWR0153")
 					(unit 1)
 				)
 			)

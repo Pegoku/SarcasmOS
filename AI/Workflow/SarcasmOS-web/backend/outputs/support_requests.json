@@ -1,6 +1,18 @@
 {
   "requests": [
     {
+      "id": "2296fcec661a449da5b0d04878f29cd3",
+      "createdAt": "2026-06-03T20:07:02+00:00",
+      "userEmail": "sarcasmosmail@gmail.com",
+      "userName": "SarcasmOS penelargo",
+      "question": "tetanos",
+      "answer": "Esto requiere intervención humana. Trágico, pero estadísticamente inevitable.",
+      "needsHuman": true,
+      "page": "/",
+      "status": "open",
+      "emailSent": false
+    },
+    {
       "id": "2c2fa4a5fa994d6d9fd858e3a24e45c4",
       "createdAt": "2026-06-03T19:39:20+00:00",
       "userEmail": "sarcasmosmail@gmail.com",

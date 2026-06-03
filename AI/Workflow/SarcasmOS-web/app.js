@@ -39,6 +39,8 @@ const developerModePanel = document.getElementById("developerModePanel");
 const supportPanel = document.getElementById("supportPanel");
 const supportLauncher = document.getElementById("supportLauncher");
 const supportClose = document.getElementById("supportClose");
+const supportChatSelect = document.getElementById("supportChatSelect");
+const supportNewChat = document.getElementById("supportNewChat");
 const supportMessages = document.getElementById("supportMessages");
 const supportForm = document.getElementById("supportForm");
 const supportInput = document.getElementById("supportInput");
@@ -255,6 +257,8 @@ const audioSyncMap = new Map();
 let audioSyncEnabled = false;
 let currentUser = null;
 let supportConversation = [];
+let supportChats = [];
+let activeSupportChatId = "";
 let supportWidgetOpen = false;
 
 audioPlayer.crossOrigin = "anonymous";
@@ -878,6 +882,7 @@ const HOME_TRANSLATIONS = {
     supportHelp: "Ask about SarcasmOS. If the assistant cannot solve it, it sends the request to support.",
     supportPlaceholder: "Ask for help",
     supportSend: "Ask",
+    supportNewChat: "New chat",
     supportWelcome: "Hi. Ask me about login, credits, audio, developer mode, Google tools, or sharing the page.",
     supportSent: "I sent this to support. A human can review it from the inbox.",
     supportSaved: "I saved this request for support. Email sending needs SMTP in backend/.env.",
@@ -1050,6 +1055,7 @@ const HOME_TRANSLATIONS = {
     supportHelp: "Pregunta sobre SarcasmOS. Si el asistente no puede resolverlo, enviará la solicitud a soporte.",
     supportPlaceholder: "Pide ayuda",
     supportSend: "Preguntar",
+    supportNewChat: "Nuevo chat",
     supportWelcome: "Hola. Pregúntame sobre login, créditos, audio, modo desarrollador, herramientas de Google o compartir la página.",
     supportSent: "He enviado esto a soporte. Un humano podrá revisarlo desde el correo.",
     supportSaved: "He guardado esta solicitud para soporte. Para enviar email hace falta SMTP en backend/.env.",
@@ -1177,9 +1183,58 @@ function appendSupportMessage(role, text) {
   supportMessages.scrollTop = supportMessages.scrollHeight;
 }
 
+function createSupportChat(messages = []) {
+  const now = new Date().toISOString();
+  return {
+    id: `support-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    title: tr("supportNewChat"),
+    createdAt: now,
+    updatedAt: now,
+    messages: messages.length ? messages : [{ role: "bot", text: tr("supportWelcome"), timestamp: now }],
+  };
+}
+
+function getSupportChatTitle(chat) {
+  const firstUserMessage = (chat.messages || []).find((item) => item.role === "user")?.text || "";
+  if (firstUserMessage) {
+    return firstUserMessage.length > 34 ? `${firstUserMessage.slice(0, 34)}...` : firstUserMessage;
+  }
+  return chat.title || tr("supportNewChat");
+}
+
+function getActiveSupportChat() {
+  if (!supportChats.length) {
+    const chat = createSupportChat();
+    supportChats = [chat];
+    activeSupportChatId = chat.id;
+  }
+  if (!supportChats.some((chat) => chat.id === activeSupportChatId)) {
+    activeSupportChatId = supportChats[0].id;
+  }
+  const chat = supportChats.find((item) => item.id === activeSupportChatId) || supportChats[0];
+  supportConversation = chat.messages || [];
+  return chat;
+}
+
+function renderSupportChatSelect() {
+  if (!supportChatSelect) {
+    return;
+  }
+  supportChatSelect.innerHTML = supportChats.map((chat) => (
+    `<option value="${escapeHtml(chat.id)}">${escapeHtml(getSupportChatTitle(chat))}</option>`
+  )).join("");
+  supportChatSelect.value = activeSupportChatId;
+}
+
 function persistSupportConversation() {
   try {
-    localStorage.setItem(userSupportStorageKey(), JSON.stringify(supportConversation.slice(-80)));
+    const chat = getActiveSupportChat();
+    chat.messages = supportConversation.slice(-80);
+    chat.updatedAt = new Date().toISOString();
+    localStorage.setItem(userSupportStorageKey(), JSON.stringify({
+      activeSupportChatId,
+      chats: supportChats.slice(-30),
+    }));
   } catch (error) {
     console.warn("Failed to save support conversation.", error);
   }
@@ -1190,9 +1245,8 @@ function renderSupportConversation() {
     return;
   }
   supportMessages.innerHTML = "";
-  if (!supportConversation.length) {
-    supportConversation = [{ role: "bot", text: tr("supportWelcome") }];
-  }
+  getActiveSupportChat();
+  renderSupportChatSelect();
   for (const item of supportConversation) {
     appendSupportMessage(item.role === "user" ? "user" : "bot", item.text || "");
   }
@@ -1201,21 +1255,50 @@ function renderSupportConversation() {
 function loadSupportConversation() {
   try {
     const raw = localStorage.getItem(userSupportStorageKey());
-    supportConversation = raw ? JSON.parse(raw) : [];
+    const saved = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(saved)) {
+      const chat = createSupportChat(saved);
+      chat.id = "support-default";
+      supportChats = [chat];
+      activeSupportChatId = chat.id;
+    } else {
+      supportChats = Array.isArray(saved?.chats) ? saved.chats : [];
+      activeSupportChatId = saved?.activeSupportChatId || "";
+    }
   } catch (error) {
     console.warn("Failed to load support conversation.", error);
-    supportConversation = [];
+    supportChats = [];
+    activeSupportChatId = "";
   }
-  if (!Array.isArray(supportConversation)) {
-    supportConversation = [];
+  if (!supportChats.length) {
+    const chat = createSupportChat();
+    supportChats = [chat];
+    activeSupportChatId = chat.id;
   }
+  getActiveSupportChat();
   renderSupportConversation();
 }
 
 function addSupportConversationMessage(role, text) {
+  const chat = getActiveSupportChat();
   supportConversation.push({ role, text, timestamp: new Date().toISOString() });
+  chat.messages = supportConversation;
   persistSupportConversation();
+  renderSupportChatSelect();
   appendSupportMessage(role, text);
+}
+
+function createNewSupportChat() {
+  const chat = createSupportChat();
+  supportChats.unshift(chat);
+  activeSupportChatId = chat.id;
+  supportConversation = chat.messages;
+  if (supportStatus) {
+    supportStatus.textContent = "";
+  }
+  persistSupportConversation();
+  renderSupportConversation();
+  supportInput?.focus();
 }
 
 function setSupportWidgetOpen(open) {
@@ -1388,10 +1471,12 @@ function applyLanguage(language) {
   if (supportClose) {
     supportClose.setAttribute("aria-label", t.supportClose);
   }
+  setText("#supportNewChat", t.supportNewChat);
   setText("#supportSend", t.supportSend);
   if (supportInput) {
     supportInput.placeholder = t.supportPlaceholder;
   }
+  renderSupportChatSelect();
   if (supportMessages && supportMessages.children.length === 0) {
     renderSupportConversation();
   }
@@ -1562,6 +1647,8 @@ function clearUserSession() {
   developerViewOverride = false;
   supportWidgetOpen = false;
   supportConversation = [];
+  supportChats = [];
+  activeSupportChatId = "";
   if (supportMessages) {
     supportMessages.innerHTML = "";
   }
@@ -3919,6 +4006,13 @@ closeVoiceChatView.addEventListener("click", closeVoiceChatPanel);
 closeKonamiView?.addEventListener("click", closeKonamiPanel);
 supportLauncher?.addEventListener("click", () => setSupportWidgetOpen(!supportWidgetOpen));
 supportClose?.addEventListener("click", () => setSupportWidgetOpen(false));
+supportNewChat?.addEventListener("click", createNewSupportChat);
+supportChatSelect?.addEventListener("change", () => {
+  activeSupportChatId = supportChatSelect.value;
+  getActiveSupportChat();
+  persistSupportConversation();
+  renderSupportConversation();
+});
 supportForm?.addEventListener("submit", handleSupportSubmit);
 
 faceView.addEventListener("click", (event) => {

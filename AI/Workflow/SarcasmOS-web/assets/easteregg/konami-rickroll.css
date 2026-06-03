@@ -1,0 +1,781 @@
+/*
+  Konami easter egg choreography.
+  This file intentionally lives outside style.css so the secret dance can be
+  tuned without making the main app stylesheet an archaeological punishment.
+*/
+
+.konami-view {
+  background:
+    radial-gradient(circle at 18% 24%, rgba(246, 196, 69, 0.18), transparent 18%),
+    radial-gradient(circle at 82% 20%, rgba(51, 211, 255, 0.13), transparent 20%),
+    linear-gradient(135deg, rgba(6, 10, 16, 0.98), rgba(12, 18, 25, 0.96));
+}
+
+.konami-panel {
+  width: min(760px, 100%);
+  padding-top: clamp(18px, 3vw, 30px);
+  image-rendering: auto;
+}
+
+.konami-bender {
+  width: min(455px, 90vw);
+  margin-bottom: -18px;
+}
+
+.konami-bender canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 22px 18px rgba(0, 0, 0, 0.45));
+}
+
+.konami-bender-dance {
+  animation: rrStepTouch 3.84s steps(8, end) infinite;
+  transform-box: fill-box;
+  transform-origin: 50% 84%;
+}
+
+.konami-head {
+  animation: rrHeadGroove 3.84s steps(8, end) infinite;
+  transform-box: fill-box;
+  transform-origin: 50% 56%;
+}
+
+.konami-body {
+  animation: rrBodyLean 3.84s steps(8, end) infinite;
+  transform-box: fill-box;
+  transform-origin: 50% 72%;
+}
+
+.konami-arm-left {
+  animation: none;
+  transform-box: fill-box;
+  transform-origin: 190px 250px;
+}
+
+.konami-arm-right {
+  animation: none;
+  transform-box: fill-box;
+  transform-origin: 330px 250px;
+}
+
+.konami-leg-left {
+  animation: none;
+  transform-box: fill-box;
+  transform-origin: 216px 404px;
+}
+
+.konami-leg-right {
+  animation: none;
+  transform-box: fill-box;
+  transform-origin: 304px 404px;
+}
+
+.konami-left-upper,
+.konami-left-forearm,
+.konami-right-upper,
+.konami-right-forearm,
+.konami-left-thigh,
+.konami-left-shin,
+.konami-right-thigh,
+.konami-right-shin {
+  transform-box: view-box;
+}
+
+.konami-left-upper {
+  animation: rrLeftUpperArm 3.84s steps(8, end) infinite;
+  transform-origin: 190px 250px;
+}
+
+.konami-left-forearm {
+  animation: rrLeftForearm 3.84s steps(8, end) infinite;
+  transform-origin: 134px 304px;
+}
+
+.konami-right-upper {
+  animation: rrRightUpperArm 3.84s steps(8, end) infinite;
+  transform-origin: 330px 250px;
+}
+
+.konami-right-forearm {
+  animation: rrRightForearm 3.84s steps(8, end) infinite;
+  transform-origin: 402px 208px;
+}
+
+.konami-left-thigh {
+  animation: rrLeftThigh 3.84s steps(8, end) infinite;
+  transform-origin: 222px 402px;
+}
+
+.konami-left-shin {
+  animation: rrLeftShin 3.84s steps(8, end) infinite;
+  transform-origin: 184px 468px;
+}
+
+.konami-right-thigh {
+  animation: rrRightThigh 3.84s steps(8, end) infinite;
+  transform-origin: 298px 402px;
+}
+
+.konami-right-shin {
+  animation: rrRightShin 3.84s steps(8, end) infinite;
+  transform-origin: 352px 466px;
+}
+
+.konami-pupil-left,
+.konami-pupil-right {
+  animation-duration: 3.84s;
+  animation-timing-function: steps(8, end);
+}
+
+.konami-pupil-left {
+  animation-name: rrPupilLeft;
+}
+
+.konami-pupil-right {
+  animation-name: rrPupilRight;
+}
+
+.konami-shadow {
+  animation: rrShadow 3.84s linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.konami-sparkles {
+  animation: rrSparkles 1.92s steps(4, end) infinite;
+}
+
+.konami-finger {
+  stroke-width: 7 !important;
+  opacity: 0.8;
+}
+
+.konami-mic rect,
+.konami-mic circle {
+  fill: #151b22;
+  stroke: #e8f0f8;
+  stroke-width: 5;
+}
+
+.konami-jacket {
+  fill: none !important;
+  stroke: #141a22 !important;
+  stroke-width: 12 !important;
+  opacity: 0.72;
+}
+
+.konami-shirt {
+  fill: #e8f0f8 !important;
+  stroke: #05070a !important;
+  stroke-width: 5 !important;
+  opacity: 0.92;
+}
+
+.konami-tie {
+  fill: #10151d !important;
+  stroke: #05070a !important;
+  stroke-width: 4 !important;
+}
+
+.konami-mouth-plate {
+  fill: #f8fbff !important;
+  stroke: #05070a !important;
+  stroke-width: 8 !important;
+}
+
+.konami-mouth-grid {
+  fill: none !important;
+  stroke: #05070a !important;
+  stroke-width: 5 !important;
+  stroke-linecap: round;
+}
+
+.konami-coat-left,
+.konami-coat-right {
+  fill: rgba(11, 15, 22, 0.78) !important;
+  stroke: #05070a !important;
+  stroke-width: 6 !important;
+  animation: rrCoatSwing 3.84s steps(8, end) infinite;
+  transform-box: fill-box;
+  transform-origin: top center;
+}
+
+.konami-arm path,
+.konami-arm circle,
+.konami-leg path {
+  stroke-width: 16 !important;
+}
+
+.konami-arm circle {
+  fill: #b8c5cb !important;
+  stroke: #05070a !important;
+}
+
+.konami-foot {
+  stroke-width: 14 !important;
+}
+
+.konami-coat-right {
+  animation-delay: -1.92s;
+}
+
+.konami-stage span:nth-child(1) {
+  --spotlight-angle: 24deg;
+}
+
+.konami-stage span:nth-child(2) {
+  --spotlight-angle: 9deg;
+}
+
+.konami-stage span:nth-child(3) {
+  --spotlight-angle: -9deg;
+}
+
+.konami-stage span:nth-child(4) {
+  --spotlight-angle: -24deg;
+}
+
+.konami-floor {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: 18px;
+  height: 172px;
+  opacity: 0.58;
+  background:
+    linear-gradient(rgba(246, 196, 69, 0.18) 2px, transparent 2px),
+    linear-gradient(90deg, rgba(246, 196, 69, 0.16) 2px, transparent 2px),
+    linear-gradient(180deg, rgba(246, 196, 69, 0.08), transparent 72%);
+  background-size: 100% 26px, 34px 100%, 100% 100%;
+  clip-path: polygon(18% 0, 82% 0, 100% 100%, 0 100%);
+  transform: perspective(260px) rotateX(58deg);
+  transform-origin: bottom center;
+  animation: rrFloorPulse 0.96s steps(2, end) infinite;
+}
+
+.konami-eq {
+  position: absolute;
+  left: 7%;
+  right: 7%;
+  bottom: 72px;
+  height: 92px;
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  align-items: end;
+  gap: 8px;
+  opacity: 0.52;
+}
+
+.konami-eq i {
+  display: block;
+  min-height: 10px;
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(180deg, rgba(255, 221, 94, 0.92), rgba(255, 139, 38, 0.4));
+  box-shadow: 0 0 18px rgba(246, 196, 69, 0.38);
+  animation: rrEqualizer 0.96s steps(4, end) infinite;
+}
+
+.konami-eq i:nth-child(2n) {
+  animation-delay: -0.18s;
+}
+
+.konami-eq i:nth-child(3n) {
+  animation-delay: -0.36s;
+}
+
+.konami-eq i:nth-child(4n) {
+  animation-delay: -0.54s;
+}
+
+.konami-dance-cues {
+  position: absolute;
+  left: 50%;
+  bottom: 54px;
+  z-index: 0;
+  width: min(460px, 88vw);
+  height: 42px;
+  transform: translateX(-50%);
+  color: rgba(248, 251, 255, 0.58);
+  font-family: inherit;
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.konami-dance-cues b {
+  position: absolute;
+  display: block;
+  opacity: 0;
+  text-shadow: 0 0 18px rgba(246, 196, 69, 0.45);
+  animation: rrCue 3.84s steps(1, end) infinite;
+}
+
+.konami-dance-cues b:nth-child(1) {
+  left: 3%;
+  animation-delay: 0s;
+}
+
+.konami-dance-cues b:nth-child(2) {
+  right: 7%;
+  animation-delay: -2.88s;
+}
+
+.konami-dance-cues b:nth-child(3) {
+  left: 37%;
+  animation-delay: -1.92s;
+}
+
+.konami-dance-cues b:nth-child(4) {
+  right: 28%;
+  animation-delay: -0.96s;
+}
+
+@keyframes rrStepTouch {
+  0% {
+    transform: translateX(-22px) translateY(0) rotate(-4deg) scaleY(1);
+  }
+  6.25% {
+    transform: translateX(-16px) translateY(-10px) rotate(-2deg) scaleY(0.98);
+  }
+  12.5% {
+    transform: translateX(0) translateY(-18px) rotate(0deg) scaleY(0.965);
+  }
+  18.75% {
+    transform: translateX(16px) translateY(-9px) rotate(2deg) scaleY(0.985);
+  }
+  25% {
+    transform: translateX(22px) translateY(0) rotate(4deg) scaleY(1);
+  }
+  31.25% {
+    transform: translateX(22px) translateY(-7px) rotate(4deg) scaleY(0.985);
+  }
+  37.5% {
+    transform: translateX(8px) translateY(-15px) rotate(1deg) scaleY(0.97);
+  }
+  43.75% {
+    transform: translateX(-12px) translateY(-7px) rotate(-3deg) scaleY(0.985);
+  }
+  50% {
+    transform: translateX(-22px) translateY(0) rotate(-4deg) scaleY(1);
+  }
+  56.25% {
+    transform: translateX(-20px) translateY(-12px) rotate(-2deg) scaleY(0.98);
+  }
+  62.5% {
+    transform: translateX(0) translateY(-22px) rotate(0deg) scaleY(0.955);
+  }
+  68.75% {
+    transform: translateX(18px) translateY(-8px) rotate(3deg) scaleY(0.985);
+  }
+  75% {
+    transform: translateX(22px) translateY(0) rotate(4deg) scaleY(1);
+  }
+  81.25% {
+    transform: translateX(18px) translateY(-7px) rotate(2deg) scaleY(0.985);
+  }
+  87.5% {
+    transform: translateX(0) translateY(-16px) rotate(0deg) scaleY(0.97);
+  }
+  93.75% {
+    transform: translateX(-18px) translateY(-7px) rotate(-3deg) scaleY(0.985);
+  }
+  100% {
+    transform: translateX(-22px) translateY(0) rotate(-4deg) scaleY(1);
+  }
+}
+
+@keyframes rrFloorPulse {
+  0%, 100% {
+    opacity: 0.46;
+    background-position: 0 0, 0 0, 0 0;
+  }
+  50% {
+    opacity: 0.7;
+    background-position: 0 13px, 17px 0, 0 0;
+  }
+}
+
+@keyframes rrEqualizer {
+  0% {
+    height: 18px;
+  }
+  25% {
+    height: 72px;
+  }
+  50% {
+    height: 38px;
+  }
+  75% {
+    height: 86px;
+  }
+  100% {
+    height: 24px;
+  }
+}
+
+@keyframes rrCue {
+  0%, 24.99% {
+    opacity: 0.92;
+    transform: translateY(0);
+  }
+  25%, 100% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes rrCoatSwing {
+  0%, 100% {
+    transform: skewX(-4deg) translateX(-2px);
+  }
+  25%, 75% {
+    transform: skewX(5deg) translateX(2px);
+  }
+  50% {
+    transform: skewX(-8deg) translateX(-3px);
+  }
+}
+
+@keyframes rrBodyLean {
+  0%, 100% {
+    transform: rotate(-5deg) translateY(0) translateX(-3px);
+  }
+  12.5% {
+    transform: rotate(-1deg) translateY(-8px) translateX(0);
+  }
+  25% {
+    transform: rotate(5deg) translateY(1px) translateX(4px);
+  }
+  37.5% {
+    transform: rotate(2deg) translateY(-5px) translateX(2px);
+  }
+  50% {
+    transform: rotate(-5deg) translateY(0) translateX(-4px);
+  }
+  62.5% {
+    transform: rotate(1deg) translateY(-9px) translateX(0);
+  }
+  75% {
+    transform: rotate(6deg) translateY(1px) translateX(4px);
+  }
+  87.5% {
+    transform: rotate(1deg) translateY(-5px) translateX(0);
+  }
+}
+
+@keyframes rrHeadGroove {
+  0% {
+    transform: translateX(-8px) translateY(0) rotate(7deg);
+  }
+  12.5% {
+    transform: translateX(-2px) translateY(12px) rotate(2deg);
+  }
+  25% {
+    transform: translateX(8px) translateY(0) rotate(-7deg);
+  }
+  37.5% {
+    transform: translateX(2px) translateY(9px) rotate(-1deg);
+  }
+  50% {
+    transform: translateX(-8px) translateY(0) rotate(7deg);
+  }
+  62.5% {
+    transform: translateX(-2px) translateY(13px) rotate(1deg);
+  }
+  75% {
+    transform: translateX(9px) translateY(0) rotate(-8deg);
+  }
+  87.5% {
+    transform: translateX(1px) translateY(9px) rotate(-1deg);
+  }
+  100% {
+    transform: translateX(-8px) translateY(0) rotate(7deg);
+  }
+}
+
+@keyframes rrLeftUpperArm {
+  0% {
+    transform: rotate(-12deg);
+  }
+  12.5% {
+    transform: rotate(18deg);
+  }
+  25% {
+    transform: rotate(38deg);
+  }
+  37.5% {
+    transform: rotate(14deg);
+  }
+  50% {
+    transform: rotate(-18deg);
+  }
+  62.5% {
+    transform: rotate(16deg);
+  }
+  75% {
+    transform: rotate(42deg);
+  }
+  87.5% {
+    transform: rotate(10deg);
+  }
+  100% {
+    transform: rotate(-12deg);
+  }
+}
+
+@keyframes rrLeftForearm {
+  0% {
+    transform: rotate(22deg);
+  }
+  12.5% {
+    transform: rotate(-18deg);
+  }
+  25% {
+    transform: rotate(-46deg);
+  }
+  37.5% {
+    transform: rotate(-20deg);
+  }
+  50% {
+    transform: rotate(26deg);
+  }
+  62.5% {
+    transform: rotate(-14deg);
+  }
+  75% {
+    transform: rotate(-48deg);
+  }
+  87.5% {
+    transform: rotate(-16deg);
+  }
+  100% {
+    transform: rotate(22deg);
+  }
+}
+
+@keyframes rrRightUpperArm {
+  0% {
+    transform: rotate(8deg);
+  }
+  12.5% {
+    transform: rotate(-22deg);
+  }
+  25% {
+    transform: rotate(-48deg);
+  }
+  37.5% {
+    transform: rotate(-26deg);
+  }
+  50% {
+    transform: rotate(10deg);
+  }
+  62.5% {
+    transform: rotate(-18deg);
+  }
+  75% {
+    transform: rotate(-52deg);
+  }
+  87.5% {
+    transform: rotate(-30deg);
+  }
+  100% {
+    transform: rotate(8deg);
+  }
+}
+
+@keyframes rrRightForearm {
+  0% {
+    transform: rotate(-20deg);
+  }
+  12.5% {
+    transform: rotate(14deg);
+  }
+  25% {
+    transform: rotate(48deg);
+  }
+  37.5% {
+    transform: rotate(20deg);
+  }
+  50% {
+    transform: rotate(-24deg);
+  }
+  62.5% {
+    transform: rotate(12deg);
+  }
+  75% {
+    transform: rotate(50deg);
+  }
+  87.5% {
+    transform: rotate(18deg);
+  }
+  100% {
+    transform: rotate(-20deg);
+  }
+}
+
+@keyframes rrLeftThigh {
+  0%, 100% {
+    transform: rotate(8deg) translateX(-7px) translateY(0);
+  }
+  12.5% {
+    transform: rotate(-4deg) translateX(-2px) translateY(-8px);
+  }
+  25% {
+    transform: rotate(-13deg) translateX(5px) translateY(0);
+  }
+  37.5% {
+    transform: rotate(-2deg) translateX(0) translateY(-7px);
+  }
+  50% {
+    transform: rotate(10deg) translateX(-8px) translateY(0);
+  }
+  62.5% {
+    transform: rotate(4deg) translateX(-4px) translateY(-11px);
+  }
+  75% {
+    transform: rotate(-14deg) translateX(6px) translateY(0);
+  }
+  87.5% {
+    transform: rotate(-6deg) translateX(0) translateY(-8px);
+  }
+}
+
+@keyframes rrLeftShin {
+  0%, 100% {
+    transform: rotate(-8deg);
+  }
+  12.5% {
+    transform: rotate(12deg);
+  }
+  25% {
+    transform: rotate(22deg);
+  }
+  37.5% {
+    transform: rotate(10deg);
+  }
+  50% {
+    transform: rotate(-18deg);
+  }
+  62.5% {
+    transform: rotate(18deg);
+  }
+  75% {
+    transform: rotate(24deg);
+  }
+  87.5% {
+    transform: rotate(8deg);
+  }
+}
+
+@keyframes rrRightThigh {
+  0%, 100% {
+    transform: rotate(-8deg) translateX(7px) translateY(0);
+  }
+  12.5% {
+    transform: rotate(-4deg) translateX(2px) translateY(-9px);
+  }
+  25% {
+    transform: rotate(13deg) translateX(-5px) translateY(0);
+  }
+  37.5% {
+    transform: rotate(6deg) translateX(0) translateY(-8px);
+  }
+  50% {
+    transform: rotate(-10deg) translateX(8px) translateY(0);
+  }
+  62.5% {
+    transform: rotate(-4deg) translateX(3px) translateY(-10px);
+  }
+  75% {
+    transform: rotate(14deg) translateX(-6px) translateY(0);
+  }
+  87.5% {
+    transform: rotate(8deg) translateX(0) translateY(-8px);
+  }
+}
+
+@keyframes rrRightShin {
+  0%, 100% {
+    transform: rotate(8deg);
+  }
+  12.5% {
+    transform: rotate(-12deg);
+  }
+  25% {
+    transform: rotate(-22deg);
+  }
+  37.5% {
+    transform: rotate(-10deg);
+  }
+  50% {
+    transform: rotate(18deg);
+  }
+  62.5% {
+    transform: rotate(-18deg);
+  }
+  75% {
+    transform: rotate(-24deg);
+  }
+  87.5% {
+    transform: rotate(-8deg);
+  }
+}
+
+@keyframes rrPupilLeft {
+  0%, 24.99% {
+    transform: translateX(-6px) rotate(7deg);
+  }
+  25%, 49.99% {
+    transform: translateX(5px) rotate(-6deg);
+  }
+  50%, 74.99% {
+    transform: translateX(-3px) translateY(2px) rotate(8deg);
+  }
+  75%, 100% {
+    transform: translateX(7px) translateY(-1px) rotate(-8deg);
+  }
+}
+
+@keyframes rrPupilRight {
+  0%, 24.99% {
+    transform: translateX(6px) rotate(-7deg);
+  }
+  25%, 49.99% {
+    transform: translateX(-5px) rotate(6deg);
+  }
+  50%, 74.99% {
+    transform: translateX(3px) translateY(2px) rotate(-8deg);
+  }
+  75%, 100% {
+    transform: translateX(-7px) translateY(-1px) rotate(8deg);
+  }
+}
+
+@keyframes rrShadow {
+  0%, 50%, 100% {
+    transform: scaleX(1);
+    opacity: 0.34;
+  }
+  12.5%, 62.5% {
+    transform: scaleX(0.78);
+    opacity: 0.2;
+  }
+  25%, 75% {
+    transform: scaleX(1.08);
+    opacity: 0.38;
+  }
+}
+
+@keyframes rrSparkles {
+  0%, 100% {
+    opacity: 0.22;
+    transform: scale(0.9) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.12) rotate(16deg);
+  }
+}

@@ -31,8 +31,18 @@ const adminPanel = document.getElementById("adminPanel");
 const adminRefresh = document.getElementById("adminRefresh");
 const adminUsersList = document.getElementById("adminUsersList");
 const developerRequestsNotice = document.getElementById("developerRequestsNotice");
+const adminSupportPanel = document.getElementById("adminSupportPanel");
+const adminSupportRefresh = document.getElementById("adminSupportRefresh");
+const adminSupportList = document.getElementById("adminSupportList");
 const googleToolsPanel = document.getElementById("googleToolsPanel");
 const developerModePanel = document.getElementById("developerModePanel");
+const supportPanel = document.getElementById("supportPanel");
+const supportLauncher = document.getElementById("supportLauncher");
+const supportClose = document.getElementById("supportClose");
+const supportMessages = document.getElementById("supportMessages");
+const supportForm = document.getElementById("supportForm");
+const supportInput = document.getElementById("supportInput");
+const supportStatus = document.getElementById("supportStatus");
 const developerModeRequest = document.getElementById("developerModeRequest");
 const developerModeStatus = document.getElementById("developerModeStatus");
 const developerModeForm = document.getElementById("developerModeForm");
@@ -72,6 +82,11 @@ const aiCreditsDetail = document.getElementById("aiCreditsDetail");
 const mainView = document.getElementById("mainView");
 const faceView = document.getElementById("faceView");
 const voiceChatView = document.getElementById("voiceChatView");
+const konamiView = document.getElementById("konamiView");
+const konamiAudioPlayer = document.getElementById("konamiAudioPlayer");
+const konamiStatus = document.getElementById("konamiStatus");
+const closeKonamiView = document.getElementById("closeKonamiView");
+const konamiDanceCanvas = document.getElementById("konamiDanceCanvas");
 const openFaceView = document.getElementById("openFaceView");
 const openVoiceChatView = document.getElementById("openVoiceChatView");
 const heroFaceViewBtn = document.getElementById("heroFaceViewBtn");
@@ -112,6 +127,7 @@ const HISTORY_STORAGE_KEY = "sarcasmos.chatHistory";
 const CHAT_FONT_STORAGE_KEY = "sarcasmos.voiceChatFontScale";
 const AUTH_STORAGE_KEY = "sarcasmos.googleUser";
 const LANGUAGE_STORAGE_KEY = "sarcasmos.language";
+const SUPPORT_HISTORY_STORAGE_KEY = "sarcasmos.supportHistory";
 const HISTORY_STORAGE_VERSION = "v2";
 const AUDIO_REPLY_STORAGE_KEY = "sarcasmos.audioReplyEnabled";
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
@@ -121,6 +137,17 @@ const BENDER_WARNING_AUDIO = [
   "/api/audio/easteregg-warning-2.wav",
   "/api/audio/easteregg-warning-3.wav",
 ];
+const KONAMI_CODE = [
+  "ArrowUp",
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowLeft",
+  "ArrowRight",
+];
+const KONAMI_AUDIO_SRC = "assets/konami.wav";
 const HOME_HERO_SUBTITLES = {
   en: [
     "A sharper way to talk, ask, listen, and get things done without opening six different tabs like a tired accountant.",
@@ -200,6 +227,7 @@ const chatSessions = [];
 let activeChatId = DEFAULT_CHAT_ID;
 let chatHistory = [];
 let pendingQuestion = "";
+let pendingHistoryEntryId = "";
 let blinkTimer = null;
 let talkTimer = null;
 let talkRaf = null;
@@ -221,9 +249,13 @@ let homeBenderAnnoyance = 0;
 let benderWarningTimer = null;
 let homeBenderMoodTimer = null;
 let benderWarningAudio = null;
+let konamiIndex = 0;
+let konamiDanceAnimation = 0;
 const audioSyncMap = new Map();
 let audioSyncEnabled = false;
 let currentUser = null;
+let supportConversation = [];
+let supportWidgetOpen = false;
 
 audioPlayer.crossOrigin = "anonymous";
 faceAudioPlayer.crossOrigin = "anonymous";
@@ -662,6 +694,11 @@ function userHistoryStorageKey() {
   return `${HISTORY_STORAGE_KEY}.${HISTORY_STORAGE_VERSION}.${email}`;
 }
 
+function userSupportStorageKey() {
+  const email = String(currentUser?.email || "anonymous").trim().toLowerCase();
+  return `${SUPPORT_HISTORY_STORAGE_KEY}.${HISTORY_STORAGE_VERSION}.${email}`;
+}
+
 function chooseHomeSubtitleIndex() {
   const subtitles = HOME_HERO_SUBTITLES.en;
   let nextIndex = Math.floor(Math.random() * subtitles.length);
@@ -835,6 +872,32 @@ const HOME_TRANSLATIONS = {
     addCreditsLabel: "Add credits",
     removeCreditsLabel: "Remove credits",
     creditAmountPlaceholder: "+ credits",
+    supportTitle: "Support chat",
+    supportLauncher: "Support",
+    supportClose: "Close support",
+    supportHelp: "Ask about SarcasmOS. If the assistant cannot solve it, it sends the request to support.",
+    supportPlaceholder: "Ask for help",
+    supportSend: "Ask",
+    supportWelcome: "Hi. Ask me about login, credits, audio, developer mode, Google tools, or sharing the page.",
+    supportSent: "I sent this to support. A human can review it from the inbox.",
+    supportSaved: "I saved this request for support. Email sending needs SMTP in backend/.env.",
+    supportFailed: "Support request failed. Try again later.",
+    supportEmpty: "Write a question first.",
+    supportBotName: "Support",
+    supportYouName: "You",
+    adminSupportTitle: "Support requests",
+    adminSupportHelp: "Questions escalated from the support chat.",
+    refreshSupport: "Refresh support",
+    loadingSupport: "Loading support requests...",
+    noSupportRequests: "No support requests yet.",
+    supportEmailSent: "Email sent",
+    supportEmailSaved: "Saved, email not sent",
+    konamiEyebrow: "SarcasmOS classified",
+    konamiTitle: "Secret mode",
+    konamiSubtitle: "Bender found the music button. Nobody is safe.",
+    konamiIdle: "Use the controls to pause, resume, or change the volume.",
+    konamiPlaying: "Looping. You can pause it or change the volume.",
+    konamiAutoplayBlocked: "Press play to start the song. The browser is being dramatic about autoplay.",
   },
   es: {
     documentTitle: "Inicio de SarcasmOS",
@@ -981,6 +1044,32 @@ const HOME_TRANSLATIONS = {
     addCreditsLabel: "Añadir créditos",
     removeCreditsLabel: "Quitar créditos",
     creditAmountPlaceholder: "+ créditos",
+    supportTitle: "Chat de asistencia",
+    supportLauncher: "Ayuda",
+    supportClose: "Cerrar asistencia",
+    supportHelp: "Pregunta sobre SarcasmOS. Si el asistente no puede resolverlo, enviará la solicitud a soporte.",
+    supportPlaceholder: "Pide ayuda",
+    supportSend: "Preguntar",
+    supportWelcome: "Hola. Pregúntame sobre login, créditos, audio, modo desarrollador, herramientas de Google o compartir la página.",
+    supportSent: "He enviado esto a soporte. Un humano podrá revisarlo desde el correo.",
+    supportSaved: "He guardado esta solicitud para soporte. Para enviar email hace falta SMTP en backend/.env.",
+    supportFailed: "No se pudo enviar la solicitud de soporte. Inténtalo más tarde.",
+    supportEmpty: "Escribe una pregunta primero.",
+    supportBotName: "Soporte",
+    supportYouName: "Tú",
+    adminSupportTitle: "Solicitudes de asistencia",
+    adminSupportHelp: "Preguntas escaladas desde el chat de asistencia.",
+    refreshSupport: "Refrescar soporte",
+    loadingSupport: "Cargando solicitudes de asistencia...",
+    noSupportRequests: "Todavía no hay solicitudes de asistencia.",
+    supportEmailSent: "Email enviado",
+    supportEmailSaved: "Guardado, email no enviado",
+    konamiEyebrow: "SarcasmOS clasificado",
+    konamiTitle: "Modo secreto",
+    konamiSubtitle: "Bender ha encontrado el botón de música. Nadie está a salvo.",
+    konamiIdle: "Usa los controles para pausar, reanudar o cambiar el volumen.",
+    konamiPlaying: "Reproduciendo en bucle. Puedes pausar o cambiar el volumen.",
+    konamiAutoplayBlocked: "Pulsa play para iniciar la canción. El navegador se pone exquisito con el autoplay.",
   },
 };
 
@@ -1003,6 +1092,240 @@ function tr(key) {
 
 function plural(count, singularKey, pluralKey) {
   return Number(count) === 1 ? tr(singularKey) : tr(pluralKey);
+}
+
+function supportKnowledgeAnswer(question) {
+  const text = question.toLowerCase();
+  const spanish = currentLanguage === "es";
+  const includesAny = (words) => words.some((word) => text.includes(word));
+  if (includesAny(["login", "loguin", "iniciar", "sesión", "session", "google"])) {
+    return spanish
+      ? "Para entrar necesitas iniciar sesión con Google. Si el botón falla, revisa que GOOGLE_CLIENT_ID esté configurado en backend/.env y que tu cuenta esté autorizada por un admin."
+      : "To enter, sign in with Google. If the button fails, check GOOGLE_CLIENT_ID in backend/.env and make sure an admin authorized your account.";
+  }
+  if (includesAny(["crédito", "credito", "credit", "saldo", "limite", "límite"])) {
+    return spanish
+      ? "Los usuarios autorizados tienen créditos semanales. El texto suele costar menos, el audio y respuestas largas cuestan más. Los admins pueden añadir o quitar créditos desde el panel."
+      : "Authorized users have weekly credits. Text usually costs less; audio and long replies cost more. Admins can add or remove credits from the admin panel.";
+  }
+  if (includesAny(["audio", "voz", "voice", "tts", "grabar", "record"])) {
+    return spanish
+      ? "Puedes activar o desactivar la respuesta con audio desde el interruptor de Audio. Si lo desactivas, Bender responde antes y gasta menos créditos."
+      : "You can toggle audio replies with the Audio switch. Turning it off makes Bender answer faster and spend fewer credits.";
+  }
+  if (includesAny(["developer", "desarrollador", "api", "apis", "keys", "clave"])) {
+    return spanish
+      ? "El modo desarrollador permite usar tus propias APIs. Pide acceso, un admin lo aprueba y luego puedes configurar Completions, Replicate, fallback, modelo LLM y modelo TTS."
+      : "Developer mode lets you use your own APIs. Request access, an admin approves it, then configure Completions, Replicate, fallback, LLM model, and TTS model.";
+  }
+  if (includesAny(["calendar", "calendario", "google tools", "herramientas"])) {
+    return spanish
+      ? "Las herramientas de Google se conectan desde Google Tools. Calendar es de solo lectura para que Bender pueda consultar fechas sin modificar tu calendario."
+      : "Google tools connect from Google Tools. Calendar is read-only so Bender can check dates without changing your calendar.";
+  }
+  if (includesAny(["ngrok", "compartir", "share", "link", "enlace"])) {
+    return spanish
+      ? "Para compartir la web usa el enlace de ngrok. En ngrok gratis puede aparecer una pantalla de aviso; pulsa Visit Site para entrar."
+      : "To share the web, use the ngrok link. Free ngrok may show a warning page; press Visit Site to continue.";
+  }
+  if (includesAny(["konami", "rick", "easter", "secreto", "secret"])) {
+    return spanish
+      ? "El modo secreto se abre con el código Konami usando las flechas: arriba, arriba, abajo, abajo, izquierda, derecha, izquierda, derecha."
+      : "Secret mode opens with the Konami code using arrow keys: up, up, down, down, left, right, left, right.";
+  }
+  return "";
+}
+
+function supportEscalationPhrase() {
+  const phrases = currentLanguage === "es"
+    ? [
+        "Tengo demasiados conocimientos para algo tan sencillo. Pregúntale a un humano.",
+        "Mi brillante cerebro robótico no tiene datos suficientes para esto. Lo mando a soporte humano.",
+        "Esto requiere intervención humana. Trágico, pero estadísticamente inevitable.",
+      ]
+    : [
+        "I know far too much for something this simple. Ask a human.",
+        "My magnificent robot brain lacks enough data for this. Sending it to human support.",
+        "This requires human intervention. Tragic, but statistically inevitable.",
+      ];
+  return phrases[Math.floor(Math.random() * phrases.length)];
+}
+
+function shouldEscalateSupportAnswer(answer) {
+  const normalized = answer.toLowerCase();
+  return [
+    "no tengo información suficiente",
+    "no tengo suficiente información",
+    "pregúntale a un humano",
+    "soporte humano",
+    "human support",
+    "ask a human",
+    "do not have enough information",
+    "don't have enough information",
+  ].some((needle) => normalized.includes(needle));
+}
+
+function appendSupportMessage(role, text) {
+  if (!supportMessages) {
+    return;
+  }
+  const message = document.createElement("div");
+  message.className = `support-message support-message--${role}`;
+  const label = role === "user" ? tr("supportYouName") : tr("supportBotName");
+  message.innerHTML = `<span>${escapeHtml(label)}</span><p>${escapeHtml(text)}</p>`;
+  supportMessages.appendChild(message);
+  supportMessages.scrollTop = supportMessages.scrollHeight;
+}
+
+function persistSupportConversation() {
+  try {
+    localStorage.setItem(userSupportStorageKey(), JSON.stringify(supportConversation.slice(-80)));
+  } catch (error) {
+    console.warn("Failed to save support conversation.", error);
+  }
+}
+
+function renderSupportConversation() {
+  if (!supportMessages) {
+    return;
+  }
+  supportMessages.innerHTML = "";
+  if (!supportConversation.length) {
+    supportConversation = [{ role: "bot", text: tr("supportWelcome") }];
+  }
+  for (const item of supportConversation) {
+    appendSupportMessage(item.role === "user" ? "user" : "bot", item.text || "");
+  }
+}
+
+function loadSupportConversation() {
+  try {
+    const raw = localStorage.getItem(userSupportStorageKey());
+    supportConversation = raw ? JSON.parse(raw) : [];
+  } catch (error) {
+    console.warn("Failed to load support conversation.", error);
+    supportConversation = [];
+  }
+  if (!Array.isArray(supportConversation)) {
+    supportConversation = [];
+  }
+  renderSupportConversation();
+}
+
+function addSupportConversationMessage(role, text) {
+  supportConversation.push({ role, text, timestamp: new Date().toISOString() });
+  persistSupportConversation();
+  appendSupportMessage(role, text);
+}
+
+function setSupportWidgetOpen(open) {
+  supportWidgetOpen = Boolean(open);
+  renderAuthState();
+  if (supportWidgetOpen) {
+    renderSupportConversation();
+    setTimeout(() => supportInput?.focus(), 60);
+  }
+}
+
+async function sendSupportTicket(question, answer, needsHuman) {
+  const response = await fetch(`${API_BASE}/api/support`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({
+      question,
+      answer,
+      needsHuman,
+      page: location.pathname || "/",
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || "Support request failed.");
+  }
+  return data.ticket || {};
+}
+
+async function askAutonomousSupport(question) {
+  const response = await fetch(`${API_BASE}/api/support/answer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({
+      question,
+      language: currentLanguage,
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || "Support AI unavailable.");
+  }
+  return {
+    answer: String(data.answer || "").trim(),
+    needsHuman: Boolean(data.needsHuman),
+    provider: data.provider || "",
+  };
+}
+
+async function handleSupportSubmit(event) {
+  event.preventDefault();
+  const question = supportInput?.value.trim() || "";
+  if (!question) {
+    if (supportStatus) {
+      supportStatus.textContent = tr("supportEmpty");
+    }
+    return;
+  }
+  supportInput.value = "";
+  addSupportConversationMessage("user", question);
+  if (supportStatus) {
+    supportStatus.textContent = currentLanguage === "es" ? "Pensando..." : "Thinking...";
+  }
+  let answer = "";
+  let needsHuman = false;
+  try {
+    const aiAnswer = await askAutonomousSupport(question);
+    answer = aiAnswer.answer;
+    needsHuman = aiAnswer.needsHuman || shouldEscalateSupportAnswer(answer);
+    if (needsHuman && !shouldEscalateSupportAnswer(answer)) {
+      answer = supportEscalationPhrase();
+    }
+  } catch (error) {
+    answer = supportKnowledgeAnswer(question);
+  }
+  if (answer) {
+    addSupportConversationMessage("bot", answer);
+    if (needsHuman) {
+      try {
+        const ticket = await sendSupportTicket(question, answer, true);
+        if (supportStatus) {
+          supportStatus.textContent = ticket.emailSent ? tr("supportSent") : tr("supportSaved");
+        }
+      } catch (error) {
+        if (supportStatus) {
+          supportStatus.textContent = tr("supportFailed");
+        }
+      }
+      return;
+    }
+    if (supportStatus) {
+      supportStatus.textContent = "";
+    }
+    return;
+  }
+  const fallbackAnswer = supportEscalationPhrase();
+  addSupportConversationMessage("bot", fallbackAnswer);
+  if (supportStatus) {
+    supportStatus.textContent = currentLanguage === "es" ? "Enviando a soporte..." : "Sending to support...";
+  }
+  try {
+    const ticket = await sendSupportTicket(question, fallbackAnswer, true);
+    if (supportStatus) {
+      supportStatus.textContent = ticket.emailSent ? tr("supportSent") : tr("supportSaved");
+    }
+  } catch (error) {
+    if (supportStatus) {
+      supportStatus.textContent = tr("supportFailed");
+    }
+  }
 }
 
 function applyLanguage(language) {
@@ -1056,6 +1379,36 @@ function applyLanguage(language) {
   setText("#developerModeRequest", developerModeState?.developerRequested ? t.requestedAccess : t.requestAccess);
   setText("#developerModeSave", t.saveDeveloperApis);
   setText("#developerModeReset", t.resetDeveloperApis);
+  setText("#supportPanel h2", t.supportTitle);
+  setText("#supportPanel .support-popover-head .helper-text", t.supportHelp);
+  setText(".support-launcher-text", t.supportLauncher);
+  if (supportLauncher) {
+    supportLauncher.title = t.supportTitle;
+  }
+  if (supportClose) {
+    supportClose.setAttribute("aria-label", t.supportClose);
+  }
+  setText("#supportSend", t.supportSend);
+  if (supportInput) {
+    supportInput.placeholder = t.supportPlaceholder;
+  }
+  if (supportMessages && supportMessages.children.length === 0) {
+    renderSupportConversation();
+  }
+  setText("#konamiEyebrow", t.konamiEyebrow);
+  setText("#konamiTitle", t.konamiTitle);
+  setText("#konamiSubtitle", t.konamiSubtitle);
+  setText("#closeKonamiView", t.backHome);
+  if (
+    konamiStatus?.textContent === HOME_TRANSLATIONS.en.konamiIdle ||
+    konamiStatus?.textContent === HOME_TRANSLATIONS.es.konamiIdle ||
+    konamiStatus?.textContent === HOME_TRANSLATIONS.en.konamiPlaying ||
+    konamiStatus?.textContent === HOME_TRANSLATIONS.es.konamiPlaying ||
+    konamiStatus?.textContent === HOME_TRANSLATIONS.en.konamiAutoplayBlocked ||
+    konamiStatus?.textContent === HOME_TRANSLATIONS.es.konamiAutoplayBlocked
+  ) {
+    konamiStatus.textContent = konamiView?.classList.contains("hidden") ? t.konamiIdle : t.konamiPlaying;
+  }
   setText(".credit-meter .label", t.aiCredits);
   renderCreditMeter();
   setText(".section-heading .eyebrow", t.talkEyebrow);
@@ -1107,6 +1460,9 @@ function applyLanguage(language) {
   setText("#adminPanel h2", t.adminPanelTitle);
   setText("#adminPanel .helper-text", t.adminPanelHelp);
   setText("#adminRefresh", t.refreshUsers);
+  setText("#adminSupportPanel h2", t.adminSupportTitle);
+  setText("#adminSupportPanel .helper-text", t.adminSupportHelp);
+  setText("#adminSupportRefresh", t.refreshSupport);
   setText(".api-health-panel h2", t.apiHealthTitle);
   setText(".api-health-panel .helper-text", t.apiHealthHelp);
   setText("#apiHealthRefresh", t.checkApis);
@@ -1204,6 +1560,11 @@ function clearUserSession() {
   renderCreditMeter();
   adminConsoleOverride = false;
   developerViewOverride = false;
+  supportWidgetOpen = false;
+  supportConversation = [];
+  if (supportMessages) {
+    supportMessages.innerHTML = "";
+  }
   stopGoogleToolsMonitor();
   renderGoogleToolsStatus(null);
   try {
@@ -1239,6 +1600,11 @@ function renderAuthState() {
   adminView?.classList.toggle("hidden", !canUseAdmin);
   adminView?.setAttribute("aria-hidden", canUseAdmin ? "false" : "true");
   adminPanel?.classList.toggle("hidden", !canUseAdmin);
+  adminSupportPanel?.classList.toggle("hidden", !canUseAdmin);
+  supportLauncher?.classList.toggle("hidden", !canUseApp);
+  supportPanel?.classList.toggle("hidden", !canUseApp || !supportWidgetOpen);
+  supportPanel?.setAttribute("aria-hidden", canUseApp && supportWidgetOpen ? "false" : "true");
+  supportLauncher?.setAttribute("aria-expanded", canUseApp && supportWidgetOpen ? "true" : "false");
   googleToolsPanel?.classList.toggle("hidden", !canUseApp);
   developerModePanel?.classList.toggle("hidden", !canUseDeveloper);
   loginSignOutBtn?.classList.toggle("hidden", !isSignedIn);
@@ -1296,6 +1662,7 @@ async function loginWithGoogle(credential) {
     saveUserSession({ ...data.user, token: data.token, sessionExpiresAt: data.expiresAt || "" });
     currentQuota = data.quota || null;
     renderCreditMeter();
+    loadSupportConversation();
     await loadHistory();
     renderAllHistoryViews();
     if (!data.user.authorized) {
@@ -1303,6 +1670,7 @@ async function loginWithGoogle(credential) {
     }
     if (data.user.isAdmin) {
       loadAdminUsers();
+      loadAdminSupportRequests();
     }
   } catch (error) {
     showLoginError(error.message || "Google sign-in failed.");
@@ -1836,6 +2204,7 @@ async function initAuth() {
       saveUserSession({ ...data.user, token: currentUser.token, sessionExpiresAt: currentUser.sessionExpiresAt || "" });
       currentQuota = data.quota || null;
       renderCreditMeter();
+      loadSupportConversation();
     } catch (error) {
       currentUser = null;
       localStorage.removeItem(AUTH_STORAGE_KEY);
@@ -1843,9 +2212,13 @@ async function initAuth() {
     }
   }
   renderAuthState();
+  if (currentUser?.authorized) {
+    loadSupportConversation();
+  }
   renderGoogleButton();
   if (currentUser?.isAdmin) {
     loadAdminUsers();
+    loadAdminSupportRequests();
   }
   if (currentUser?.authorized) {
     loadGoogleToolsStatus({ check: true, quiet: true });
@@ -2003,6 +2376,51 @@ async function loadAdminUsers() {
     renderAdminUsers(lastAdminUsers);
   } catch (error) {
     adminUsersList.innerHTML = `<p class="error">${escapeHtml(error.message || "Failed to load users.")}</p>`;
+  }
+}
+
+function renderAdminSupportTickets(requests = []) {
+  if (!adminSupportList) {
+    return;
+  }
+  if (!requests.length) {
+    adminSupportList.innerHTML = `<p class="helper-text">${escapeHtml(tr("noSupportRequests"))}</p>`;
+    return;
+  }
+  adminSupportList.innerHTML = requests.map((ticket) => {
+    const status = ticket.emailSent ? tr("supportEmailSent") : tr("supportEmailSaved");
+    const createdAt = ticket.createdAt ? new Date(ticket.createdAt).toLocaleString() : "";
+    return `
+      <article class="support-ticket">
+        <div class="support-ticket-head">
+          <div>
+            <strong>${escapeHtml(ticket.userName || ticket.userEmail || tr("user"))}</strong>
+            <span>${escapeHtml(ticket.userEmail || "")}</span>
+          </div>
+          <small>${escapeHtml(status)}</small>
+        </div>
+        <p class="helper-text">${escapeHtml(createdAt)}</p>
+        <p><b>${escapeHtml(tr("lastQuestion"))}:</b> ${escapeHtml(ticket.question || "")}</p>
+        <p><b>${escapeHtml(tr("lastAnswer"))}:</b> ${escapeHtml(ticket.answer || "")}</p>
+      </article>
+    `;
+  }).join("");
+}
+
+async function loadAdminSupportRequests() {
+  if (!adminSupportList || !currentUser?.isAdmin) {
+    return;
+  }
+  adminSupportList.innerHTML = `<p class="helper-text">${escapeHtml(tr("loadingSupport"))}</p>`;
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/support`, { headers: authHeaders() });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to load support requests.");
+    }
+    renderAdminSupportTickets(Array.isArray(data.requests) ? data.requests : []);
+  } catch (error) {
+    adminSupportList.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
   }
 }
 
@@ -2408,6 +2826,404 @@ function renderAllHistoryViews() {
   renderChatSessions();
 }
 
+function queuePendingTextMessage(question) {
+  pendingQuestion = question;
+  pendingHistoryEntryId = `pending-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const entry = {
+    id: pendingHistoryEntryId,
+    question,
+    answer: "",
+    audioUrl: "",
+    timestamp: new Date().toLocaleTimeString(),
+    pending: true,
+  };
+  chatHistory.unshift(entry);
+  syncActiveChat();
+  renderAllHistoryViews();
+  return entry;
+}
+
+function clearTextInputs() {
+  if (textInput) {
+    textInput.value = "";
+  }
+  if (faceTextInput) {
+    faceTextInput.value = "";
+  }
+  if (voiceChatTextInput) {
+    voiceChatTextInput.value = "";
+  }
+}
+
+function updatePendingTextMessage(data) {
+  if (!pendingHistoryEntryId) {
+    return false;
+  }
+  const entry = chatHistory.find((item) => item.id === pendingHistoryEntryId);
+  if (!entry) {
+    return false;
+  }
+  entry.answer = data.answer || "";
+  entry.audioUrl = data.audio_url ? `${API_BASE}${data.audio_url}` : "";
+  entry.pending = false;
+  entry.timestamp = new Date().toLocaleTimeString();
+  pendingHistoryEntryId = "";
+  pendingQuestion = "";
+  syncActiveChat();
+  renderAllHistoryViews();
+  persistHistory();
+  return true;
+}
+
+function failPendingTextMessage(message) {
+  if (!pendingHistoryEntryId) {
+    return;
+  }
+  const entry = chatHistory.find((item) => item.id === pendingHistoryEntryId);
+  if (entry) {
+    entry.answer = message || "Text request failed";
+    entry.pending = false;
+    entry.failed = true;
+    syncActiveChat();
+    renderAllHistoryViews();
+  }
+  pendingHistoryEntryId = "";
+  pendingQuestion = "";
+}
+
+function drawKonamiRoundedRect(ctx, x, y, w, h, r) {
+  const radius = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + w, y, x + w, y + h, radius);
+  ctx.arcTo(x + w, y + h, x, y + h, radius);
+  ctx.arcTo(x, y + h, x, y, radius);
+  ctx.arcTo(x, y, x + w, y, radius);
+  ctx.closePath();
+}
+
+function drawKonamiLine(ctx, points, width, color = "#b8c5cb") {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(points[0][0], points[0][1]);
+  for (let index = 1; index < points.length; index += 1) {
+    const point = points[index];
+    if (point.length === 4) {
+      ctx.quadraticCurveTo(point[0], point[1], point[2], point[3]);
+    } else {
+      ctx.lineTo(point[0], point[1]);
+    }
+  }
+  ctx.stroke();
+}
+
+function drawKonamiHand(ctx, x, y, angle = 0) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.fillStyle = "#c4d0d6";
+  ctx.strokeStyle = "#05070a";
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 21, 18, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  drawKonamiLine(ctx, [[-6, -3], [-20, -14]], 5, "#05070a");
+  drawKonamiLine(ctx, [[0, -4], [0, -20]], 5, "#05070a");
+  drawKonamiLine(ctx, [[7, -2], [20, -12]], 5, "#05070a");
+  ctx.restore();
+}
+
+function drawKonamiMic(ctx, x, y, angle = 0) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.fillStyle = "#e8f0f8";
+  ctx.strokeStyle = "#05070a";
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 16, 20, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  drawKonamiLine(ctx, [[8, 15], [25, 42]], 11, "#05070a");
+  drawKonamiLine(ctx, [[8, 15], [25, 42]], 5, "#e8f0f8");
+  ctx.restore();
+}
+
+function drawKonamiFace(ctx, x, y, tilt, look, mouthOpen) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(tilt);
+  ctx.shadowColor = "rgba(0, 0, 0, 0.38)";
+  ctx.shadowBlur = 14;
+  ctx.shadowOffsetY = 10;
+  drawKonamiRoundedRect(ctx, -160, -66, 320, 132, 66);
+  ctx.fillStyle = "#e8f0f8";
+  ctx.strokeStyle = "#05070a";
+  ctx.lineWidth = 10;
+  ctx.fill();
+  ctx.stroke();
+  ctx.shadowColor = "transparent";
+  drawKonamiRoundedRect(ctx, -144, -51, 288, 102, 51);
+  ctx.fillStyle = "#05070a";
+  ctx.fill();
+  ctx.fillStyle = "#f8fbff";
+  ctx.strokeStyle = "#05070a";
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.ellipse(-64, -2, 58, 39, -0.05, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(66, -2, 58, 39, 0.05, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.save();
+  ctx.translate(-64 + look * 8, -4);
+  ctx.rotate(0.15);
+  ctx.fillStyle = "#05070a";
+  ctx.fillRect(-8, -8, 16, 16);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(66 + look * 8, -4);
+  ctx.rotate(-0.12);
+  ctx.fillStyle = "#05070a";
+  ctx.fillRect(-8, -8, 16, 16);
+  ctx.restore();
+  ctx.translate(0, 118);
+  drawKonamiRoundedRect(ctx, -82, -38, 164, mouthOpen ? 82 : 70, 34);
+  ctx.fillStyle = "#f8fbff";
+  ctx.strokeStyle = "#05070a";
+  ctx.lineWidth = 8;
+  ctx.fill();
+  ctx.stroke();
+  drawKonamiLine(ctx, [[-74, -12], [74, -12]], 5, "#05070a");
+  drawKonamiLine(ctx, [[-74, 14], [74, 14]], 5, "#05070a");
+  [-42, 0, 42].forEach((lineX) => drawKonamiLine(ctx, [[lineX, -37], [lineX, 39]], 5, "#05070a"));
+  ctx.restore();
+}
+
+function drawKonamiBody(ctx, x, y, lean, bounce) {
+  ctx.save();
+  ctx.translate(x, y + bounce);
+  ctx.rotate(lean);
+  ctx.shadowColor = "rgba(0, 0, 0, 0.28)";
+  ctx.shadowBlur = 12;
+  ctx.shadowOffsetY = 8;
+  drawKonamiRoundedRect(ctx, -96, -108, 192, 226, 58);
+  ctx.fillStyle = "#9faab0";
+  ctx.strokeStyle = "#05070a";
+  ctx.lineWidth = 10;
+  ctx.fill();
+  ctx.stroke();
+  ctx.shadowColor = "transparent";
+  ctx.fillStyle = "#e8f0f8";
+  ctx.strokeStyle = "#05070a";
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(-46, -90);
+  ctx.lineTo(-12, 112);
+  ctx.lineTo(12, 112);
+  ctx.lineTo(46, -90);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#10151d";
+  ctx.beginPath();
+  ctx.moveTo(0, -78);
+  ctx.lineTo(-18, -18);
+  ctx.lineTo(0, 38);
+  ctx.lineTo(18, -18);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  drawKonamiLine(ctx, [[-55, -34], [54, -24]], 5, "rgba(5, 7, 10, 0.48)");
+  drawKonamiLine(ctx, [[-58, 22], [58, 34]], 5, "rgba(5, 7, 10, 0.48)");
+  drawKonamiLine(ctx, [[-88, -88], [-114, -6, -72, 116], [-42, 32, -44, -76]], 8, "#05070a");
+  drawKonamiLine(ctx, [[88, -88], [114, -6, 72, 116], [42, 32, 44, -76]], 8, "#05070a");
+  ctx.restore();
+}
+
+function easeKonamiDance(value) {
+  return value < 0.5 ? 4 * value * value * value : 1 - ((-2 * value + 2) ** 3) / 2;
+}
+
+function lerpKonamiValue(a, b, amount) {
+  return a + (b - a) * amount;
+}
+
+function lerpKonamiArray(a, b, amount) {
+  return a.map((value, index) => Array.isArray(value)
+    ? lerpKonamiArray(value, b[index], amount)
+    : lerpKonamiValue(value, b[index], amount));
+}
+
+function lerpKonamiPose(a, b, amount) {
+  return {
+    x: lerpKonamiValue(a.x, b.x, amount),
+    lean: lerpKonamiValue(a.lean, b.lean, amount),
+    head: lerpKonamiValue(a.head, b.head, amount),
+    look: lerpKonamiValue(a.look, b.look, amount),
+    bounce: lerpKonamiValue(a.bounce, b.bounce, amount),
+    mouth: amount < 0.5 ? a.mouth : b.mouth,
+    lHand: lerpKonamiArray(a.lHand, b.lHand, amount),
+    rHand: lerpKonamiArray(a.rHand, b.rHand, amount),
+    mic: lerpKonamiArray(a.mic, b.mic, amount),
+    lArm: lerpKonamiArray(a.lArm, b.lArm, amount),
+    rArm: lerpKonamiArray(a.rArm, b.rArm, amount),
+    lLeg: lerpKonamiArray(a.lLeg, b.lLeg, amount),
+    rLeg: lerpKonamiArray(a.rLeg, b.rLeg, amount),
+  };
+}
+
+function drawKonamiDancerFrame(ctx, framePosition, timeSeconds) {
+  const poses = [
+    { x: -24, lean: -0.08, head: 0.1, look: -1, bounce: 0, mouth: 0, lHand: [100, 284, 0.55], rHand: [442, 142, -0.75], mic: [468, 104, -0.72], lArm: [[176, 260], [138, 276, 100, 284]], rArm: [[344, 258], [392, 212, 442, 142]], lLeg: [[226, 402], [198, 444, 158, 486], [112, 506]], rLeg: [[302, 402], [332, 438, 388, 476], [452, 486]] },
+    { x: -8, lean: -0.02, head: 0.03, look: -0.3, bounce: -20, mouth: 1, lHand: [130, 238, 0.08], rHand: [428, 184, -0.32], mic: [462, 154, -0.35], lArm: [[176, 254], [150, 244, 130, 238]], rArm: [[344, 254], [384, 226, 428, 184]], lLeg: [[226, 402], [206, 432, 196, 468], [166, 500]], rLeg: [[302, 402], [326, 428, 350, 464], [400, 498]] },
+    { x: 18, lean: 0.08, head: -0.09, look: 1, bounce: -2, mouth: 0, lHand: [92, 204, -0.18], rHand: [416, 256, 0.25], mic: [450, 232, 0.12], lArm: [[176, 260], [132, 230, 92, 204]], rArm: [[344, 260], [384, 264, 416, 256]], lLeg: [[226, 402], [226, 440, 214, 478], [174, 506]], rLeg: [[302, 402], [320, 448, 350, 482], [414, 506]] },
+    { x: 28, lean: 0.05, head: -0.05, look: 0.7, bounce: -14, mouth: 1, lHand: [112, 292, 0.5], rHand: [458, 132, -0.9], mic: [480, 92, -0.84], lArm: [[176, 258], [140, 278, 112, 292]], rArm: [[344, 256], [400, 208, 458, 132]], lLeg: [[226, 402], [204, 452, 152, 482], [112, 488]], rLeg: [[302, 402], [330, 432, 368, 466], [430, 492]] },
+    { x: 20, lean: 0.02, head: 0.03, look: 0, bounce: 0, mouth: 0, lHand: [96, 252, 0.22], rHand: [442, 202, -0.1], mic: [474, 174, -0.2], lArm: [[176, 258], [136, 258, 96, 252]], rArm: [[344, 258], [390, 234, 442, 202]], lLeg: [[226, 402], [214, 440, 196, 480], [146, 512]], rLeg: [[302, 402], [336, 430, 390, 452], [456, 466]] },
+    { x: 0, lean: -0.02, head: 0.02, look: -0.2, bounce: -22, mouth: 1, lHand: [144, 210, -0.08], rHand: [414, 244, 0.25], mic: [448, 218, 0.12], lArm: [[176, 254], [156, 224, 144, 210]], rArm: [[344, 258], [384, 254, 414, 244]], lLeg: [[226, 402], [212, 426, 228, 462], [188, 498]], rLeg: [[302, 402], [314, 428, 300, 462], [342, 500]] },
+    { x: -28, lean: -0.09, head: 0.1, look: -1, bounce: -1, mouth: 0, lHand: [78, 142, -0.55], rHand: [428, 288, 0.55], mic: [462, 264, 0.38], lArm: [[176, 260], [124, 210, 78, 142]], rArm: [[344, 260], [386, 276, 428, 288]], lLeg: [[226, 402], [192, 434, 150, 458], [104, 470]], rLeg: [[302, 402], [334, 444, 376, 480], [438, 504]] },
+    { x: -12, lean: -0.02, head: 0.01, look: -0.4, bounce: -14, mouth: 1, lHand: [112, 286, 0.45], rHand: [438, 142, -0.78], mic: [468, 104, -0.72], lArm: [[176, 258], [142, 276, 112, 286]], rArm: [[344, 256], [398, 202, 438, 142]], lLeg: [[226, 402], [208, 448, 176, 486], [124, 506]], rLeg: [[302, 402], [322, 436, 352, 470], [404, 502]] },
+  ];
+  const baseFrame = Math.floor(framePosition) % poses.length;
+  const nextFrame = (baseFrame + 1) % poses.length;
+  const pose = lerpKonamiPose(poses[baseFrame], poses[nextFrame], easeKonamiDance(framePosition % 1));
+  const originX = 260 + pose.x;
+  const originY = 326;
+  ctx.clearRect(0, 0, 520, 560);
+  ctx.fillStyle = "rgba(0, 0, 0, 0.34)";
+  ctx.beginPath();
+  ctx.ellipse(260 + pose.x * 0.35, 508, 142 - Math.abs(pose.bounce) * 2.2, 22, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const sparklePulse = Math.sin(timeSeconds * 7) * 0.5 + 0.5;
+  ctx.fillStyle = `rgba(246, 196, 69, ${0.48 + sparklePulse * 0.34})`;
+  [[82, 300, 26], [438, 332, 22], [424, 214, 6], [112, 208, 5]].forEach(([x, y, size]) => {
+    ctx.beginPath();
+    ctx.moveTo(x, y - size);
+    ctx.lineTo(x + size * 0.34, y - size * 0.34);
+    ctx.lineTo(x + size, y);
+    ctx.lineTo(x + size * 0.34, y + size * 0.34);
+    ctx.lineTo(x, y + size);
+    ctx.lineTo(x - size * 0.34, y + size * 0.34);
+    ctx.lineTo(x - size, y);
+    ctx.lineTo(x - size * 0.34, y - size * 0.34);
+    ctx.closePath();
+    ctx.fill();
+  });
+  drawKonamiLine(ctx, pose.lLeg, 18);
+  drawKonamiLine(ctx, [pose.lLeg[2], [pose.lLeg[2][0] + 48, pose.lLeg[2][1] + 8]], 14);
+  drawKonamiLine(ctx, pose.rLeg, 18);
+  drawKonamiLine(ctx, [pose.rLeg[2], [pose.rLeg[2][0] + 52, pose.rLeg[2][1] - 6]], 14);
+  drawKonamiLine(ctx, pose.lArm, 18);
+  drawKonamiHand(ctx, pose.lHand[0], pose.lHand[1], pose.lHand[2]);
+  drawKonamiLine(ctx, pose.rArm, 18);
+  drawKonamiHand(ctx, pose.rHand[0], pose.rHand[1], pose.rHand[2]);
+  drawKonamiMic(ctx, pose.mic[0], pose.mic[1], pose.mic[2]);
+  drawKonamiBody(ctx, originX, originY, pose.lean, pose.bounce);
+  drawKonamiFace(ctx, originX, 122 + pose.bounce * 0.45, pose.head, pose.look, pose.mouth);
+}
+
+function tickKonamiDance() {
+  if (!konamiDanceCanvas || !konamiView || konamiView.classList.contains("hidden")) {
+    konamiDanceAnimation = 0;
+    return;
+  }
+  const ctx = konamiDanceCanvas.getContext("2d");
+  const currentTime = konamiAudioPlayer?.currentTime || performance.now() / 1000;
+  drawKonamiDancerFrame(ctx, (currentTime / 0.42) % 8, currentTime);
+  konamiDanceAnimation = requestAnimationFrame(tickKonamiDance);
+}
+
+function startKonamiDance() {
+  if (konamiDanceAnimation || !konamiDanceCanvas) {
+    return;
+  }
+  tickKonamiDance();
+}
+
+function stopKonamiDance() {
+  if (konamiDanceAnimation) {
+    cancelAnimationFrame(konamiDanceAnimation);
+    konamiDanceAnimation = 0;
+  }
+}
+
+function openKonamiView() {
+  if (!konamiView) {
+    return;
+  }
+  closeFacePanel();
+  closeVoiceChatPanel();
+  pauseAllAudio();
+  konamiView.classList.remove("hidden");
+  konamiView.setAttribute("aria-hidden", "false");
+  document.body.classList.add("konami-open");
+  startKonamiDance();
+  if (konamiAudioPlayer) {
+    konamiAudioPlayer.loop = true;
+    konamiAudioPlayer.src = KONAMI_AUDIO_SRC;
+    konamiAudioPlayer.load();
+    konamiAudioPlayer.play().then(() => {
+      if (konamiStatus) {
+        konamiStatus.textContent = tr("konamiPlaying");
+      }
+    }).catch(() => {
+      if (konamiStatus) {
+        konamiStatus.textContent = tr("konamiAutoplayBlocked");
+      }
+    });
+  }
+}
+
+function closeKonamiPanel() {
+  if (!konamiView) {
+    return;
+  }
+  if (konamiAudioPlayer) {
+    konamiAudioPlayer.pause();
+    konamiAudioPlayer.currentTime = 0;
+  }
+  stopKonamiDance();
+  konamiView.classList.add("hidden");
+  konamiView.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("konami-open");
+}
+
+function handleKonamiKey(event) {
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+    return;
+  }
+  const expected = KONAMI_CODE[konamiIndex];
+  if (event.key === expected) {
+    konamiIndex += 1;
+    if (konamiIndex === KONAMI_CODE.length) {
+      konamiIndex = 0;
+      event.preventDefault();
+      openKonamiView();
+    }
+    return;
+  }
+  konamiIndex = event.key === KONAMI_CODE[0] ? 1 : 0;
+}
+
+function submitTextFromInput(input, target) {
+  activePlaybackTarget = target;
+  const message = input.value.trim();
+  if (!message) {
+    showError(tr("typeMessageFirst"));
+    return;
+  }
+  const context = getActiveChatContext();
+  queuePendingTextMessage(message);
+  clearTextInputs();
+  sendTextMessage(message, context);
+}
+
 function updateResult(data) {
   if (data?.quota) {
     currentQuota = data.quota;
@@ -2426,7 +3242,9 @@ function updateResult(data) {
     answerOutput.textContent = data.answer || tr("emptyAnswer");
     faceAnswerOutput.textContent = answerOutput.textContent;
   }
-  if (data.answer || data.transcript) {
+  if (data.answer && updatePendingTextMessage(data)) {
+    // The text chat already rendered the user's message immediately.
+  } else if (data.answer || data.transcript) {
     const question = (data.transcript || pendingQuestion || "").trim();
     if (question) {
       const entry = {
@@ -2534,7 +3352,7 @@ function renderVoiceChat() {
     .map((entry, reverseIndex) => {
       const index = chatHistory.length - 1 - reverseIndex;
       const question = entry.question || "";
-      const answer = entry.answer || "";
+      const answer = entry.pending ? tr("waitingResponse") : (entry.answer || "");
       const audio = entry.audioUrl
         ? `<audio class="voice-chat-audio" controls src="${escapeHtml(entry.audioUrl)}"></audio>`
         : "";
@@ -2543,7 +3361,7 @@ function renderVoiceChat() {
           <div class="label">${escapeHtml(tr("you"))}</div>
           <p>${escapeHtml(question)}</p>
         </div>
-        <div class="voice-chat-message assistant" data-history-index="${index}">
+        <div class="voice-chat-message assistant${entry.pending ? " pending" : ""}${entry.failed ? " failed" : ""}" data-history-index="${index}">
           <div class="voice-chat-message-top">
             <div class="label">Bender</div>
             <button class="voice-chat-message-delete" type="button">${escapeHtml(tr("delete"))}</button>
@@ -2846,7 +3664,7 @@ async function sendAudioBlob(blob, filename) {
   }
 }
 
-async function sendTextMessage(message) {
+async function sendTextMessage(message, context = getActiveChatContext()) {
   await refreshCalendarToolIfNeeded();
   setLoading(true, tr("sendingText"));
   showError("");
@@ -2857,7 +3675,7 @@ async function sendTextMessage(message) {
       headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({
         message,
-        context: getActiveChatContext(),
+        context,
         chatId: activeChatId,
         synthesizeAudio: audioReplyEnabled,
       }),
@@ -2868,6 +3686,7 @@ async function sendTextMessage(message) {
     }
     updateResult(data);
   } catch (error) {
+    failPendingTextMessage(error.message || "Text request failed");
     showError(error.message || "Text request failed");
   } finally {
     setLoading(false, tr("idle"));
@@ -2972,37 +3791,29 @@ faceStopBtn.addEventListener("click", stopRecording);
 voiceChatStopBtn.addEventListener("click", stopRecording);
 
 textSend.addEventListener("click", () => {
-  activePlaybackTarget = "main";
-  const message = textInput.value.trim();
-  if (!message) {
-    showError(tr("typeMessageFirst"));
-    return;
-  }
-  pendingQuestion = message;
-  sendTextMessage(message);
+  submitTextFromInput(textInput, "main");
 });
 
 faceTextSend.addEventListener("click", () => {
-  activePlaybackTarget = "face";
-  const message = faceTextInput.value.trim();
-  if (!message) {
-    showError(tr("typeMessageFirst"));
-    return;
-  }
-  pendingQuestion = message;
-  sendTextMessage(message);
+  submitTextFromInput(faceTextInput, "face");
 });
 
 voiceChatTextSend.addEventListener("click", () => {
-  activePlaybackTarget = "voice";
-  const message = voiceChatTextInput.value.trim();
-  if (!message) {
-    showError(tr("typeMessageFirst"));
-    return;
-  }
-  pendingQuestion = message;
-  sendTextMessage(message);
+  submitTextFromInput(voiceChatTextInput, "voice");
 });
+
+for (const [input, target] of [
+  [textInput, "main"],
+  [faceTextInput, "face"],
+  [voiceChatTextInput, "voice"],
+]) {
+  input?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      submitTextFromInput(input, target);
+    }
+  });
+}
 
 statusBtn.addEventListener("click", refreshStatus);
 apiHealthRefresh.addEventListener("click", checkApiHealth);
@@ -3034,8 +3845,10 @@ openAdminConsole.addEventListener("click", () => {
   developerViewOverride = false;
   adminConsoleOverride = true;
   renderAuthState();
+  loadAdminSupportRequests();
 });
 adminRefresh.addEventListener("click", loadAdminUsers);
+adminSupportRefresh?.addEventListener("click", loadAdminSupportRequests);
 googleToolsRefresh.addEventListener("click", () => loadGoogleToolsStatus({ check: true }));
 connectGoogleCalendar.addEventListener("click", connectCalendarTool);
 disconnectGoogleCalendar.addEventListener("click", disconnectCalendarTool);
@@ -3103,6 +3916,10 @@ heroVoiceChatBtn.addEventListener("click", () => openVoiceChatView.click());
 
 closeFaceView.addEventListener("click", closeFacePanel);
 closeVoiceChatView.addEventListener("click", closeVoiceChatPanel);
+closeKonamiView?.addEventListener("click", closeKonamiPanel);
+supportLauncher?.addEventListener("click", () => setSupportWidgetOpen(!supportWidgetOpen));
+supportClose?.addEventListener("click", () => setSupportWidgetOpen(false));
+supportForm?.addEventListener("submit", handleSupportSubmit);
 
 faceView.addEventListener("click", (event) => {
   if (event.target === faceView && !isBusy) {
@@ -3111,11 +3928,15 @@ faceView.addEventListener("click", (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
+  handleKonamiKey(event);
   if (event.key === "Escape" && !faceView.classList.contains("hidden") && !isBusy) {
     closeFacePanel();
   }
   if (event.key === "Escape" && !voiceChatView.classList.contains("hidden") && !isBusy) {
     closeVoiceChatPanel();
+  }
+  if (event.key === "Escape" && konamiView && !konamiView.classList.contains("hidden")) {
+    closeKonamiPanel();
   }
 });
 

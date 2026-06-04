@@ -4,12 +4,45 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SarcasmOS Home</title>
-    <link rel="stylesheet" href="style.css?v=20260603-support-tabs" />
+    <link rel="stylesheet" href="style.css?v=20260604-user-profile" />
     <link rel="stylesheet" href="assets/easteregg/konami-rickroll.css" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
     <div id="benderWarning" class="bender-warning hidden" role="alert" aria-live="assertive"></div>
+    <section id="profileSetup" class="profile-setup hidden" aria-hidden="true" aria-label="User profile setup">
+      <form id="profileSetupForm" class="profile-card">
+        <p class="eyebrow">SarcasmOS</p>
+        <h2>Before Bender judges you</h2>
+        <p class="helper-text">Tell the bot how to treat you. Optional, but useful.</p>
+        <label>
+          <span>What should Bender call you?</span>
+          <input id="profileDisplayName" type="text" maxlength="48" autocomplete="nickname" />
+        </label>
+        <label>
+          <span>Age</span>
+          <input id="profileAge" type="number" min="1" max="120" inputmode="numeric" />
+        </label>
+        <label>
+          <span>Gender / pronouns</span>
+          <select id="profileGender">
+            <option value="">Prefer not to say</option>
+            <option value="female">Female / she</option>
+            <option value="male">Male / he</option>
+            <option value="nonbinary">Non-binary / they</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+        <label id="profileCustomGenderWrap" class="hidden">
+          <span>Custom gender / pronouns</span>
+          <input id="profileCustomGender" type="text" maxlength="60" />
+        </label>
+        <div class="profile-actions">
+          <button id="profileSkip" class="ghost" type="button">Skip</button>
+          <button id="profileSave" class="accent" type="submit">Save profile</button>
+        </div>
+      </form>
+    </section>
     <section id="loginView" class="login-view" aria-label="Sign in">
       <div class="login-shell">
         <div id="loginBot" class="login-bot" aria-hidden="true">
@@ -600,6 +633,6 @@
       </div>
     </section>
 
-    <script src="app.js?v=20260603-support-tabs"></script>
+    <script src="app.js?v=20260604-user-profile"></script>
   </body>
 </html>

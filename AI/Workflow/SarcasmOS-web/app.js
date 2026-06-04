@@ -2,6 +2,14 @@ let API_BASE = "";
 let GOOGLE_CLIENT_ID = "";
 
 const loginView = document.getElementById("loginView");
+const profileSetup = document.getElementById("profileSetup");
+const profileSetupForm = document.getElementById("profileSetupForm");
+const profileDisplayName = document.getElementById("profileDisplayName");
+const profileAge = document.getElementById("profileAge");
+const profileGender = document.getElementById("profileGender");
+const profileCustomGenderWrap = document.getElementById("profileCustomGenderWrap");
+const profileCustomGender = document.getElementById("profileCustomGender");
+const profileSkip = document.getElementById("profileSkip");
 const loginBot = document.getElementById("loginBot");
 const benderWarning = document.getElementById("benderWarning");
 const homeBenderButton = document.getElementById("homeBenderButton");
@@ -129,6 +137,7 @@ const HISTORY_STORAGE_KEY = "sarcasmos.chatHistory";
 const CHAT_FONT_STORAGE_KEY = "sarcasmos.voiceChatFontScale";
 const AUTH_STORAGE_KEY = "sarcasmos.googleUser";
 const LANGUAGE_STORAGE_KEY = "sarcasmos.language";
+const USER_PROFILE_STORAGE_KEY = "sarcasmos.userProfile";
 const SUPPORT_HISTORY_STORAGE_KEY = "sarcasmos.supportHistory";
 const HISTORY_STORAGE_VERSION = "v2";
 const AUDIO_REPLY_STORAGE_KEY = "sarcasmos.audioReplyEnabled";
@@ -256,6 +265,7 @@ let konamiDanceAnimation = 0;
 const audioSyncMap = new Map();
 let audioSyncEnabled = false;
 let currentUser = null;
+let currentUserProfile = null;
 let supportConversation = [];
 let supportChats = [];
 let activeSupportChatId = "";
@@ -703,6 +713,98 @@ function userSupportStorageKey() {
   return `${SUPPORT_HISTORY_STORAGE_KEY}.${HISTORY_STORAGE_VERSION}.${email}`;
 }
 
+function userProfileStorageKey() {
+  const email = String(currentUser?.email || "anonymous").trim().toLowerCase();
+  return `${USER_PROFILE_STORAGE_KEY}.${HISTORY_STORAGE_VERSION}.${email}`;
+}
+
+function loadUserProfile() {
+  try {
+    const raw = localStorage.getItem(userProfileStorageKey());
+    currentUserProfile = raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    console.warn("Failed to load user profile.", error);
+    currentUserProfile = null;
+  }
+  return currentUserProfile;
+}
+
+function saveUserProfile(profile) {
+  currentUserProfile = {
+    preferredName: String(profile.preferredName || "").trim(),
+    age: String(profile.age || "").trim(),
+    gender: String(profile.gender || "").trim(),
+    customGender: String(profile.customGender || "").trim(),
+    skipped: Boolean(profile.skipped),
+    updatedAt: new Date().toISOString(),
+  };
+  try {
+    localStorage.setItem(userProfileStorageKey(), JSON.stringify(currentUserProfile));
+  } catch (error) {
+    console.warn("Failed to save user profile.", error);
+  }
+  renderProfileSetup();
+}
+
+function profileIsComplete() {
+  return Boolean(currentUserProfile?.skipped || currentUserProfile?.preferredName);
+}
+
+function profileGenderLabel(profile = currentUserProfile) {
+  if (!profile) {
+    return "";
+  }
+  if (profile.gender === "custom") {
+    return profile.customGender || "";
+  }
+  const labels = {
+    female: currentLanguage === "es" ? "mujer / ella" : "female / she",
+    male: currentLanguage === "es" ? "hombre / él" : "male / he",
+    nonbinary: currentLanguage === "es" ? "no binario / elle" : "non-binary / they",
+  };
+  return labels[profile.gender] || "";
+}
+
+function userProfileContextEntry() {
+  if (!currentUserProfile || currentUserProfile.skipped) {
+    return null;
+  }
+  const parts = [];
+  if (currentUserProfile.preferredName) {
+    parts.push(`preferred name: ${currentUserProfile.preferredName}`);
+  }
+  if (currentUserProfile.age) {
+    parts.push(`age: ${currentUserProfile.age}`);
+  }
+  const gender = profileGenderLabel();
+  if (gender) {
+    parts.push(`gender/pronouns: ${gender}`);
+  }
+  if (!parts.length) {
+    return null;
+  }
+  return {
+    question: "User profile",
+    answer: `Use this user profile when replying: ${parts.join("; ")}. Address the user by their preferred name when natural.`,
+    timestamp: currentUserProfile.updatedAt || "",
+  };
+}
+
+function renderProfileSetup() {
+  const shouldShow = Boolean(currentUser?.authorized && !profileIsComplete());
+  profileSetup?.classList.toggle("hidden", !shouldShow);
+  profileSetup?.setAttribute("aria-hidden", shouldShow ? "false" : "true");
+  document.body.classList.toggle("profile-setup-open", shouldShow);
+  if (shouldShow && profileDisplayName && !profileDisplayName.value) {
+    profileDisplayName.value = currentUser?.name?.split(" ")[0] || "";
+  }
+}
+
+function syncProfileCustomGenderVisibility() {
+  const custom = profileGender?.value === "custom";
+  profileCustomGenderWrap?.classList.toggle("hidden", !custom);
+}
+
 function chooseHomeSubtitleIndex() {
   const subtitles = HOME_HERO_SUBTITLES.en;
   let nextIndex = Math.floor(Math.random() * subtitles.length);
@@ -897,6 +999,19 @@ const HOME_TRANSLATIONS = {
     noSupportRequests: "No support requests yet.",
     supportEmailSent: "Email sent",
     supportEmailSaved: "Saved, email not sent",
+    profileTitle: "Before Bender judges you",
+    profileHelp: "Tell the bot how to treat you. Optional, but useful.",
+    profileName: "What should Bender call you?",
+    profileAge: "Age",
+    profileGender: "Gender / pronouns",
+    profilePreferNot: "Prefer not to say",
+    profileFemale: "Female / she",
+    profileMale: "Male / he",
+    profileNonbinary: "Non-binary / they",
+    profileCustom: "Custom",
+    profileCustomLabel: "Custom gender / pronouns",
+    profileSkip: "Skip",
+    profileSave: "Save profile",
     konamiEyebrow: "SarcasmOS classified",
     konamiTitle: "Secret mode",
     konamiSubtitle: "Bender found the music button. Nobody is safe.",
@@ -1070,6 +1185,19 @@ const HOME_TRANSLATIONS = {
     noSupportRequests: "Todavía no hay solicitudes de asistencia.",
     supportEmailSent: "Email enviado",
     supportEmailSaved: "Guardado, email no enviado",
+    profileTitle: "Antes de que Bender te juzgue",
+    profileHelp: "Dile al bot cómo tratarte. Es opcional, pero útil.",
+    profileName: "¿Cómo quieres que te llame Bender?",
+    profileAge: "Edad",
+    profileGender: "Género / pronombres",
+    profilePreferNot: "Prefiero no decirlo",
+    profileFemale: "Mujer / ella",
+    profileMale: "Hombre / él",
+    profileNonbinary: "No binario / elle",
+    profileCustom: "Personalizado",
+    profileCustomLabel: "Género / pronombres personalizados",
+    profileSkip: "Saltar",
+    profileSave: "Guardar perfil",
     konamiEyebrow: "SarcasmOS clasificado",
     konamiTitle: "Modo secreto",
     konamiSubtitle: "Bender ha encontrado el botón de música. Nadie está a salvo.",
@@ -1462,6 +1590,22 @@ function applyLanguage(language) {
   setText("#developerModeRequest", developerModeState?.developerRequested ? t.requestedAccess : t.requestAccess);
   setText("#developerModeSave", t.saveDeveloperApis);
   setText("#developerModeReset", t.resetDeveloperApis);
+  setText("#profileSetup h2", t.profileTitle);
+  setText("#profileSetup .helper-text", t.profileHelp);
+  setText("#profileSetupForm label:nth-of-type(1) span", t.profileName);
+  setText("#profileSetupForm label:nth-of-type(2) span", t.profileAge);
+  setText("#profileSetupForm label:nth-of-type(3) span", t.profileGender);
+  setText("#profileCustomGenderWrap span", t.profileCustomLabel);
+  setText("#profileSkip", t.profileSkip);
+  setText("#profileSave", t.profileSave);
+  if (profileGender) {
+    const options = profileGender.options;
+    if (options[0]) options[0].textContent = t.profilePreferNot;
+    if (options[1]) options[1].textContent = t.profileFemale;
+    if (options[2]) options[2].textContent = t.profileMale;
+    if (options[3]) options[3].textContent = t.profileNonbinary;
+    if (options[4]) options[4].textContent = t.profileCustom;
+  }
   setText("#supportPanel h2", t.supportTitle);
   setText("#supportPanel .support-popover-head .helper-text", t.supportHelp);
   setText(".support-launcher-text", t.supportLauncher);
@@ -1613,6 +1757,7 @@ function apiBaseCandidates() {
 
 function saveUserSession(user) {
   currentUser = user;
+  loadUserProfile();
   try {
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
   } catch (error) {
@@ -1642,6 +1787,7 @@ function clearUserSession() {
   const token = currentUser?.token;
   currentUser = null;
   currentQuota = null;
+  currentUserProfile = null;
   renderCreditMeter();
   adminConsoleOverride = false;
   developerViewOverride = false;
@@ -1675,6 +1821,7 @@ function renderAuthState() {
   const canUseDeveloper = isSignedIn && isAuthorized && developerViewOverride;
   const canUseApp = isSignedIn && isAuthorized && !developerViewOverride && (!isAdmin || !adminConsoleOverride);
   const canUseAdmin = isSignedIn && isAuthorized && isAdmin && adminConsoleOverride && !developerViewOverride;
+  renderProfileSetup();
   if (!canUseApp) {
     closeFacePanel();
     closeVoiceChatPanel();
@@ -2900,11 +3047,13 @@ function getAllHistoryItems() {
 }
 
 function getActiveChatContext() {
-  return [...chatHistory].reverse().map((entry) => ({
+  const context = [...chatHistory].reverse().map((entry) => ({
     question: entry.question || "",
     answer: entry.answer || "",
     timestamp: entry.timestamp || "",
   }));
+  const profileEntry = userProfileContextEntry();
+  return profileEntry ? [profileEntry, ...context] : context;
 }
 
 function renderAllHistoryViews() {
@@ -3942,6 +4091,18 @@ disconnectGoogleCalendar.addEventListener("click", disconnectCalendarTool);
 developerModeRequest?.addEventListener("click", requestDeveloperMode);
 developerModeForm?.addEventListener("submit", saveDeveloperModeSettings);
 developerModeReset?.addEventListener("click", resetDeveloperModeSettings);
+profileGender?.addEventListener("change", syncProfileCustomGenderVisibility);
+profileSkip?.addEventListener("click", () => saveUserProfile({ skipped: true }));
+profileSetupForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  saveUserProfile({
+    preferredName: profileDisplayName?.value || "",
+    age: profileAge?.value || "",
+    gender: profileGender?.value || "",
+    customGender: profileCustomGender?.value || "",
+    skipped: false,
+  });
+});
 
 clearHistory.addEventListener("click", async () => {
   const filenames = Array.from(new Set(chatHistory.map((entry) => getAudioFilename(entry.audioUrl)).filter(Boolean)));

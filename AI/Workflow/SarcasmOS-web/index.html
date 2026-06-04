@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SarcasmOS Home</title>
-    <link rel="stylesheet" href="style.css?v=20260604-edit-profile" />
+    <link rel="stylesheet" href="style.css?v=20260604-profile-extra-pronouns" />
     <link rel="stylesheet" href="assets/easteregg/konami-rickroll.css" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
@@ -32,6 +32,11 @@
             <option value="nonbinary">Non-binary / they</option>
             <option value="custom">Custom</option>
           </select>
+        </label>
+        <button id="profileMorePronouns" class="profile-more-pronouns" type="button">More pronouns you can use...</button>
+        <label id="profileExtraPronounsWrap" class="hidden">
+          <span>More pronouns</span>
+          <select id="profileExtraPronouns"></select>
         </label>
         <label id="profileCustomGenderWrap" class="hidden">
           <span>Custom gender / pronouns</span>
@@ -634,6 +639,6 @@
       </div>
     </section>
 
-    <script src="app.js?v=20260604-edit-profile"></script>
+    <script src="app.js?v=20260604-profile-extra-pronouns"></script>
   </body>
 </html>

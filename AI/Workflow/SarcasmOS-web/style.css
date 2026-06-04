@@ -194,6 +194,29 @@ audio {
   outline: none;
 }
 
+.profile-more-pronouns {
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+
+.profile-more-pronouns:hover,
+.profile-more-pronouns.active {
+  color: var(--accent-2);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+#profileExtraPronounsWrap select {
+  max-height: 220px;
+}
+
 .profile-actions {
   display: flex;
   justify-content: flex-end;

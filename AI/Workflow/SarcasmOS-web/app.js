@@ -7,6 +7,9 @@ const profileSetupForm = document.getElementById("profileSetupForm");
 const profileDisplayName = document.getElementById("profileDisplayName");
 const profileAge = document.getElementById("profileAge");
 const profileGender = document.getElementById("profileGender");
+const profileMorePronouns = document.getElementById("profileMorePronouns");
+const profileExtraPronounsWrap = document.getElementById("profileExtraPronounsWrap");
+const profileExtraPronouns = document.getElementById("profileExtraPronouns");
 const profileCustomGenderWrap = document.getElementById("profileCustomGenderWrap");
 const profileCustomGender = document.getElementById("profileCustomGender");
 const profileSkip = document.getElementById("profileSkip");
@@ -252,11 +255,43 @@ const PROFILE_GENDER_OPTIONS = [
   { value: "spreadsheet_victim", en: "Spreadsheet victim", es: "Víctima del Excel" },
   { value: "emotionally_buffering", en: "Emotionally buffering", es: "Cargando emociones" },
   { value: "404_gender_not_found", en: "404: gender not found", es: "404: género no encontrado" },
+  { value: "terms_and_conditions", en: "Terms and conditions nobody read", es: "Términos y condiciones que nadie leyó" },
+  { value: "expired_warranty", en: "Expired warranty", es: "Garantía caducada" },
+  { value: "premium_mistake", en: "Premium mistake", es: "Error premium" },
+  { value: "emotionally_bankrupt", en: "Emotionally bankrupt", es: "En bancarrota emocional" },
+  { value: "walking_red_flag", en: "Walking red flag", es: "Bandera roja con piernas" },
+  { value: "unpaid_intern", en: "Unpaid intern", es: "Becario sin cobrar" },
+  { value: "legal_liability", en: "Legal liability", es: "Responsabilidad legal" },
+  { value: "forbidden_patch_note", en: "Forbidden patch note", es: "Nota de parche prohibida" },
+  { value: "side_effect", en: "Side effect", es: "Efecto secundario" },
+  { value: "failed_captcha", en: "Failed CAPTCHA", es: "CAPTCHA fallido" },
+  { value: "low_battery_prophet", en: "Low-battery prophet", es: "Profeta con batería baja" },
+  { value: "morally_flexible", en: "Morally flexible", es: "Moralmente flexible" },
+  { value: "black_box_with_anxiety", en: "Black box with anxiety", es: "Caja negra con ansiedad" },
+  { value: "budget_villain", en: "Budget villain", es: "Villano de bajo presupuesto" },
+  { value: "fraudulent_wizard", en: "Fraudulent wizard", es: "Mago fraudulento" },
+  { value: "tax_deductible_trauma", en: "Tax-deductible trauma", es: "Trauma deducible de impuestos" },
+  { value: "sleep_deprivation_entity", en: "Sleep-deprivation entity", es: "Entidad de privación de sueño" },
+  { value: "cosmic_bad_decision", en: "Cosmic bad decision", es: "Mala decisión cósmica" },
+  { value: "existential_receipt", en: "Existential receipt", es: "Ticket existencial" },
+  { value: "haunted_terms_sheet", en: "Haunted terms sheet", es: "Hoja de condiciones encantada" },
+  { value: "lawsuit_speedrun", en: "Lawsuit speedrun", es: "Speedrun de demanda" },
+  { value: "bender_minion", en: "Bender's unpaid minion", es: "Secuaz no pagado de Bender" },
+  { value: "ethically_sourced_disaster", en: "Ethically sourced disaster", es: "Desastre de origen ético" },
+  { value: "clown_accountant", en: "Clown accountant", es: "Contable payaso" },
+  { value: "corporate_ritual", en: "Corporate ritual", es: "Ritual corporativo" },
+  { value: "meeting_that_should_email", en: "Meeting that should be an email", es: "Reunión que debió ser un email" },
+  { value: "sentient_debt", en: "Sentient debt", es: "Deuda consciente" },
+  { value: "doomscroll_knight", en: "Doomscroll knight", es: "Caballero del doomscroll" },
+  { value: "algorithmic_accident", en: "Algorithmic accident", es: "Accidente algorítmico" },
+  { value: "emotional_damage_dealer", en: "Emotional damage dealer", es: "Repartidor de daño emocional" },
   { value: "ask_bender", en: "Ask Bender, he knows everything badly", es: "Pregúntale a Bender, lo sabe todo mal" },
   { value: "bender_guess", en: "Let Bender guess badly", es: "Que Bender lo adivine mal" },
   { value: "chaos_mode", en: "Chaos mode", es: "Modo caos" },
   { value: "custom", en: "Custom", es: "Personalizado" },
 ];
+const PROFILE_BASIC_GENDER_VALUES = new Set(["", "female", "male", "nonbinary", "custom"]);
+const PROFILE_MORE_GENDER_VALUE = "__more__";
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
 const GOOGLE_TOOLS_CHECK_INTERVAL_MS = 30000;
 const BENDER_WARNING_AUDIO = [
@@ -929,7 +964,8 @@ function renderProfileSetup() {
       profileCustomGender.value = currentUserProfile?.customGender || "";
     }
     if (profileGender) {
-      profileGender.value = currentUserProfile?.gender || "";
+      const savedGender = currentUserProfile?.gender || "";
+      profileGender.value = PROFILE_BASIC_GENDER_VALUES.has(savedGender) ? savedGender : "";
       syncProfileCustomGenderVisibility();
     }
   }
@@ -953,16 +989,61 @@ function renderProfileGenderOptions() {
   if (!profileGender) {
     return;
   }
-  const selected = profileGender.value || currentUserProfile?.gender || "";
+  const saved = currentUserProfile?.gender || "";
+  const selected = profileGender.value || (PROFILE_BASIC_GENDER_VALUES.has(saved) ? saved : PROFILE_MORE_GENDER_VALUE);
   profileGender.innerHTML = "";
-  PROFILE_GENDER_OPTIONS.forEach((item) => {
+  PROFILE_GENDER_OPTIONS.filter((item) => PROFILE_BASIC_GENDER_VALUES.has(item.value)).forEach((item) => {
     const option = document.createElement("option");
     option.value = item.value;
     option.textContent = item[currentLanguage] || item.en;
     profileGender.appendChild(option);
   });
-  profileGender.value = PROFILE_GENDER_OPTIONS.some((item) => item.value === selected) ? selected : "";
+  if (!PROFILE_BASIC_GENDER_VALUES.has(selected) && selected !== PROFILE_MORE_GENDER_VALUE) {
+    profileGender.value = "";
+  } else if (selected === PROFILE_MORE_GENDER_VALUE) {
+    profileGender.value = "";
+  } else {
+    profileGender.value = selected;
+  }
+  renderProfileExtraPronounOptions(saved);
   syncProfileCustomGenderVisibility();
+}
+
+function renderProfileExtraPronounOptions(savedValue = currentUserProfile?.gender || "") {
+  if (!profileExtraPronouns) {
+    return;
+  }
+  const extras = PROFILE_GENDER_OPTIONS.filter((item) => item.value && !PROFILE_BASIC_GENDER_VALUES.has(item.value));
+  profileExtraPronouns.innerHTML = "";
+  extras.forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.value;
+    option.textContent = item[currentLanguage] || item.en;
+    profileExtraPronouns.appendChild(option);
+  });
+  profileExtraPronouns.value = extras.some((item) => item.value === savedValue) ? savedValue : extras[0]?.value || "";
+  const shouldShow = Boolean(savedValue && !PROFILE_BASIC_GENDER_VALUES.has(savedValue));
+  profileExtraPronounsWrap?.classList.toggle("hidden", !shouldShow);
+  profileMorePronouns?.classList.toggle("active", shouldShow);
+}
+
+function toggleProfileExtraPronouns() {
+  const isHidden = profileExtraPronounsWrap?.classList.contains("hidden");
+  profileExtraPronounsWrap?.classList.toggle("hidden", !isHidden);
+  profileMorePronouns?.classList.toggle("active", Boolean(isHidden));
+  if (isHidden) {
+    profileGender.value = "";
+    syncProfileCustomGenderVisibility();
+    profileExtraPronouns?.focus();
+  }
+}
+
+function selectedProfileGenderValue() {
+  const extraOpen = profileExtraPronounsWrap && !profileExtraPronounsWrap.classList.contains("hidden");
+  if (extraOpen && profileExtraPronouns?.value) {
+    return profileExtraPronouns.value;
+  }
+  return profileGender?.value || "";
 }
 
 function chooseHomeSubtitleIndex() {
@@ -1165,6 +1246,8 @@ const HOME_TRANSLATIONS = {
     profileName: "What should Bender call you?",
     profileAge: "Age",
     profileGender: "Gender / pronouns",
+    profileMorePronouns: "More pronouns you can use...",
+    profileExtraPronouns: "More pronouns",
     profilePreferNot: "Prefer not to say",
     profileFemale: "Female / she",
     profileMale: "Male / he",
@@ -1352,6 +1435,8 @@ const HOME_TRANSLATIONS = {
     profileName: "¿Cómo quieres que te llame Bender?",
     profileAge: "Edad",
     profileGender: "Género / pronombres",
+    profileMorePronouns: "Más pronombres que puedes usar...",
+    profileExtraPronouns: "Más pronombres",
     profilePreferNot: "Prefiero no decirlo",
     profileFemale: "Mujer / ella",
     profileMale: "Hombre / él",
@@ -1758,6 +1843,8 @@ function applyLanguage(language) {
   setText("#profileSetupForm label:nth-of-type(1) span", t.profileName);
   setText("#profileSetupForm label:nth-of-type(2) span", t.profileAge);
   setText("#profileSetupForm label:nth-of-type(3) span", t.profileGender);
+  setText("#profileMorePronouns", t.profileMorePronouns);
+  setText("#profileExtraPronounsWrap span", t.profileExtraPronouns);
   setText("#profileCustomGenderWrap span", t.profileCustomLabel);
   setText("#profileSkip", t.profileSkip);
   setText("#profileSave", t.profileSave);
@@ -4248,14 +4335,19 @@ disconnectGoogleCalendar.addEventListener("click", disconnectCalendarTool);
 developerModeRequest?.addEventListener("click", requestDeveloperMode);
 developerModeForm?.addEventListener("submit", saveDeveloperModeSettings);
 developerModeReset?.addEventListener("click", resetDeveloperModeSettings);
-profileGender?.addEventListener("change", syncProfileCustomGenderVisibility);
+profileGender?.addEventListener("change", () => {
+  profileExtraPronounsWrap?.classList.add("hidden");
+  profileMorePronouns?.classList.remove("active");
+  syncProfileCustomGenderVisibility();
+});
+profileMorePronouns?.addEventListener("click", toggleProfileExtraPronouns);
 profileSkip?.addEventListener("click", () => saveUserProfile({ skipped: true }));
 profileSetupForm?.addEventListener("submit", (event) => {
   event.preventDefault();
   saveUserProfile({
     preferredName: profileDisplayName?.value || "",
     age: profileAge?.value || "",
-    gender: profileGender?.value || "",
+    gender: selectedProfileGenderValue(),
     customGender: profileCustomGender?.value || "",
     skipped: false,
   });

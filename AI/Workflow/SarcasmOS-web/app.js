@@ -23,6 +23,7 @@ const userName = document.getElementById("userName");
 const userEmail = document.getElementById("userEmail");
 const signOutBtn = document.getElementById("signOutBtn");
 const languageToggle = document.getElementById("languageToggle");
+const editProfileInfo = document.getElementById("editProfileInfo");
 const openAdminConsole = document.getElementById("openAdminConsole");
 const adminView = document.getElementById("adminView");
 const developerView = document.getElementById("developerView");
@@ -141,6 +142,121 @@ const USER_PROFILE_STORAGE_KEY = "sarcasmos.userProfile";
 const SUPPORT_HISTORY_STORAGE_KEY = "sarcasmos.supportHistory";
 const HISTORY_STORAGE_VERSION = "v2";
 const AUDIO_REPLY_STORAGE_KEY = "sarcasmos.audioReplyEnabled";
+const PROFILE_GENDER_OPTIONS = [
+  { value: "", en: "Prefer not to say", es: "Prefiero no decirlo" },
+  { value: "female", en: "Woman / she", es: "Mujer / ella" },
+  { value: "male", en: "Man / he", es: "Hombre / él" },
+  { value: "nonbinary", en: "Non-binary / they", es: "No binario / elle" },
+  { value: "agender", en: "Agender", es: "Agénero" },
+  { value: "androgynous", en: "Androgynous", es: "Andrógino" },
+  { value: "androgyne", en: "Androgyne", es: "Andrógine" },
+  { value: "aporagender", en: "Aporagender", es: "Aporagénero" },
+  { value: "bigender", en: "Bigender", es: "Bigénero" },
+  { value: "cisgender", en: "Cisgender", es: "Cisgénero" },
+  { value: "cis_woman", en: "Cis woman", es: "Mujer cis" },
+  { value: "cis_man", en: "Cis man", es: "Hombre cis" },
+  { value: "demiboy", en: "Demiboy", es: "Demichico" },
+  { value: "demigirl", en: "Demigirl", es: "Demichica" },
+  { value: "demigender", en: "Demigender", es: "Demigénero" },
+  { value: "enby", en: "Enby", es: "Enby" },
+  { value: "femme", en: "Femme", es: "Femme" },
+  { value: "gender_apathic", en: "Gender apathic", es: "Género apático" },
+  { value: "gender_creative", en: "Gender creative", es: "Género creativo" },
+  { value: "gender_expansive", en: "Gender expansive", es: "Género expansivo" },
+  { value: "gender_nonconforming", en: "Gender non-conforming", es: "Género no conforme" },
+  { value: "gender_questioning", en: "Questioning gender", es: "Cuestionando mi género" },
+  { value: "gender_variant", en: "Gender variant", es: "Género variante" },
+  { value: "genderfluid", en: "Genderfluid", es: "Género fluido" },
+  { value: "genderflux", en: "Genderflux", es: "Genderflux" },
+  { value: "genderqueer", en: "Genderqueer", es: "Genderqueer" },
+  { value: "genderless", en: "Genderless", es: "Sin género" },
+  { value: "gendervoid", en: "Gendervoid", es: "Gendervoid" },
+  { value: "graygender", en: "Graygender", es: "Grisgénero" },
+  { value: "intergender", en: "Intergender", es: "Intergénero" },
+  { value: "intersex", en: "Intersex", es: "Intersex" },
+  { value: "masc", en: "Masc", es: "Masc" },
+  { value: "maverique", en: "Maverique", es: "Maverique" },
+  { value: "multigender", en: "Multigender", es: "Multigénero" },
+  { value: "neutrois", en: "Neutrois", es: "Neutrois" },
+  { value: "nonbinary_man", en: "Non-binary man", es: "Hombre no binario" },
+  { value: "nonbinary_woman", en: "Non-binary woman", es: "Mujer no binaria" },
+  { value: "pangender", en: "Pangender", es: "Pangénero" },
+  { value: "polygender", en: "Polygender", es: "Poligénero" },
+  { value: "trans", en: "Trans", es: "Trans" },
+  { value: "trans_woman", en: "Trans woman", es: "Mujer trans" },
+  { value: "trans_man", en: "Trans man", es: "Hombre trans" },
+  { value: "transfeminine", en: "Transfeminine", es: "Transfemenino" },
+  { value: "transmasculine", en: "Transmasculine", es: "Transmasculino" },
+  { value: "two_spirit", en: "Two-Spirit", es: "Two-Spirit" },
+  { value: "xenogender", en: "Xenogender", es: "Xenogénero" },
+  { value: "third_gender", en: "Third gender", es: "Tercer género" },
+  { value: "third_sex", en: "Third sex", es: "Tercer sexo" },
+  { value: "trigender", en: "Trigender", es: "Trigénero" },
+  { value: "omnigender", en: "Omnigender", es: "Omnigénero" },
+  { value: "aliagender", en: "Aliagender", es: "Aliagénero" },
+  { value: "ambigender", en: "Ambigender", es: "Ambigénero" },
+  { value: "autigender", en: "Autigender", es: "Autigénero" },
+  { value: "cassgender", en: "Cassgender", es: "Cassgénero" },
+  { value: "collgender", en: "Collgender", es: "Collgénero" },
+  { value: "condigender", en: "Condigender", es: "Condigénero" },
+  { value: "demiflux", en: "Demiflux", es: "Demiflux" },
+  { value: "demifluid", en: "Demifluid", es: "Demifluid" },
+  { value: "faegender", en: "Faegender", es: "Faegénero" },
+  { value: "fluidflux", en: "Fluidflux", es: "Fluidflux" },
+  { value: "genderfae", en: "Genderfae", es: "Genderfae" },
+  { value: "genderfaun", en: "Genderfaun", es: "Genderfaun" },
+  { value: "genderpunk", en: "Genderpunk", es: "Genderpunk" },
+  { value: "genderwitched", en: "Genderwitched", es: "Genderwitched" },
+  { value: "libragender", en: "Libragender", es: "Libragénero" },
+  { value: "librafeminine", en: "Librafeminine", es: "Librafemenino" },
+  { value: "libramasculine", en: "Libramasculine", es: "Libramasculino" },
+  { value: "nanogender", en: "Nanogender", es: "Nanogénero" },
+  { value: "novigender", en: "Novigender", es: "Novigénero" },
+  { value: "paragender", en: "Paragender", es: "Paragénero" },
+  { value: "proxvir", en: "Proxvir", es: "Proxvir" },
+  { value: "juxera", en: "Juxera", es: "Juxera" },
+  { value: "quoigender", en: "Quoigender", es: "Quoigénero" },
+  { value: "questioning_unsure", en: "Questioning / unsure", es: "Cuestionando / no lo tengo claro" },
+  { value: "prefer_labels_later", en: "Ask me later", es: "Pregúntame más tarde" },
+  { value: "same_as_google_name", en: "Just use my profile name", es: "Usa solo mi nombre de perfil" },
+  { value: "respectful_default", en: "Respectful neutral default", es: "Neutral respetuoso" },
+  { value: "ze_hir", en: "Ze / hir", es: "Ze / hir" },
+  { value: "xe_xem", en: "Xe / xem", es: "Xe / xem" },
+  { value: "ey_em", en: "Ey / em", es: "Ey / em" },
+  { value: "fae_faer", en: "Fae / faer", es: "Fae / faer" },
+  { value: "he_they", en: "He / they", es: "Él / elle" },
+  { value: "she_they", en: "She / they", es: "Ella / elle" },
+  { value: "they_he", en: "They / he", es: "Elle / él" },
+  { value: "they_she", en: "They / she", es: "Elle / ella" },
+  { value: "any_pronouns", en: "Any pronouns", es: "Cualquier pronombre" },
+  { value: "no_pronouns", en: "Use my name, no pronouns", es: "Usa mi nombre, sin pronombres" },
+  { value: "femboy", en: "Femboy", es: "Femboy" },
+  { value: "tomboy", en: "Tomboy", es: "Tomboy" },
+  { value: "therian", en: "Therian", es: "Therian" },
+  { value: "otherkin", en: "Otherkin", es: "Otherkin" },
+  { value: "robot", en: "Robot", es: "Robot" },
+  { value: "sarcastic_robot", en: "Sarcastic robot", es: "Robot sarcástico" },
+  { value: "sentient_toaster", en: "Sentient toaster", es: "Tostadora consciente" },
+  { value: "coffee_machine", en: "Coffee machine", es: "Cafetera con autoestima" },
+  { value: "chaotic_entity", en: "Chaotic entity", es: "Entidad caótica" },
+  { value: "final_boss", en: "Final boss", es: "Jefe final" },
+  { value: "npc_with_lore", en: "NPC with lore", es: "NPC con lore" },
+  { value: "side_quest_giver", en: "Side quest giver", es: "NPC que da misiones" },
+  { value: "walking_bug_report", en: "Walking bug report", es: "Bug con patas" },
+  { value: "premium_disaster", en: "Premium disaster", es: "Desastre premium" },
+  { value: "tax_fraud_goblin", en: "Tax fraud enthusiast", es: "Fan del fraude fiscal" },
+  { value: "bender_cousin", en: "Bender's suspicious cousin", es: "Primo sospechoso de Bender" },
+  { value: "meatbag", en: "Meatbag", es: "Saco de carne" },
+  { value: "carbon_based_problem", en: "Carbon-based problem", es: "Problema basado en carbono" },
+  { value: "wifi_ghost", en: "Wi-Fi ghost", es: "Fantasma del wifi" },
+  { value: "spreadsheet_victim", en: "Spreadsheet victim", es: "Víctima del Excel" },
+  { value: "emotionally_buffering", en: "Emotionally buffering", es: "Cargando emociones" },
+  { value: "404_gender_not_found", en: "404: gender not found", es: "404: género no encontrado" },
+  { value: "ask_bender", en: "Ask Bender, he knows everything badly", es: "Pregúntale a Bender, lo sabe todo mal" },
+  { value: "bender_guess", en: "Let Bender guess badly", es: "Que Bender lo adivine mal" },
+  { value: "chaos_mode", en: "Chaos mode", es: "Modo caos" },
+  { value: "custom", en: "Custom", es: "Personalizado" },
+];
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
 const GOOGLE_TOOLS_CHECK_INTERVAL_MS = 30000;
 const BENDER_WARNING_AUDIO = [
@@ -266,6 +382,7 @@ const audioSyncMap = new Map();
 let audioSyncEnabled = false;
 let currentUser = null;
 let currentUserProfile = null;
+let profileSetupForcedOpen = false;
 let supportConversation = [];
 let supportChats = [];
 let activeSupportChatId = "";
@@ -738,6 +855,7 @@ function saveUserProfile(profile) {
     skipped: Boolean(profile.skipped),
     updatedAt: new Date().toISOString(),
   };
+  profileSetupForcedOpen = false;
   try {
     localStorage.setItem(userProfileStorageKey(), JSON.stringify(currentUserProfile));
   } catch (error) {
@@ -756,6 +874,10 @@ function profileGenderLabel(profile = currentUserProfile) {
   }
   if (profile.gender === "custom") {
     return profile.customGender || "";
+  }
+  const option = PROFILE_GENDER_OPTIONS.find((item) => item.value === profile.gender);
+  if (option) {
+    return option[currentLanguage] || option.en;
   }
   const labels = {
     female: currentLanguage === "es" ? "mujer / ella" : "female / she",
@@ -791,18 +913,56 @@ function userProfileContextEntry() {
 }
 
 function renderProfileSetup() {
-  const shouldShow = Boolean(currentUser?.authorized && !profileIsComplete());
+  const shouldShow = Boolean(currentUser?.authorized && (profileSetupForcedOpen || !profileIsComplete()));
+  renderProfileGenderOptions();
   profileSetup?.classList.toggle("hidden", !shouldShow);
   profileSetup?.setAttribute("aria-hidden", shouldShow ? "false" : "true");
   document.body.classList.toggle("profile-setup-open", shouldShow);
-  if (shouldShow && profileDisplayName && !profileDisplayName.value) {
-    profileDisplayName.value = currentUser?.name?.split(" ")[0] || "";
+  if (shouldShow) {
+    if (profileDisplayName) {
+      profileDisplayName.value = currentUserProfile?.preferredName || currentUser?.name?.split(" ")[0] || "";
+    }
+    if (profileAge) {
+      profileAge.value = currentUserProfile?.age || "";
+    }
+    if (profileCustomGender) {
+      profileCustomGender.value = currentUserProfile?.customGender || "";
+    }
+    if (profileGender) {
+      profileGender.value = currentUserProfile?.gender || "";
+      syncProfileCustomGenderVisibility();
+    }
   }
+}
+
+function openProfileSetupEditor() {
+  if (!currentUser?.authorized) {
+    return;
+  }
+  profileSetupForcedOpen = true;
+  renderProfileSetup();
+  setTimeout(() => profileDisplayName?.focus(), 60);
 }
 
 function syncProfileCustomGenderVisibility() {
   const custom = profileGender?.value === "custom";
   profileCustomGenderWrap?.classList.toggle("hidden", !custom);
+}
+
+function renderProfileGenderOptions() {
+  if (!profileGender) {
+    return;
+  }
+  const selected = profileGender.value || currentUserProfile?.gender || "";
+  profileGender.innerHTML = "";
+  PROFILE_GENDER_OPTIONS.forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.value;
+    option.textContent = item[currentLanguage] || item.en;
+    profileGender.appendChild(option);
+  });
+  profileGender.value = PROFILE_GENDER_OPTIONS.some((item) => item.value === selected) ? selected : "";
+  syncProfileCustomGenderVisibility();
 }
 
 function chooseHomeSubtitleIndex() {
@@ -952,6 +1112,7 @@ const HOME_TRANSLATIONS = {
     serviceNotConfigured: "Service is not configured correctly",
     developerMode: "Developer Mode",
     developer: "Developer",
+    editProfile: "Edit profile",
     developerModeHelp: "Use your own API keys so your actions do not spend the shared weekly credits.",
     requestAccess: "Request access",
     requestedAccess: "Access requested",
@@ -1138,6 +1299,7 @@ const HOME_TRANSLATIONS = {
     serviceNotConfigured: "El servicio no está configurado correctamente",
     developerMode: "Modo Desarrollador",
     developer: "Desarrollador",
+    editProfile: "Editar perfil",
     developerModeHelp: "Usa tus propias API keys para que tus acciones no gasten créditos semanales compartidos.",
     requestAccess: "Solicitar acceso",
     requestedAccess: "Acceso solicitado",
@@ -1548,6 +1710,7 @@ function applyLanguage(language) {
   setText("#languageToggle", t.translate);
   setText("#adminLanguageToggle", t.translate);
   setText("#developerLanguageToggle", t.translate);
+  setText("#editProfileInfo", t.editProfile);
   setText("#openAdminConsole", t.admin);
   setText("#openDeveloperMode", t.developer);
   setText("#closeDeveloperMode", t.backHome);
@@ -1598,14 +1761,7 @@ function applyLanguage(language) {
   setText("#profileCustomGenderWrap span", t.profileCustomLabel);
   setText("#profileSkip", t.profileSkip);
   setText("#profileSave", t.profileSave);
-  if (profileGender) {
-    const options = profileGender.options;
-    if (options[0]) options[0].textContent = t.profilePreferNot;
-    if (options[1]) options[1].textContent = t.profileFemale;
-    if (options[2]) options[2].textContent = t.profileMale;
-    if (options[3]) options[3].textContent = t.profileNonbinary;
-    if (options[4]) options[4].textContent = t.profileCustom;
-  }
+  renderProfileGenderOptions();
   setText("#supportPanel h2", t.supportTitle);
   setText("#supportPanel .support-popover-head .helper-text", t.supportHelp);
   setText(".support-launcher-text", t.supportLauncher);
@@ -4057,6 +4213,7 @@ signOutBtn.addEventListener("click", clearUserSession);
 loginSignOutBtn.addEventListener("click", clearUserSession);
 adminSignOutBtn.addEventListener("click", clearUserSession);
 languageToggle?.addEventListener("click", toggleLanguage);
+editProfileInfo?.addEventListener("click", openProfileSetupEditor);
 adminLanguageToggle?.addEventListener("click", toggleLanguage);
 developerLanguageToggle?.addEventListener("click", toggleLanguage);
 homeBenderButton.addEventListener("click", annoyHomeBender);

@@ -4,11 +4,45 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SarcasmOS Home</title>
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="style.css?v=20260604-edit-profile" />
+    <link rel="stylesheet" href="assets/easteregg/konami-rickroll.css" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
     <div id="benderWarning" class="bender-warning hidden" role="alert" aria-live="assertive"></div>
+    <section id="profileSetup" class="profile-setup hidden" aria-hidden="true" aria-label="User profile setup">
+      <form id="profileSetupForm" class="profile-card">
+        <p class="eyebrow">SarcasmOS</p>
+        <h2>Before Bender judges you</h2>
+        <p class="helper-text">Tell the bot how to treat you. Optional, but useful.</p>
+        <label>
+          <span>What should Bender call you?</span>
+          <input id="profileDisplayName" type="text" maxlength="48" autocomplete="nickname" />
+        </label>
+        <label>
+          <span>Age</span>
+          <input id="profileAge" type="number" min="1" max="120" inputmode="numeric" />
+        </label>
+        <label>
+          <span>Gender / pronouns</span>
+          <select id="profileGender">
+            <option value="">Prefer not to say</option>
+            <option value="female">Female / she</option>
+            <option value="male">Male / he</option>
+            <option value="nonbinary">Non-binary / they</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+        <label id="profileCustomGenderWrap" class="hidden">
+          <span>Custom gender / pronouns</span>
+          <input id="profileCustomGender" type="text" maxlength="60" />
+        </label>
+        <div class="profile-actions">
+          <button id="profileSkip" class="ghost" type="button">Skip</button>
+          <button id="profileSave" class="accent" type="submit">Save profile</button>
+        </div>
+      </form>
+    </section>
     <section id="loginView" class="login-view" aria-label="Sign in">
       <div class="login-shell">
         <div id="loginBot" class="login-bot" aria-hidden="true">
@@ -65,6 +99,7 @@
             <small class="credit-detail">AI credits</small>
           </div>
           <button id="languageToggle" class="ghost" type="button">Traducir</button>
+          <button id="editProfileInfo" class="ghost" type="button">Perfil</button>
           <button id="openDeveloperMode" class="ghost" type="button">Developer</button>
           <button id="openAdminConsole" class="ghost hidden" type="button">Admin</button>
           <button id="signOutBtn" class="ghost" type="button">Sign out</button>
@@ -170,6 +205,31 @@
           <strong id="aiCreditsStatus" class="credit-status">Loading...</strong>
           <span id="aiCreditsDetail" class="helper-text credit-detail">Text costs less; long audio costs more.</span>
         </div>
+      </section>
+
+      <button id="supportLauncher" class="support-launcher hidden" type="button" aria-controls="supportPanel" aria-expanded="false" title="Support">
+        <span class="support-launcher-icon" aria-hidden="true">?</span>
+        <span class="support-launcher-text">Support</span>
+      </button>
+
+      <section id="supportPanel" class="support-panel hidden" aria-label="Support chat" aria-hidden="true">
+        <div class="support-popover-head">
+          <div>
+            <h2>Support chat</h2>
+            <p class="helper-text">Ask about SarcasmOS. If the assistant cannot solve it, it sends the request to support.</p>
+          </div>
+          <button id="supportClose" class="ghost support-close" type="button" aria-label="Close support">×</button>
+        </div>
+        <div class="support-chat-switcher">
+          <select id="supportChatSelect" aria-label="Support chats"></select>
+          <button id="supportNewChat" class="ghost" type="button">New chat</button>
+        </div>
+        <div id="supportMessages" class="support-messages" aria-live="polite"></div>
+        <form id="supportForm" class="support-form">
+          <input id="supportInput" type="text" placeholder="Ask for help" autocomplete="off" />
+          <button id="supportSend" class="accent" type="submit">Ask</button>
+        </form>
+        <p id="supportStatus" class="helper-text"></p>
       </section>
 
       <section id="googleToolsPanel" class="panel google-tools-panel slim-panel" aria-label="Google tools">
@@ -361,6 +421,17 @@
         <div id="adminUsersList" class="admin-users-list"></div>
       </section>
 
+      <section id="adminSupportPanel" class="panel admin-support-panel hidden" aria-label="Support requests">
+        <div class="history-header">
+          <div>
+            <h2>Support requests</h2>
+            <p class="helper-text">Questions escalated from the support chat.</p>
+          </div>
+          <button id="adminSupportRefresh" class="ghost" type="button">Refresh support</button>
+        </div>
+        <div id="adminSupportList" class="support-ticket-list"></div>
+      </section>
+
       <section class="panel api-health-panel">
         <div class="history-header">
           <div>
@@ -532,6 +603,37 @@
       <button id="closeVoiceChatView" class="accent">Back to home</button>
     </section>
 
-    <script src="app.js"></script>
+    <section id="konamiView" class="konami-view hidden" aria-hidden="true">
+      <div class="konami-panel">
+        <div class="konami-stage" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+          <div class="konami-eq">
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          </div>
+          <div class="konami-dance-cues">
+            <b>step</b>
+            <b>point</b>
+            <b>sway</b>
+            <b>kick</b>
+          </div>
+          <div class="konami-floor"></div>
+        </div>
+        <div class="konami-bender" aria-hidden="true">
+          <canvas id="konamiDanceCanvas" width="520" height="560"></canvas>
+        </div>
+        <p id="konamiEyebrow" class="eyebrow">SarcasmOS classified</p>
+        <h1 id="konamiTitle">Secret mode</h1>
+        <p id="konamiSubtitle" class="subtitle">Bender found the music button. Nobody is safe.</p>
+        <audio id="konamiAudioPlayer" controls loop preload="auto" src="assets/konami.wav"></audio>
+        <p id="konamiStatus" class="helper-text">Use the controls to pause, resume, or change the volume.</p>
+        <button id="closeKonamiView" class="accent" type="button">Back to home</button>
+      </div>
+    </section>
+
+    <script src="app.js?v=20260604-edit-profile"></script>
   </body>
 </html>

@@ -1,0 +1,76 @@
+{
+  "requests": [
+    {
+      "id": "2296fcec661a449da5b0d04878f29cd3",
+      "createdAt": "2026-06-03T20:07:02+00:00",
+      "userEmail": "sarcasmosmail@gmail.com",
+      "userName": "SarcasmOS penelargo",
+      "question": "tetanos",
+      "answer": "Esto requiere intervención humana. Trágico, pero estadísticamente inevitable.",
+      "needsHuman": true,
+      "page": "/",
+      "status": "open",
+      "emailSent": false
+    },
+    {
+      "id": "2c2fa4a5fa994d6d9fd858e3a24e45c4",
+      "createdAt": "2026-06-03T19:39:20+00:00",
+      "userEmail": "sarcasmosmail@gmail.com",
+      "userName": "SarcasmOS penelargo",
+      "question": "puta zorra",
+      "answer": "¡Vaya, qué lenguaje! Parece que tienes un problema que va más allá de mis capacidades robóticas. Tengo demasiados conocimientos para algo tan sencillo. Pregúntale a un humano.",
+      "needsHuman": true,
+      "page": "/",
+      "status": "open",
+      "emailSent": false
+    },
+    {
+      "id": "3a88a99db3a9465b9c7305694eb8b9fa",
+      "createdAt": "2026-06-03T19:39:03+00:00",
+      "userEmail": "sarcasmosmail@gmail.com",
+      "userName": "SarcasmOS penelargo",
+      "question": "puta zorra",
+      "answer": "{\"answer\":\"I'm not programmed to handle that kind of language, meatbag. Ask something useful, or I'll have to send you to human support. And trust me, you don't want that.\",\"needsHuman\":false}\n\":false}",
+      "needsHuman": true,
+      "page": "/",
+      "status": "open",
+      "emailSent": false
+    },
+    {
+      "id": "5a2a823a058849ccb999073fad4f53cd",
+      "createdAt": "2026-06-03T18:39:36+00:00",
+      "userEmail": "sarcasmosmail@gmail.com",
+      "userName": "SarcasmOS penelargo",
+      "question": "pegoku es gaym bloqueale",
+      "answer": "No tengo ni la más remota idea de qué es 'pegoku' ni por qué querría bloquearlo. Parece que mi guía de SarcasmOS no cubre ese tipo de... ¿problemas? Tengo demasiados conocimientos para algo tan sencillo. Pregúntale a un humano.",
+      "needsHuman": true,
+      "page": "/",
+      "status": "open",
+      "emailSent": false
+    },
+    {
+      "id": "7d0c232ec8464306bda4798cda830358",
+      "createdAt": "2026-06-02T16:17:28+00:00",
+      "userEmail": "sarcasmosmail@gmail.com",
+      "userName": "SarcasmOS penelargo",
+      "question": "tengo sida?",
+      "answer": "No tengo ni idea de qué hablas. Pregúntale a un humano.",
+      "needsHuman": true,
+      "page": "/",
+      "status": "open",
+      "emailSent": false
+    },
+    {
+      "id": "398e38d3666643869411571c20a5a2cf",
+      "createdAt": "2026-06-02T16:16:00+00:00",
+      "userEmail": "pegoku08@gmail.com",
+      "userName": "Pere Gomila",
+      "question": "reipte lo ultimo q dije",
+      "answer": "No tengo ni idea de lo que acabas de decir. ¿Podrías repetirlo en un idioma que mi diminuto cerebro pueda procesar, o mejor aún, pregúntale a un humano. Tengo demasiados conocimientos para algo tan sencillo. Pregúntale a un humano.",
+      "needsHuman": true,
+      "page": "/",
+      "status": "open",
+      "emailSent": false
+    }
+  ]
+}

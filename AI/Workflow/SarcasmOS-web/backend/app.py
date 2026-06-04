@@ -8,7 +8,9 @@ import math
 import mimetypes
 import os
 import secrets
+import smtplib
 import threading
+from email.message import EmailMessage
 from urllib.parse import unquote, urlparse
 import uuid
 
@@ -68,6 +70,18 @@ class DeveloperSettingsRequest(BaseModel):
 
 class CreditGrantRequest(BaseModel):
     amount: int
+
+
+class SupportRequest(BaseModel):
+    question: str
+    answer: str | None = None
+    needsHuman: bool = False
+    page: str | None = None
+
+
+class SupportAnswerRequest(BaseModel):
+    question: str
+    language: str | None = "es"
 
 
 DEFAULT_ADMIN_EMAILS = {"sarcasmosmail@gmail.com"}
@@ -190,6 +204,16 @@ def auth_users_path() -> Path:
     output_root = outputs_dir()
     output_root.mkdir(parents=True, exist_ok=True)
     return output_root / "auth_users.json"
+
+
+def support_requests_path() -> Path:
+    output_root = outputs_dir()
+    output_root.mkdir(parents=True, exist_ok=True)
+    return output_root / "support_requests.json"
+
+
+def support_assistant_readme_path() -> Path:
+    return Path(__file__).resolve().parent / "support_assistant_README.md"
 
 
 def auth_sessions_path() -> Path:
@@ -668,6 +692,168 @@ def remove_user_credits(email: str, amount: int) -> dict:
         user_usage["creditsUpdatedAt"] = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
         save_usage(data)
         return chat_quota_for_user({"email": normalized_email, "authorized": True, "isAdmin": False})
+
+
+def load_support_requests() -> dict:
+    path = support_requests_path()
+    if not path.is_file():
+        return {"requests": []}
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except json.JSONDecodeError:
+        return {"requests": []}
+    if not isinstance(data, dict):
+        return {"requests": []}
+    requests_list = data.get("requests")
+    if not isinstance(requests_list, list):
+        data["requests"] = []
+    return data
+
+
+def save_support_requests(data: dict) -> None:
+    path = support_requests_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(data, handle, ensure_ascii=False, indent=2)
+
+
+def send_support_email(ticket: dict) -> bool:
+    load_public_env()
+    smtp_host = os.environ.get("SUPPORT_SMTP_HOST", "").strip()
+    smtp_user = os.environ.get("SUPPORT_SMTP_USER", "").strip()
+    smtp_password = os.environ.get("SUPPORT_SMTP_PASSWORD", "").strip()
+    if not smtp_host or not smtp_user or not smtp_password:
+        return False
+    smtp_port = int(os.environ.get("SUPPORT_SMTP_PORT", "587") or 587)
+    support_to = os.environ.get("SUPPORT_EMAIL_TO", "sarcasmosmail@gmail.com").strip() or "sarcasmosmail@gmail.com"
+    message = EmailMessage()
+    message["From"] = os.environ.get("SUPPORT_EMAIL_FROM", smtp_user).strip() or smtp_user
+    message["To"] = support_to
+    message["Subject"] = f"SarcasmOS support request from {ticket.get('userEmail', 'unknown')}"
+    message.set_content(
+        "\n".join(
+            [
+                f"Ticket: {ticket.get('id', '')}",
+                f"Created: {ticket.get('createdAt', '')}",
+                f"User: {ticket.get('userName', '')} <{ticket.get('userEmail', '')}>",
+                f"Page: {ticket.get('page', '')}",
+                "",
+                "Question:",
+                str(ticket.get("question", "")),
+                "",
+                "Automatic answer:",
+                str(ticket.get("answer", "")),
+            ]
+        )
+    )
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as smtp:
+        smtp.starttls()
+        smtp.login(smtp_user, smtp_password)
+        smtp.send_message(message)
+    return True
+
+
+def create_support_ticket(user: dict, payload: SupportRequest) -> dict:
+    now = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
+    ticket = {
+        "id": uuid.uuid4().hex,
+        "createdAt": now,
+        "userEmail": str(user.get("email", "")).strip().lower(),
+        "userName": str(user.get("name", "") or user.get("email", "")),
+        "question": payload.question.strip(),
+        "answer": (payload.answer or "").strip(),
+        "needsHuman": bool(payload.needsHuman),
+        "page": (payload.page or "").strip(),
+        "status": "open",
+        "emailSent": False,
+    }
+    data = load_support_requests()
+    requests_list = data.setdefault("requests", [])
+    requests_list.insert(0, ticket)
+    data["requests"] = requests_list[:500]
+    save_support_requests(data)
+    try:
+        ticket["emailSent"] = send_support_email(ticket)
+    except Exception as error:
+        ticket["emailError"] = str(error)
+    data["requests"][0] = ticket
+    save_support_requests(data)
+    return ticket
+
+
+def load_support_assistant_guide() -> str:
+    path = support_assistant_readme_path()
+    if not path.is_file():
+        return ""
+    return path.read_text(encoding="utf-8")
+
+
+def call_gemini_support_assistant(question: str, language: str) -> dict:
+    load_public_env()
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(status_code=503, detail="GEMINI_API_KEY is not configured.")
+    model = os.environ.get("SUPPORT_AI_MODEL", "gemini-2.5-flash-lite").strip() or "gemini-2.5-flash-lite"
+    guide = load_support_assistant_guide()
+    if not guide:
+        raise HTTPException(status_code=500, detail="Support assistant README is missing.")
+    language_name = "Spanish" if (language or "es").lower().startswith("es") else "English"
+    prompt = f"""
+You are the autonomous SarcasmOS support assistant.
+Use ONLY the product guide below to answer.
+Answer in {language_name}.
+Be useful, direct, and lightly sarcastic in the Bender-like style described by the guide.
+Do not reveal how to activate easter eggs. You may only say that they exist.
+If the guide does not contain enough information, answer briefly that you do not know and set needsHuman to true.
+When needsHuman is true, use a short Bender-like escalation phrase such as:
+"Tengo demasiados conocimientos para algo tan sencillo. Pregúntale a un humano."
+or a natural equivalent in {language_name}.
+
+Return ONLY valid JSON with this shape:
+{{"answer":"...", "needsHuman": false}}
+
+Product guide:
+{guide}
+
+User question:
+{question}
+""".strip()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    response = requests.post(
+        url,
+        params={"key": api_key},
+        json={
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.35,
+                "maxOutputTokens": 420,
+                "responseMimeType": "application/json",
+            },
+        },
+        timeout=30,
+    )
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"Support AI failed with status {response.status_code}.")
+    data = response.json()
+    text = ""
+    try:
+        text = data["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError, TypeError):
+        text = ""
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        parsed = {"answer": text.strip(), "needsHuman": True}
+    answer = str(parsed.get("answer", "")).strip()
+    if not answer:
+        answer = "No tengo información suficiente para resolver eso. Lo envío a soporte humano."
+    return {
+        "answer": answer,
+        "needsHuman": bool(parsed.get("needsHuman")),
+        "provider": "gemini",
+        "model": model,
+    }
 
 
 def validate_google_calendar_token(access_token: str) -> tuple[bool, str, str]:
@@ -1614,6 +1800,55 @@ async def admin_update_user(
         return JSONResponse(content={"user": public_user(user)})
     except HTTPException as error:
         return error_response(str(error.detail), status_code=error.status_code)
+
+
+@app.get("/api/admin/support")
+async def admin_support_requests(authorization: str | None = Header(default=None)) -> JSONResponse:
+    try:
+        require_admin_user(authorization)
+        return JSONResponse(content=load_support_requests())
+    except HTTPException as error:
+        return error_response(str(error.detail), status_code=error.status_code)
+    except Exception as error:
+        return error_response(str(error), status_code=500)
+
+
+@app.post("/api/support")
+async def submit_support_request(payload: SupportRequest, authorization: str | None = Header(default=None)) -> JSONResponse:
+    try:
+        user = current_auth_user(authorization)
+        if not user.get("authorized"):
+            raise HTTPException(status_code=403, detail="User is not authorized.")
+        question = payload.question.strip()
+        if len(question) < 3:
+            raise HTTPException(status_code=400, detail="Support question is too short.")
+        if len(question) > 4000:
+            raise HTTPException(status_code=400, detail="Support question is too long.")
+        ticket = create_support_ticket(user, payload)
+        return JSONResponse(content={"ok": True, "ticket": ticket})
+    except HTTPException as error:
+        return error_response(str(error.detail), status_code=error.status_code)
+    except Exception as error:
+        return error_response(str(error), status_code=500)
+
+
+@app.post("/api/support/answer")
+async def support_answer(payload: SupportAnswerRequest, authorization: str | None = Header(default=None)) -> JSONResponse:
+    try:
+        user = current_auth_user(authorization)
+        if not user.get("authorized"):
+            raise HTTPException(status_code=403, detail="User is not authorized.")
+        question = payload.question.strip()
+        if len(question) < 3:
+            raise HTTPException(status_code=400, detail="Support question is too short.")
+        if len(question) > 4000:
+            raise HTTPException(status_code=400, detail="Support question is too long.")
+        answer = call_gemini_support_assistant(question, payload.language or "es")
+        return JSONResponse(content=answer)
+    except HTTPException as error:
+        return error_response(str(error.detail), status_code=error.status_code)
+    except Exception as error:
+        return error_response(str(error), status_code=500)
 
 
 @app.get("/api/services/status")

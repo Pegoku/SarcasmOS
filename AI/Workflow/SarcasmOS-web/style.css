@@ -147,6 +147,64 @@ audio {
   animation: warningIn 0.22s ease-out;
 }
 
+.profile-setup {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(3, 6, 10, 0.72);
+  backdrop-filter: blur(16px);
+}
+
+.profile-card {
+  width: min(520px, 100%);
+  display: grid;
+  gap: 14px;
+  padding: 28px;
+  border: 1px solid rgba(246, 196, 69, 0.24);
+  border-radius: 12px;
+  background:
+    linear-gradient(145deg, rgba(18, 25, 34, 0.96), rgba(5, 8, 12, 0.98)),
+    var(--panel);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.52);
+}
+
+.profile-card h2 {
+  margin-bottom: 0;
+  font-size: 1.35rem;
+}
+
+.profile-card label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.profile-card select,
+.profile-card input[type="number"] {
+  min-width: 0;
+  padding: 13px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: rgba(4, 8, 13, 0.78);
+  color: var(--text);
+  outline: none;
+}
+
+.profile-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+body.profile-setup-open {
+  overflow: hidden;
+}
+
 .login-view {
   min-height: calc(100vh - 104px);
   display: grid;
@@ -796,6 +854,205 @@ h2 {
   border-radius: 8px;
   padding: 18px;
   background: rgba(10, 15, 21, 0.82);
+}
+
+.support-launcher {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 80;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 10px 16px 10px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(246, 196, 69, 0.42);
+  color: #05070a;
+  background: linear-gradient(135deg, #ffd35f, #ff8b26);
+  box-shadow: 0 18px 36px rgba(255, 139, 38, 0.24), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+}
+
+.support-launcher:hover {
+  transform: translateY(-2px);
+}
+
+.support-launcher-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  color: #f8fbff;
+  background: #05070a;
+  font-size: 1.35rem;
+  font-family: var(--display);
+  line-height: 1;
+}
+
+.support-launcher-text {
+  font-weight: 900;
+}
+
+.support-panel {
+  position: fixed;
+  right: 24px;
+  bottom: 96px;
+  z-index: 81;
+  width: min(420px, calc(100vw - 32px));
+  display: grid;
+  grid-template-rows: auto auto minmax(180px, 340px) auto auto;
+  overflow: hidden;
+  border: 1px solid rgba(246, 196, 69, 0.25);
+  border-radius: 8px;
+  background: rgba(11, 16, 23, 0.96);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.44);
+  backdrop-filter: blur(18px);
+}
+
+.support-popover-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+  padding: 18px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(135deg, rgba(246, 196, 69, 0.13), rgba(255, 139, 38, 0.05));
+}
+
+.support-popover-head h2 {
+  margin: 0 0 4px;
+  font-size: 1.1rem;
+}
+
+.support-close {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.support-chat-switcher {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(5, 8, 12, 0.42);
+}
+
+.support-chat-switcher select {
+  min-width: 0;
+  height: 40px;
+  color: var(--text);
+  background: rgba(4, 7, 10, 0.88);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+}
+
+.support-chat-switcher button {
+  min-height: 40px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.support-messages {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 14px;
+  border: 0;
+  border-radius: 0;
+  background: rgba(5, 8, 12, 0.48);
+}
+
+.support-message {
+  max-width: min(760px, 92%);
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.support-message--user {
+  justify-self: end;
+  background: rgba(246, 196, 69, 0.14);
+  border-color: rgba(246, 196, 69, 0.24);
+}
+
+.support-message span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.support-message p {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.support-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.support-form input {
+  min-width: 0;
+}
+
+#supportStatus {
+  min-height: 18px;
+  margin: 0;
+  padding: 0 14px 14px;
+}
+
+.support-ticket-list {
+  display: grid;
+  gap: 12px;
+}
+
+.support-ticket {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.support-ticket-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.support-ticket-head div {
+  display: grid;
+  gap: 2px;
+}
+
+.support-ticket-head span,
+.support-ticket-head small {
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.support-ticket p {
+  margin: 0;
+  line-height: 1.45;
 }
 
 .section-heading {
@@ -1758,6 +2015,23 @@ h2 {
   align-self: flex-start;
 }
 
+.voice-chat-message.assistant.pending {
+  opacity: 0.82;
+}
+
+.voice-chat-message.assistant.pending p {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.voice-chat-message.assistant.failed {
+  border-color: rgba(255, 90, 90, 0.45);
+}
+
+.voice-chat-message.assistant.failed p {
+  color: #ff8f8f;
+}
+
 .voice-chat-message .label {
   margin-bottom: 6px;
   font-size: 0.78rem;
@@ -2030,6 +2304,352 @@ body.thinking-long .svg-mouth-group,
 
 body.face-open {
   overflow: hidden;
+}
+
+body.konami-open {
+  overflow: hidden;
+}
+
+.konami-view {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background:
+    radial-gradient(circle at 50% 28%, rgba(246, 196, 69, 0.16), transparent 30%),
+    linear-gradient(135deg, rgba(6, 10, 16, 0.96), rgba(12, 18, 25, 0.94));
+}
+
+.konami-panel {
+  width: min(680px, 100%);
+  display: grid;
+  gap: 18px;
+  padding: clamp(26px, 5vw, 46px);
+  border-radius: 18px;
+  border: 1px solid rgba(246, 196, 69, 0.32);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.025)),
+    rgba(10, 15, 21, 0.92);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.45), 0 0 34px rgba(246, 196, 69, 0.16);
+  text-align: center;
+  justify-items: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.konami-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 58px),
+    linear-gradient(180deg, transparent, rgba(246, 196, 69, 0.08));
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.4), transparent 70%);
+}
+
+.konami-stage {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.konami-stage span {
+  position: absolute;
+  top: -18%;
+  width: 170px;
+  height: 78%;
+  background: linear-gradient(180deg, rgba(246, 196, 69, 0.24), transparent 72%);
+  filter: blur(1px);
+  opacity: 0.48;
+  transform-origin: top center;
+  animation: konamiSpotlight 2.4s ease-in-out infinite;
+}
+
+.konami-stage span:nth-child(1) {
+  left: 4%;
+  transform: rotate(20deg);
+}
+
+.konami-stage span:nth-child(2) {
+  left: 28%;
+  animation-delay: -0.8s;
+  transform: rotate(8deg);
+}
+
+.konami-stage span:nth-child(3) {
+  right: 24%;
+  animation-delay: -1.3s;
+  transform: rotate(-8deg);
+}
+
+.konami-stage span:nth-child(4) {
+  right: 4%;
+  animation-delay: -0.4s;
+  transform: rotate(-20deg);
+}
+
+.konami-bender {
+  position: relative;
+  z-index: 1;
+  width: min(360px, 82vw);
+  aspect-ratio: 520 / 560;
+  margin-bottom: -4px;
+  filter: drop-shadow(0 20px 18px rgba(0, 0, 0, 0.42));
+}
+
+.konami-bender svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.konami-bender-dance {
+  animation: konamiDance 0.64s cubic-bezier(0.5, 0, 0.4, 1) infinite;
+  transform-box: fill-box;
+  transform-origin: 50% 74%;
+}
+
+.konami-head {
+  animation: konamiHeadBob 0.64s cubic-bezier(0.5, 0, 0.4, 1) infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.konami-shadow {
+  fill: rgba(0, 0, 0, 0.35);
+  animation: konamiShadowPulse 0.64s ease-in-out infinite;
+}
+
+.konami-body rect,
+.konami-head rect:first-child,
+.konami-arm path,
+.konami-arm circle,
+.konami-leg path {
+  fill: none;
+  stroke: #e8f0f8;
+  stroke-width: 12;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.konami-body rect {
+  fill: #aeb9bf;
+  stroke: #05070a;
+}
+
+.konami-body path {
+  fill: none;
+  stroke: rgba(5, 7, 10, 0.45);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+
+.konami-head rect:first-child {
+  fill: #e8f0f8;
+  stroke: #05070a;
+}
+
+.konami-head rect:nth-child(2) {
+  fill: #05070a;
+  stroke: none;
+}
+
+.konami-head ellipse,
+.konami-head rect:nth-child(6) {
+  fill: #f8fbff;
+  stroke: #05070a;
+  stroke-width: 7;
+}
+
+.konami-head rect:nth-child(4),
+.konami-head rect:nth-child(5) {
+  fill: #05070a;
+}
+
+.konami-pupil-left {
+  animation: konamiPupilLeft 0.72s steps(2, end) infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.konami-pupil-right {
+  animation: konamiPupilRight 0.72s steps(2, end) infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.konami-head path {
+  fill: none;
+  stroke: #05070a;
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+
+.konami-arm path,
+.konami-arm circle,
+.konami-leg path {
+  stroke: #aeb9bf;
+}
+
+.konami-arm-left {
+  animation: konamiArmLeft 0.64s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: 178px 244px;
+}
+
+.konami-arm-right {
+  animation: konamiArmRight 0.64s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: 342px 244px;
+}
+
+.konami-leg-left {
+  animation: konamiLegLeft 0.64s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: 216px 404px;
+}
+
+.konami-leg-right {
+  animation: konamiLegRight 0.64s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: 304px 404px;
+}
+
+.konami-sparkles {
+  fill: rgba(246, 196, 69, 0.78);
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 2;
+  animation: konamiSparkle 1.28s steps(2, end) infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.konami-panel h1 {
+  margin: 0;
+  font-size: clamp(2.4rem, 8vw, 5.8rem);
+  line-height: 0.95;
+}
+
+.konami-panel audio {
+  margin-top: 8px;
+}
+
+@keyframes konamiDance {
+  0% {
+    transform: translateX(-12px) translateY(0) rotate(-5deg) scaleY(1);
+  }
+  25% {
+    transform: translateX(0) translateY(-12px) rotate(0) scaleY(0.98);
+  }
+  50% {
+    transform: translateX(12px) translateY(0) rotate(5deg) scaleY(1);
+  }
+  75% {
+    transform: translateX(0) translateY(-10px) rotate(0) scaleY(0.98);
+  }
+  100% {
+    transform: translateX(-12px) translateY(0) rotate(-5deg) scaleY(1);
+  }
+}
+
+@keyframes konamiHeadBob {
+  0%, 100% {
+    transform: translateY(0) rotate(4deg);
+  }
+  50% {
+    transform: translateY(10px) rotate(-4deg);
+  }
+}
+
+@keyframes konamiArmLeft {
+  0%, 100% {
+    transform: rotate(-14deg) translateY(0);
+  }
+  50% {
+    transform: rotate(22deg) translateY(8px);
+  }
+}
+
+@keyframes konamiArmRight {
+  0%, 100% {
+    transform: rotate(14deg) translateY(0);
+  }
+  50% {
+    transform: rotate(-22deg) translateY(8px);
+  }
+}
+
+@keyframes konamiLegLeft {
+  0%, 100% {
+    transform: rotate(12deg) translateX(0);
+  }
+  50% {
+    transform: rotate(-13deg) translateX(-8px);
+  }
+}
+
+@keyframes konamiLegRight {
+  0%, 100% {
+    transform: rotate(-12deg) translateX(0);
+  }
+  50% {
+    transform: rotate(13deg) translateX(8px);
+  }
+}
+
+@keyframes konamiPupilLeft {
+  0%, 100% {
+    transform: translateX(-5px) rotate(8deg);
+  }
+  50% {
+    transform: translateX(5px) rotate(-8deg);
+  }
+}
+
+@keyframes konamiPupilRight {
+  0%, 100% {
+    transform: translateX(5px) rotate(-8deg);
+  }
+  50% {
+    transform: translateX(-5px) rotate(8deg);
+  }
+}
+
+@keyframes konamiShadowPulse {
+  0%, 100% {
+    transform: scaleX(1);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scaleX(0.82);
+    opacity: 0.22;
+  }
+}
+
+@keyframes konamiSparkle {
+  0%, 100% {
+    opacity: 0.28;
+    transform: scale(0.92) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08) rotate(12deg);
+  }
+}
+
+@keyframes konamiSpotlight {
+  0%, 100% {
+    opacity: 0.32;
+    transform: rotate(var(--spotlight-angle, 14deg)) translateX(-12px);
+  }
+  50% {
+    opacity: 0.58;
+    transform: rotate(calc(var(--spotlight-angle, 14deg) * -1)) translateX(12px);
+  }
 }
 
 #closeFaceView {
@@ -2384,6 +3004,19 @@ body.face-open {
   .admin-credit-grant {
     grid-column: 1 / -1;
     width: 100%;
+  }
+
+  .support-launcher {
+    right: 14px;
+    bottom: 14px;
+    min-height: 54px;
+  }
+
+  .support-panel {
+    right: 12px;
+    bottom: 78px;
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 96px);
   }
 
   .face-view {

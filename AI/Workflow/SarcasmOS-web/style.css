@@ -1987,7 +1987,6 @@ h2 {
   overscroll-behavior: contain;
   touch-action: pan-y;
   padding: 18px;
-  padding-right: 18px;
 }
 
 .voice-chat-messages,

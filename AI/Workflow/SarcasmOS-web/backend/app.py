@@ -82,6 +82,11 @@ class SupportRequest(BaseModel):
 class SupportAnswerRequest(BaseModel):
     question: str
     language: str | None = "es"
+    context: list[dict] | None = None
+
+
+class SupportAbuseRequest(BaseModel):
+    question: str | None = None
 
 
 DEFAULT_ADMIN_EMAILS = {"sarcasmosmail@gmail.com"}
@@ -113,6 +118,8 @@ TEXT_RESPONSE_EXTRA_CREDITS_PER_STEP = math.ceil(NET_TEXT_RESPONSE_EXTRA_CREDITS
 AUDIO_SECONDS_PER_CREDIT_STEP = 15
 AUDIO_CREDITS_PER_STEP = math.ceil(NET_AUDIO_CREDITS_PER_STEP * CREDIT_MARGIN_MULTIPLIER)
 GOOGLE_CALENDAR_CHECK_URL = "https://www.googleapis.com/calendar/v3/users/me/calendarList"
+SUPPORT_ABUSE_BAN_MINUTES = [30, 60, 120, 240, 480, 960, 1440]
+GLOBAL_ABUSE_BLOCK_DAYS = 7
 
 AUTH_USERS_LOCK = threading.RLock()
 AUTH_SESSIONS_LOCK = threading.RLock()
@@ -395,6 +402,10 @@ def public_user(user: dict) -> dict:
         "isAdmin": bool(user.get("isAdmin")),
         "developerMode": bool(user.get("developerMode")),
         "developerRequested": bool(user.get("developerRequested")),
+        "supportAbuseCount": int(user.get("supportAbuseCount", 0) or 0),
+        "supportBannedUntil": user.get("supportBannedUntil", ""),
+        "abuseBlockedUntil": user.get("abuseBlockedUntil", ""),
+        "abuseBlockedReason": user.get("abuseBlockedReason", ""),
         "createdAt": user.get("createdAt", ""),
         "lastLoginAt": user.get("lastLoginAt", ""),
     }
@@ -548,6 +559,110 @@ def credit_notice_for_quota(quota: dict) -> str:
     return ""
 
 
+def abuse_block_until(user: dict, key: str) -> dt.datetime | None:
+    value = str(user.get(key, "") or "")
+    return parse_utc_datetime(value)
+
+
+def active_abuse_block(user: dict, key: str) -> dt.datetime | None:
+    if user.get("isAdmin"):
+        return None
+    until = abuse_block_until(user, key)
+    if until and until > dt.datetime.now(dt.UTC):
+        return until
+    return None
+
+
+def format_block_message(until: dt.datetime, global_block: bool = False) -> str:
+    prefix = (
+        "Bloqueo semanal por abuso del soporte. No puedes usar chats ni funciones IA hasta"
+        if global_block
+        else "Has abusado del chat de asistencia. Vuelve a intentarlo después de"
+    )
+    return f"{prefix} {until.isoformat(timespec='seconds')}."
+
+
+def drain_user_weekly_credits(email: str) -> None:
+    normalized_email = email.strip().lower()
+    with USAGE_LOCK:
+        data = load_usage()
+        users = data.setdefault("users", {})
+        user_usage = users.setdefault(normalized_email, {})
+        period = week_key()
+        quota = chat_quota_for_user({"email": normalized_email, "authorized": True, "isAdmin": False})
+        user_usage[period] = {
+            "used": int(quota.get("limit", AUTHORIZED_WEEKLY_CREDIT_LIMIT) or AUTHORIZED_WEEKLY_CREDIT_LIMIT),
+            "lastCost": 0,
+            "lastDetail": "weekly abuse block",
+            "updatedAt": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+        }
+        save_usage(data)
+
+
+def register_support_abuse(user: dict, question: str = "") -> dict:
+    if user.get("isAdmin"):
+        return {
+            "ok": True,
+            "supportBannedUntil": "",
+            "abuseBlockedUntil": "",
+            "abuseCount": int(user.get("supportAbuseCount", 0) or 0),
+            "globalBlocked": False,
+        }
+    normalized_email = str(user.get("email", "")).strip().lower()
+    now = dt.datetime.now(dt.UTC)
+    with AUTH_USERS_LOCK:
+        data = load_auth_users()
+        users = data.setdefault("users", {})
+        stored = users.setdefault(normalized_email, user)
+        count = int(stored.get("supportAbuseCount", 0) or 0) + 1
+        stored["supportAbuseCount"] = count
+        stored["lastSupportAbuseAt"] = now.isoformat(timespec="seconds")
+        stored["lastSupportAbuseQuestion"] = str(question or "")[:500]
+        if count == 1:
+            until = now
+            stored["supportBannedUntil"] = ""
+            stored["abuseBlockedReason"] = "support_warning"
+            global_block = False
+            warning_only = True
+        elif count - 1 <= len(SUPPORT_ABUSE_BAN_MINUTES):
+            until = now + dt.timedelta(minutes=SUPPORT_ABUSE_BAN_MINUTES[count - 2])
+            stored["supportBannedUntil"] = until.isoformat(timespec="seconds")
+            stored["abuseBlockedReason"] = "support_abuse"
+            global_block = False
+            warning_only = False
+        else:
+            until = now + dt.timedelta(days=GLOBAL_ABUSE_BLOCK_DAYS)
+            stored["supportBannedUntil"] = until.isoformat(timespec="seconds")
+            stored["abuseBlockedUntil"] = until.isoformat(timespec="seconds")
+            stored["abuseBlockedReason"] = "repeated_support_abuse"
+            global_block = True
+            warning_only = False
+        save_auth_users(data)
+    if global_block:
+        drain_user_weekly_credits(normalized_email)
+    return {
+        "ok": True,
+        "supportBannedUntil": stored.get("supportBannedUntil", ""),
+        "abuseBlockedUntil": stored.get("abuseBlockedUntil", ""),
+        "abuseCount": count,
+        "warningOnly": warning_only,
+        "globalBlocked": global_block,
+    }
+
+
+def assert_not_globally_abuse_blocked(user: dict) -> None:
+    until = active_abuse_block(user, "abuseBlockedUntil")
+    if until:
+        raise HTTPException(status_code=423, detail=format_block_message(until, global_block=True))
+
+
+def assert_not_support_banned(user: dict) -> None:
+    assert_not_globally_abuse_blocked(user)
+    until = active_abuse_block(user, "supportBannedUntil")
+    if until:
+        raise HTTPException(status_code=429, detail=format_block_message(until, global_block=False))
+
+
 def chat_quota_for_user(user: dict) -> dict:
     period = week_key()
     if user.get("isAdmin"):
@@ -627,6 +742,7 @@ def consume_ai_credits(user: dict, cost: int, detail: str) -> dict:
 
 
 def assert_user_has_minimum_credits(user: dict) -> None:
+    assert_not_globally_abuse_blocked(user)
     if developer_mode_ready(user):
         return
     quota = chat_quota_for_user(user)
@@ -789,7 +905,22 @@ def load_support_assistant_guide() -> str:
     return path.read_text(encoding="utf-8")
 
 
-def call_gemini_support_assistant(question: str, language: str) -> dict:
+def format_support_context(context: list[dict] | None) -> str:
+    if not context:
+        return "No previous context."
+    lines = []
+    for item in context[-10:]:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role", "") or "unknown").strip()[:24]
+        text = str(item.get("text", "") or "").strip().replace("\n", " ")
+        if not text:
+            continue
+        lines.append(f"{role}: {text[:700]}")
+    return "\n".join(lines) if lines else "No previous context."
+
+
+def call_gemini_support_assistant(question: str, language: str, context: list[dict] | None = None) -> dict:
     load_public_env()
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not api_key:
@@ -799,22 +930,35 @@ def call_gemini_support_assistant(question: str, language: str) -> dict:
     if not guide:
         raise HTTPException(status_code=500, detail="Support assistant README is missing.")
     language_name = "Spanish" if (language or "es").lower().startswith("es") else "English"
+    context_text = format_support_context(context)
     prompt = f"""
 You are the autonomous SarcasmOS support assistant.
-Use ONLY the product guide below to answer.
+First classify the CURRENT user message before answering.
+Analyze the full recent conversation context, not only the last line. Detect if the current message is a continuation of abuse/off-topic behavior, a real follow-up to a SarcasmOS issue, or a harmless clarification.
+Use ONLY the product guide below to answer actual SarcasmOS support questions.
 Answer in {language_name}.
 Be useful, direct, and lightly sarcastic in the Bender-like style described by the guide.
 Do not reveal how to activate easter eggs. You may only say that they exist.
-If the guide does not contain enough information, answer briefly that you do not know and set needsHuman to true.
+Categories:
+- support: a real question about SarcasmOS, login, credits, audio, Google tools, developer mode, admin panel, chat history, sharing, or site errors.
+- off_topic: unrelated questions, jokes, random trivia, homework, personal questions, or requests outside SarcasmOS.
+- abuse: sexual comments, harassment, insults, trolling, vulgar bait, threats, or attempts to waste support time.
+- unknown_support: appears related to SarcasmOS but the guide does not contain enough information.
+If category is off_topic or abuse, do NOT escalate to a human. Set needsHuman to false and tell the user to ask a real SarcasmOS support question.
+If category is unknown_support, answer briefly that you do not know and set needsHuman to true.
+If the recent context shows previous warnings, sexual/vulgar bait, insults, or repeated unrelated messages, classify the current message as abuse unless it clearly returns to a real SarcasmOS support issue.
 When needsHuman is true, use a short Bender-like escalation phrase such as:
 "Tengo demasiados conocimientos para algo tan sencillo. Pregúntale a un humano."
 or a natural equivalent in {language_name}.
 
 Return ONLY valid JSON with this shape:
-{{"answer":"...", "needsHuman": false}}
+{{"category":"support", "answer":"...", "needsHuman": false}}
 
 Product guide:
 {guide}
+
+Recent support conversation:
+{context_text}
 
 User question:
 {question}
@@ -846,11 +990,15 @@ User question:
     except json.JSONDecodeError:
         parsed = {"answer": text.strip(), "needsHuman": True}
     answer = str(parsed.get("answer", "")).strip()
+    category = str(parsed.get("category", "support") or "support").strip().lower()
+    if category not in {"support", "off_topic", "abuse", "unknown_support"}:
+        category = "support"
     if not answer:
         answer = "No tengo información suficiente para resolver eso. Lo envío a soporte humano."
     return {
+        "category": category,
         "answer": answer,
-        "needsHuman": bool(parsed.get("needsHuman")),
+        "needsHuman": bool(parsed.get("needsHuman")) and category not in {"off_topic", "abuse"},
         "provider": "gemini",
         "model": model,
     }
@@ -968,6 +1116,10 @@ def upsert_auth_user(email: str, name: str, picture: str) -> dict:
             "isAdmin": bool(existing.get("isAdmin")) or is_bootstrap_admin,
             "developerMode": bool(existing.get("developerMode")),
             "developerRequested": bool(existing.get("developerRequested")),
+            "supportAbuseCount": int(existing.get("supportAbuseCount", 0) or 0),
+            "supportBannedUntil": existing.get("supportBannedUntil", ""),
+            "abuseBlockedUntil": existing.get("abuseBlockedUntil", ""),
+            "abuseBlockedReason": existing.get("abuseBlockedReason", ""),
             "createdAt": existing.get("createdAt") or now,
             "lastLoginAt": now,
         }
@@ -1819,6 +1971,7 @@ async def submit_support_request(payload: SupportRequest, authorization: str | N
         user = current_auth_user(authorization)
         if not user.get("authorized"):
             raise HTTPException(status_code=403, detail="User is not authorized.")
+        assert_not_support_banned(user)
         question = payload.question.strip()
         if len(question) < 3:
             raise HTTPException(status_code=400, detail="Support question is too short.")
@@ -1838,13 +1991,28 @@ async def support_answer(payload: SupportAnswerRequest, authorization: str | Non
         user = current_auth_user(authorization)
         if not user.get("authorized"):
             raise HTTPException(status_code=403, detail="User is not authorized.")
+        assert_not_support_banned(user)
         question = payload.question.strip()
         if len(question) < 3:
             raise HTTPException(status_code=400, detail="Support question is too short.")
         if len(question) > 4000:
             raise HTTPException(status_code=400, detail="Support question is too long.")
-        answer = call_gemini_support_assistant(question, payload.language or "es")
+        answer = call_gemini_support_assistant(question, payload.language or "es", payload.context)
         return JSONResponse(content=answer)
+    except HTTPException as error:
+        return error_response(str(error.detail), status_code=error.status_code)
+    except Exception as error:
+        return error_response(str(error), status_code=500)
+
+
+@app.post("/api/support/abuse")
+async def support_abuse(payload: SupportAbuseRequest, authorization: str | None = Header(default=None)) -> JSONResponse:
+    try:
+        user = current_auth_user(authorization)
+        if not user.get("authorized"):
+            raise HTTPException(status_code=403, detail="User is not authorized.")
+        result = register_support_abuse(user, payload.question or "")
+        return JSONResponse(content=result)
     except HTTPException as error:
         return error_response(str(error.detail), status_code=error.status_code)
     except Exception as error:

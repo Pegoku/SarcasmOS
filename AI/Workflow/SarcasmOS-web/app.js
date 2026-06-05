@@ -53,6 +53,7 @@ const supportLauncher = document.getElementById("supportLauncher");
 const supportClose = document.getElementById("supportClose");
 const supportChatSelect = document.getElementById("supportChatSelect");
 const supportNewChat = document.getElementById("supportNewChat");
+const supportResolveChat = document.getElementById("supportResolveChat");
 const supportMessages = document.getElementById("supportMessages");
 const supportForm = document.getElementById("supportForm");
 const supportInput = document.getElementById("supportInput");
@@ -144,6 +145,7 @@ const LANGUAGE_STORAGE_KEY = "sarcasmos.language";
 const USER_PROFILE_STORAGE_KEY = "sarcasmos.userProfile";
 const SUPPORT_HISTORY_STORAGE_KEY = "sarcasmos.supportHistory";
 const HISTORY_STORAGE_VERSION = "v2";
+const SUPPORT_HISTORY_STORAGE_VERSION = "v3";
 const AUDIO_REPLY_STORAGE_KEY = "sarcasmos.audioReplyEnabled";
 const PROFILE_GENDER_OPTIONS = [
   { value: "", en: "Prefer not to say", es: "Prefiero no decirlo" },
@@ -862,7 +864,7 @@ function userHistoryStorageKey() {
 
 function userSupportStorageKey() {
   const email = String(currentUser?.email || "anonymous").trim().toLowerCase();
-  return `${SUPPORT_HISTORY_STORAGE_KEY}.${HISTORY_STORAGE_VERSION}.${email}`;
+  return `${SUPPORT_HISTORY_STORAGE_KEY}.${SUPPORT_HISTORY_STORAGE_VERSION}.${email}`;
 }
 
 function userProfileStorageKey() {
@@ -1227,6 +1229,8 @@ const HOME_TRANSLATIONS = {
     supportPlaceholder: "Ask for help",
     supportSend: "Ask",
     supportNewChat: "New chat",
+    supportResolveChat: "Resolved",
+    supportResolvedDeleted: "Support chat resolved and deleted. Fresh chat ready.",
     supportWelcome: "Hi. Ask me about login, credits, audio, developer mode, Google tools, or sharing the page.",
     supportSent: "I sent this to support. A human can review it from the inbox.",
     supportSaved: "I saved this request for support. Email sending needs SMTP in backend/.env.",
@@ -1416,6 +1420,8 @@ const HOME_TRANSLATIONS = {
     supportPlaceholder: "Pide ayuda",
     supportSend: "Preguntar",
     supportNewChat: "Nuevo chat",
+    supportResolveChat: "Resuelto",
+    supportResolvedDeleted: "Chat de asistencia resuelto y borrado. Chat nuevo listo.",
     supportWelcome: "Hola. Pregúntame sobre login, créditos, audio, modo desarrollador, herramientas de Google o compartir la página.",
     supportSent: "He enviado esto a soporte. Un humano podrá revisarlo desde el correo.",
     supportSaved: "He guardado esta solicitud para soporte. Para enviar email hace falta SMTP en backend/.env.",
@@ -1473,6 +1479,165 @@ function tr(key) {
 
 function plural(count, singularKey, pluralKey) {
   return Number(count) === 1 ? tr(singularKey) : tr(pluralKey);
+}
+
+function normalizeSupportQuestion(question) {
+  return String(question || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function supportTimeWasteAnswer(question) {
+  const text = normalizeSupportQuestion(question);
+  const spanish = currentLanguage === "es";
+  const words = text.split(/\s+/).filter(Boolean);
+  const includesAny = (needles) => needles.some((needle) => text.includes(needle));
+  const sarcasmosTerms = [
+    "sarcasmos", "bender", "login", "loguin", "google", "credito", "credit", "audio", "voz", "voice",
+    "tts", "developer", "desarrollador", "api", "calendar", "calendario", "ngrok", "compartir",
+    "share", "admin", "panel", "chat", "soporte", "support", "ayuda", "cuenta", "usuario",
+  ];
+  const hasSarcasmosContext = includesAny(sarcasmosTerms);
+  const obviousNoise = [
+    "bloquea a", "bloqueale", "banear a", "banea a", "pegoku es", "es gay", "eres gay", "puto",
+    "puta", "mierda", "jilipollez", "gilipollez", "tonto", "idiota", "imbecil", "imbecil",
+    "chup", "fuck", "shit", "bitch", "kill yourself", "kys", "sexo", "porno", "polla",
+    "vagina", "culo", "pecho", "pechos", "teta", "tetas", "pito", "pitos", "tanga",
+    "bragas", "calzoncillo", "desnudo", "desnuda", "nazi", "hitler",
+  ];
+  const offTopic = [
+    "cuentame un chiste", "dime un chiste", "hazme un poema", "receta", "futbol", "minecraft",
+    "fortnite", "roblox", "novia", "novio", "deberes", "matematicas", "capital de",
+    "weather", "clima", "noticias", "bitcoin", "crypto",
+  ];
+  const repeatedChars = /(.)\1{8,}/.test(text);
+  const tooShortNoise = words.length <= 2 && !hasSarcasmosContext;
+  if (repeatedChars || tooShortNoise || includesAny(obviousNoise) || (includesAny(offTopic) && !hasSarcasmosContext)) {
+    const replies = spanish
+      ? [
+          "Eso no parece una duda sobre SarcasmOS. El soporte no es una papelera con wifi. Pregunta algo de login, créditos, audio, Google Tools, modo desarrollador o compartir la página.",
+          "No voy a gastar neuronas de silicio en eso. Si tienes un problema real con SarcasmOS, dispara. Si no, Bender ya ha archivado tu drama en la carpeta de tonterías.",
+          "Filtro anti-tocar-los-botones activado. Haz una pregunta sobre la página y te ayudo; para lo demás, consulta a una pared con disponibilidad.",
+        ]
+      : [
+          "That does not look like a SarcasmOS support question. Support is not a Wi-Fi trash bin. Ask about login, credits, audio, Google Tools, developer mode, or sharing the page.",
+          "I am not spending silicon brain cells on that. If you have a real SarcasmOS issue, ask it. Otherwise Bender filed your drama under nonsense.",
+          "Anti-time-wasting filter activated. Ask about the website and I will help; for everything else, consult a wall with availability.",
+        ];
+    return replies[Math.floor(Math.random() * replies.length)];
+  }
+  return "";
+}
+
+function supportQuestionLooksRelevant(question) {
+  const text = normalizeSupportQuestion(question);
+  return [
+    "sarcasmos", "bender", "login", "loguin", "google", "credito", "credit", "audio", "voz",
+    "developer", "desarrollador", "api", "calendar", "calendario", "ngrok", "compartir",
+    "share", "admin", "panel", "chat", "soporte", "support", "ayuda", "cuenta", "usuario",
+    "entrar", "iniciar", "sesion", "pagina", "web", "herramienta", "tools", "error", "falla",
+    "no funciona", "no puedo",
+  ].some((needle) => text.includes(needle));
+}
+
+function parseServerTime(value) {
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime()) ? date : null;
+}
+
+function supportBanMessage(data = {}) {
+  if (data.warningOnly) {
+    return currentLanguage === "es"
+      ? "Aviso: eso no era una duda de SarcasmOS. He borrado este chat para mantener la ayuda limpia. La próxima vez habrá baneo temporal, porque hasta Bender tiene límites legales."
+      : "Warning: that was not a SarcasmOS support question. I deleted this chat to keep support clean. Next time you get a temporary ban, because even Bender has legal limits.";
+  }
+  const global = Boolean(data.globalBlocked || data.abuseBlockedUntil);
+  const until = parseServerTime(data.abuseBlockedUntil || data.supportBannedUntil);
+  const untilText = until ? until.toLocaleString(currentLanguage === "es" ? "es-ES" : "en-US") : "";
+  const remainingMs = until ? Math.max(0, until.getTime() - Date.now()) : 0;
+  const remainingMinutes = Math.ceil(remainingMs / 60000);
+  const remainingText = remainingMinutes > 0
+    ? currentLanguage === "es"
+      ? `${remainingMinutes} min aprox.`
+      : `about ${remainingMinutes} min`
+    : currentLanguage === "es"
+      ? "muy poco"
+      : "very soon";
+  if (currentLanguage === "es") {
+    return global
+      ? `Te has ganado el modo estatua: sin chats, sin IA y sin créditos hasta ${untilText || "dentro de una semana"} (${remainingText}). Bender aplaudiría, pero no quiere gastar servo-motores.`
+      : `Chat de asistencia bloqueado hasta ${untilText || "más tarde"} (${remainingText}). He borrado este chat porque venía oliendo a pérdida de tiempo.`;
+  }
+  return global
+    ? `You unlocked statue mode: no chats, no AI, and no credits until ${untilText || "next week"} (${remainingText}). Bender would clap, but servo motors cost money.`
+    : `Support chat is blocked until ${untilText || "later"} (${remainingText}). I deleted this chat because it smelled like a waste of time.`;
+  if (currentLanguage === "es") {
+    return global
+      ? `Te has ganado el modo estatua: sin chats, sin IA y sin créditos hasta ${untilText || "dentro de una semana"}. Bender aplaudiría, pero no quiere gastar servo-motores.`
+      : `Chat de asistencia bloqueado hasta ${untilText || "más tarde"}. He borrado este chat porque venía oliendo a pérdida de tiempo.`;
+  }
+  return global
+    ? `You unlocked statue mode: no chats, no AI, and no credits until ${untilText || "next week"}. Bender would clap, but servo motors cost money.`
+    : `Support chat is blocked until ${untilText || "later"}. I deleted this chat because it smelled like a waste of time.`;
+}
+
+function clearActiveSupportChatWithMessage(message) {
+  supportChats = supportChats.filter((chat) => chat.id !== activeSupportChatId);
+  const chat = createSupportChat([{ role: "bot", text: message, timestamp: new Date().toISOString() }]);
+  supportChats.unshift(chat);
+  activeSupportChatId = chat.id;
+  supportConversation = chat.messages;
+  persistSupportConversation();
+  renderSupportConversation();
+}
+
+function deleteActiveSupportChat(message = tr("supportResolvedDeleted")) {
+  supportChats = supportChats.filter((chat) => chat.id !== activeSupportChatId);
+  const chat = createSupportChat([{ role: "bot", text: message, timestamp: new Date().toISOString() }]);
+  supportChats.unshift(chat);
+  activeSupportChatId = chat.id;
+  supportConversation = chat.messages;
+  if (supportStatus) {
+    supportStatus.textContent = message;
+  }
+  persistSupportConversation();
+  renderSupportConversation();
+}
+
+function currentSupportBanMessage() {
+  const until = parseServerTime(currentUser?.supportBannedUntil);
+  if (until && until > new Date()) {
+    return supportBanMessage({ supportBannedUntil: currentUser.supportBannedUntil });
+  }
+  const globalUntil = parseServerTime(currentUser?.abuseBlockedUntil);
+  if (globalUntil && globalUntil > new Date()) {
+    return supportBanMessage({ abuseBlockedUntil: currentUser.abuseBlockedUntil, globalBlocked: true });
+  }
+  return "";
+}
+
+async function reportSupportAbuse(question) {
+  const response = await fetch(`${API_BASE}/api/support/abuse`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ question }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || "Support abuse report failed.");
+  }
+  currentUser = {
+    ...currentUser,
+    supportAbuseCount: data.abuseCount ?? currentUser?.supportAbuseCount,
+    supportBannedUntil: data.warningOnly ? "" : data.supportBannedUntil || currentUser?.supportBannedUntil || "",
+    abuseBlockedUntil: data.abuseBlockedUntil || currentUser?.abuseBlockedUntil || "",
+    abuseBlockedReason: data.warningOnly ? "support_warning" : data.globalBlocked ? "repeated_support_abuse" : currentUser?.abuseBlockedReason || "",
+  };
+  saveUserSession(currentUser);
+  return data;
 }
 
 function supportKnowledgeAnswer(question) {
@@ -1704,27 +1869,45 @@ async function sendSupportTicket(question, answer, needsHuman) {
 }
 
 async function askAutonomousSupport(question) {
+  const context = supportConversation.slice(-10).map((item) => ({
+    role: item.role === "user" ? "user" : "support",
+    text: String(item.text || "").slice(0, 700),
+    timestamp: item.timestamp || "",
+  }));
   const response = await fetch(`${API_BASE}/api/support/answer`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({
       question,
       language: currentLanguage,
+      context,
     }),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.error || "Support AI unavailable.");
+    const error = new Error(data.error || "Support AI unavailable.");
+    error.status = response.status;
+    error.data = data;
+    throw error;
   }
   return {
     answer: String(data.answer || "").trim(),
     needsHuman: Boolean(data.needsHuman),
+    category: String(data.category || "support"),
     provider: data.provider || "",
   };
 }
 
 async function handleSupportSubmit(event) {
   event.preventDefault();
+  const activeBanMessage = currentSupportBanMessage();
+  if (activeBanMessage) {
+    clearActiveSupportChatWithMessage(activeBanMessage);
+    if (supportStatus) {
+      supportStatus.textContent = activeBanMessage;
+    }
+    return;
+  }
   const question = supportInput?.value.trim() || "";
   if (!question) {
     if (supportStatus) {
@@ -1734,6 +1917,22 @@ async function handleSupportSubmit(event) {
   }
   supportInput.value = "";
   addSupportConversationMessage("user", question);
+  const blockedAnswer = supportTimeWasteAnswer(question);
+  if (blockedAnswer) {
+    let banMessage = blockedAnswer;
+    try {
+      const abuse = await reportSupportAbuse(question);
+      banMessage = supportBanMessage(abuse);
+    } catch (error) {
+      console.warn("Support abuse report failed.", error);
+    }
+    clearActiveSupportChatWithMessage(banMessage);
+    if (supportStatus) {
+      supportStatus.textContent = banMessage;
+    }
+    renderAuthState();
+    return;
+  }
   if (supportStatus) {
     supportStatus.textContent = currentLanguage === "es" ? "Pensando..." : "Thinking...";
   }
@@ -1742,12 +1941,40 @@ async function handleSupportSubmit(event) {
   try {
     const aiAnswer = await askAutonomousSupport(question);
     answer = aiAnswer.answer;
+    if (["abuse", "off_topic"].includes(aiAnswer.category)) {
+      let banMessage = answer || supportTimeWasteAnswer(question);
+      try {
+        const abuse = await reportSupportAbuse(question);
+        banMessage = supportBanMessage(abuse);
+      } catch (abuseError) {
+        console.warn("Support abuse report failed.", abuseError);
+      }
+      clearActiveSupportChatWithMessage(banMessage);
+      if (supportStatus) {
+        supportStatus.textContent = banMessage;
+      }
+      renderAuthState();
+      return;
+    }
     needsHuman = aiAnswer.needsHuman || shouldEscalateSupportAnswer(answer);
     if (needsHuman && !shouldEscalateSupportAnswer(answer)) {
       answer = supportEscalationPhrase();
     }
   } catch (error) {
+    if (error.status === 429 || error.status === 423) {
+      answer = error.message || currentSupportBanMessage() || supportBanMessage({ supportBannedUntil: currentUser?.supportBannedUntil });
+      clearActiveSupportChatWithMessage(answer);
+      if (supportStatus) {
+        supportStatus.textContent = answer;
+      }
+      return;
+    }
     answer = supportKnowledgeAnswer(question);
+    if (!answer && !supportQuestionLooksRelevant(question)) {
+      answer = supportTimeWasteAnswer(question) || (currentLanguage === "es"
+        ? "Eso no va de SarcasmOS. Si quieres soporte, pregunta por la página; si quieres filosofía barata, Bender cobra aparte."
+        : "That is not about SarcasmOS. If you want support, ask about the website; if you want budget philosophy, Bender charges extra.");
+    }
   }
   if (answer) {
     addSupportConversationMessage("bot", answer);
@@ -1769,8 +1996,18 @@ async function handleSupportSubmit(event) {
     }
     return;
   }
-  const fallbackAnswer = supportEscalationPhrase();
+  const fallbackAnswer = supportQuestionLooksRelevant(question)
+    ? supportEscalationPhrase()
+    : (currentLanguage === "es"
+      ? "No parece una duda de SarcasmOS, así que no voy a molestar a un humano con esto. Pregunta por la web y me pongo útil, qué tragedia."
+      : "This does not look like a SarcasmOS question, so I am not bothering a human with it. Ask about the website and I will become useful, tragically.");
   addSupportConversationMessage("bot", fallbackAnswer);
+  if (!supportQuestionLooksRelevant(question)) {
+    if (supportStatus) {
+      supportStatus.textContent = "";
+    }
+    return;
+  }
   if (supportStatus) {
     supportStatus.textContent = currentLanguage === "es" ? "Enviando a soporte..." : "Sending to support...";
   }
@@ -1859,6 +2096,7 @@ function applyLanguage(language) {
     supportClose.setAttribute("aria-label", t.supportClose);
   }
   setText("#supportNewChat", t.supportNewChat);
+  setText("#supportResolveChat", t.supportResolveChat);
   setText("#supportSend", t.supportSend);
   if (supportInput) {
     supportInput.placeholder = t.supportPlaceholder;
@@ -2061,8 +2299,10 @@ function renderAuthState() {
   const isSignedIn = Boolean(currentUser?.email && currentUser?.token);
   const isAuthorized = Boolean(currentUser?.authorized);
   const isAdmin = Boolean(currentUser?.isAdmin);
-  const canUseDeveloper = isSignedIn && isAuthorized && developerViewOverride;
-  const canUseApp = isSignedIn && isAuthorized && !developerViewOverride && (!isAdmin || !adminConsoleOverride);
+  const globalBlockedUntil = parseServerTime(currentUser?.abuseBlockedUntil);
+  const isGloballyBlocked = Boolean(globalBlockedUntil && globalBlockedUntil > new Date() && !isAdmin);
+  const canUseDeveloper = isSignedIn && isAuthorized && !isGloballyBlocked && developerViewOverride;
+  const canUseApp = isSignedIn && isAuthorized && !isGloballyBlocked && !developerViewOverride && (!isAdmin || !adminConsoleOverride);
   const canUseAdmin = isSignedIn && isAuthorized && isAdmin && adminConsoleOverride && !developerViewOverride;
   renderProfileSetup();
   if (!canUseApp) {
@@ -2087,6 +2327,11 @@ function renderAuthState() {
   loginSignOutBtn?.classList.toggle("hidden", !isSignedIn);
   googleLoginButton?.classList.toggle("hidden", isSignedIn);
   openAdminConsole?.classList.toggle("hidden", !isAdmin);
+  if (isGloballyBlocked) {
+    showLoginError(supportBanMessage({ abuseBlockedUntil: currentUser.abuseBlockedUntil, globalBlocked: true }));
+  } else if (isSignedIn && isAuthorized) {
+    showLoginError("");
+  }
   if (canUseApp || canUseDeveloper) {
     startGoogleToolsMonitor();
     loadDeveloperModeStatus();
@@ -4417,6 +4662,7 @@ closeKonamiView?.addEventListener("click", closeKonamiPanel);
 supportLauncher?.addEventListener("click", () => setSupportWidgetOpen(!supportWidgetOpen));
 supportClose?.addEventListener("click", () => setSupportWidgetOpen(false));
 supportNewChat?.addEventListener("click", createNewSupportChat);
+supportResolveChat?.addEventListener("click", () => deleteActiveSupportChat());
 supportChatSelect?.addEventListener("change", () => {
   activeSupportChatId = supportChatSelect.value;
   getActiveSupportChat();

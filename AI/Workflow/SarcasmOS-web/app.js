@@ -26,6 +26,7 @@ const userName = document.getElementById("userName");
 const userEmail = document.getElementById("userEmail");
 const signOutBtn = document.getElementById("signOutBtn");
 const languageToggle = document.getElementById("languageToggle");
+const themeToggle = document.getElementById("themeToggle");
 const editProfileInfo = document.getElementById("editProfileInfo");
 const openAdminConsole = document.getElementById("openAdminConsole");
 const adminView = document.getElementById("adminView");
@@ -142,6 +143,7 @@ const HISTORY_STORAGE_KEY = "sarcasmos.chatHistory";
 const CHAT_FONT_STORAGE_KEY = "sarcasmos.voiceChatFontScale";
 const AUTH_STORAGE_KEY = "sarcasmos.googleUser";
 const LANGUAGE_STORAGE_KEY = "sarcasmos.language";
+const THEME_STORAGE_KEY = "sarcasmos.theme";
 const USER_PROFILE_STORAGE_KEY = "sarcasmos.userProfile";
 const SUPPORT_HISTORY_STORAGE_KEY = "sarcasmos.supportHistory";
 const HISTORY_STORAGE_VERSION = "v2";
@@ -740,6 +742,69 @@ function setRecordingState(label) {
   voiceChatRecordState.textContent = label;
 }
 
+function resolveSystemTheme() {
+  return window.matchMedia?.("(prefers-color-scheme: light)")?.matches ? "light" : "dark";
+}
+
+function getSavedTheme() {
+  try {
+    return localStorage.getItem(THEME_STORAGE_KEY) || "auto";
+  } catch (error) {
+    return "auto";
+  }
+}
+
+function applyTheme(theme = getSavedTheme()) {
+  const resolved = theme === "auto" ? resolveSystemTheme() : theme;
+  document.documentElement.dataset.theme = resolved;
+  document.documentElement.dataset.themeMode = theme;
+  if (themeToggle) {
+    themeToggle.textContent = resolved === "light" ? "☾" : "☼";
+    themeToggle.title = resolved === "light" ? "Modo oscuro" : "Modo claro";
+    themeToggle.setAttribute("aria-label", themeToggle.title);
+  }
+}
+
+function toggleTheme() {
+  const current = document.documentElement.dataset.theme || resolveSystemTheme();
+  const next = current === "light" ? "dark" : "light";
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, next);
+  } catch (error) {
+    console.warn("Failed to save theme.", error);
+  }
+  applyTheme(next);
+}
+
+function typeTextInto(element, text, speed = 9) {
+  if (!element) {
+    return;
+  }
+  const value = text || "";
+  element.classList.add("typewriting");
+  element.textContent = "";
+  let index = 0;
+  const step = () => {
+    index += Math.max(1, Math.ceil(value.length / 160));
+    element.textContent = value.slice(0, index);
+    if (index < value.length) {
+      window.setTimeout(step, speed);
+    } else {
+      element.classList.remove("typewriting");
+    }
+  };
+  step();
+}
+
+function setResultProcessing(isProcessing, label = tr("benderThinking")) {
+  for (const target of [answerOutput, faceAnswerOutput]) {
+    target?.classList.toggle("processing-output", isProcessing);
+    if (isProcessing) {
+      target.textContent = label;
+    }
+  }
+}
+
 function setLoading(isLoading, label, mode = "") {
   isBusy = isLoading;
   recordBtn.disabled = isLoading;
@@ -754,6 +819,7 @@ function setLoading(isLoading, label, mode = "") {
   voiceChatStopBtn.disabled = !mediaRecorder || !mediaRecorder.state || mediaRecorder.state === "inactive";
   voiceChatTextSend.disabled = isLoading;
   setRecordingState(label || (isLoading ? tr("thinking") : tr("idle")));
+  setResultProcessing(isLoading, label || tr("benderThinking"));
   setThinking(isLoading, mode);
 }
 
@@ -1132,6 +1198,7 @@ const HOME_TRANSLATIONS = {
     answer: "Answer",
     waitingAudio: "Waiting for audio...",
     waitingResponse: "Waiting for response...",
+    benderThinking: "Bender is thinking...",
     backHome: "Back to home",
     adminConsoleTitle: "Admin Console",
     adminConsoleSubtitle: "Manage users, inspect chat history, and check API health.",
@@ -1323,6 +1390,7 @@ const HOME_TRANSLATIONS = {
     answer: "Respuesta",
     waitingAudio: "Esperando audio...",
     waitingResponse: "Esperando respuesta...",
+    benderThinking: "Bender está pensando...",
     backHome: "Volver al inicio",
     adminConsoleTitle: "Panel de Admin",
     adminConsoleSubtitle: "Gestiona usuarios, revisa historiales de chat y comprueba la salud de la API.",
@@ -3505,6 +3573,28 @@ function createChat(title = "New chat", items = []) {
   };
 }
 
+function sessionDateLabel(chat) {
+  const raw = chat.updatedAt || chat.createdAt || "";
+  const date = raw ? new Date(raw) : null;
+  if (!date || Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const today = new Date();
+  const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const startDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((startToday - startDate) / 86400000);
+  if (diffDays === 0) {
+    return currentLanguage === "es" ? "Hoy" : "Today";
+  }
+  if (diffDays === 1) {
+    return currentLanguage === "es" ? "Ayer" : "Yesterday";
+  }
+  return date.toLocaleDateString(currentLanguage === "es" ? "es-ES" : "en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
 function getActiveChat() {
   let chat = chatSessions.find((session) => session.id === activeChatId);
   if (!chat) {
@@ -3613,6 +3703,52 @@ function failPendingTextMessage(message) {
   }
   pendingHistoryEntryId = "";
   pendingQuestion = "";
+}
+
+function updatePendingTextDelta(answerText) {
+  if (!pendingHistoryEntryId) {
+    return false;
+  }
+  const entry = chatHistory.find((item) => item.id === pendingHistoryEntryId);
+  if (!entry) {
+    return false;
+  }
+  entry.answer = answerText || "";
+  entry.pending = true;
+  syncActiveChat();
+  renderAllHistoryViews();
+  return true;
+}
+
+function finishPendingTextStream(answerText, audioUrl) {
+  if (!pendingHistoryEntryId) {
+    return false;
+  }
+  const entry = chatHistory.find((item) => item.id === pendingHistoryEntryId);
+  if (!entry) {
+    return false;
+  }
+  entry.answer = answerText || "";
+  entry.audioUrl = audioUrl ? `${API_BASE}${audioUrl}` : "";
+  entry.pending = false;
+  entry.timestamp = new Date().toLocaleTimeString();
+  pendingHistoryEntryId = "";
+  pendingQuestion = "";
+  syncActiveChat();
+  renderAllHistoryViews();
+  persistHistory();
+  return true;
+}
+
+function websocketUrl(path) {
+  const base = API_BASE
+    ? new URL(API_BASE, window.location.origin)
+    : new URL(window.location.origin);
+  base.protocol = base.protocol === "https:" ? "wss:" : "ws:";
+  base.pathname = path;
+  base.search = "";
+  base.hash = "";
+  return base.toString();
 }
 
 function drawKonamiRoundedRect(ctx, x, y, w, h, r) {
@@ -3963,8 +4099,9 @@ function updateResult(data) {
     faceTranscriptOutput.textContent = transcriptOutput.textContent;
   }
   if (data.answer !== undefined) {
-    answerOutput.textContent = data.answer || tr("emptyAnswer");
-    faceAnswerOutput.textContent = answerOutput.textContent;
+    const answerText = data.answer || tr("emptyAnswer");
+    typeTextInto(answerOutput, answerText);
+    typeTextInto(faceAnswerOutput, answerText);
   }
   if (data.answer && updatePendingTextMessage(data)) {
     // The text chat already rendered the user's message immediately.
@@ -4055,11 +4192,12 @@ function renderChatSessions() {
     .map((chat) => {
       const count = Array.isArray(chat.items) ? chat.items.length : 0;
       const activeClass = chat.id === activeChatId ? " active" : "";
+      const dateLabel = sessionDateLabel(chat);
       return `
         <div class="voice-chat-session" data-chat-id="${escapeHtml(chat.id)}">
           <button class="voice-chat-session-open${activeClass}" type="button">
             <span class="voice-chat-session-title">${escapeHtml(chat.title || tr("newChat"))}</span>
-            <span class="voice-chat-session-meta">${count} ${escapeHtml(plural(count, "messageSingular", "messagePlural"))}</span>
+            <span class="voice-chat-session-meta">${escapeHtml(dateLabel ? `${dateLabel} · ` : "")}${count} ${escapeHtml(plural(count, "messageSingular", "messagePlural"))}</span>
           </button>
           <button class="voice-chat-session-delete" type="button" aria-label="${escapeHtml(tr("delete"))}">${escapeHtml(tr("delete"))}</button>
         </div>
@@ -4394,6 +4532,9 @@ async function sendTextMessage(message, context = getActiveChatContext()) {
   showError("");
 
   try {
+    if (await sendTextMessageStreaming(message, context)) {
+      return;
+    }
     const response = await fetch(`${API_BASE}/api/chat/text`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -4415,6 +4556,121 @@ async function sendTextMessage(message, context = getActiveChatContext()) {
   } finally {
     setLoading(false, tr("idle"));
   }
+}
+
+function sendTextMessageStreaming(message, context = getActiveChatContext()) {
+  return new Promise((resolve) => {
+    if (!window.WebSocket || !currentUser?.token) {
+      resolve(false);
+      return;
+    }
+    let socket;
+    let settled = false;
+    let receivedAnyEvent = false;
+    let accumulatedAnswer = "";
+    const finish = (value) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      try {
+        socket?.close();
+      } catch (error) {
+        console.warn("Failed to close text stream socket.", error);
+      }
+      resolve(value);
+    };
+
+    try {
+      socket = new WebSocket(websocketUrl("/api/chat/text/stream"));
+    } catch (error) {
+      resolve(false);
+      return;
+    }
+
+    const fallbackTimer = window.setTimeout(() => {
+      if (!receivedAnyEvent) {
+        finish(false);
+      }
+    }, 4500);
+
+    socket.addEventListener("open", () => {
+      socket.send(JSON.stringify({
+        token: currentUser.token,
+        message,
+        context,
+        chatId: activeChatId,
+        synthesizeAudio: audioReplyEnabled,
+      }));
+    });
+
+    socket.addEventListener("message", (event) => {
+      receivedAnyEvent = true;
+      window.clearTimeout(fallbackTimer);
+      let data;
+      try {
+        data = JSON.parse(event.data);
+      } catch (error) {
+        return;
+      }
+
+      if (data.type === "status") {
+        setRecordingState(data.message || tr("benderThinking"));
+        return;
+      }
+
+      if (data.type === "answer_start") {
+        accumulatedAnswer = "";
+        answerOutput.textContent = "";
+        faceAnswerOutput.textContent = "";
+        updatePendingTextDelta("");
+        return;
+      }
+
+      if (data.type === "answer_delta") {
+        accumulatedAnswer += data.text || "";
+        answerOutput.textContent = accumulatedAnswer;
+        faceAnswerOutput.textContent = accumulatedAnswer;
+        updatePendingTextDelta(accumulatedAnswer);
+        return;
+      }
+
+      if (data.type === "done") {
+        const finalAnswer = data.answer || accumulatedAnswer;
+        accumulatedAnswer = finalAnswer;
+        answerOutput.textContent = finalAnswer || tr("emptyAnswer");
+        faceAnswerOutput.textContent = answerOutput.textContent;
+        finishPendingTextStream(finalAnswer, data.audio_url || "");
+        updateResult({
+          audio_url: data.audio_url || "",
+          quota: data.quota,
+          credit_notice: data.credit_notice || "",
+        });
+        finish(true);
+        return;
+      }
+
+      if (data.type === "error") {
+        const error = new Error(data.error || "Text stream failed");
+        failPendingTextMessage(error.message);
+        showError(error.message);
+        finish(true);
+      }
+    });
+
+    socket.addEventListener("error", () => {
+      finish(false);
+    });
+
+    socket.addEventListener("close", () => {
+      window.clearTimeout(fallbackTimer);
+      if (!settled && !receivedAnyEvent) {
+        finish(false);
+      } else if (!settled) {
+        finish(true);
+      }
+    });
+  });
 }
 
 async function refreshStatus() {
@@ -4545,6 +4801,7 @@ signOutBtn.addEventListener("click", clearUserSession);
 loginSignOutBtn.addEventListener("click", clearUserSession);
 adminSignOutBtn.addEventListener("click", clearUserSession);
 languageToggle?.addEventListener("click", toggleLanguage);
+themeToggle?.addEventListener("click", toggleTheme);
 editProfileInfo?.addEventListener("click", openProfileSetupEditor);
 adminLanguageToggle?.addEventListener("click", toggleLanguage);
 developerLanguageToggle?.addEventListener("click", toggleLanguage);
@@ -4746,6 +5003,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   setLookDirection("look-center");
   initLoginBotLook();
   initHomeBenderLook();
+  applyTheme();
   chooseHomeSubtitleIndex();
   loadLanguagePreference();
   await initAuth();
@@ -4758,6 +5016,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && currentUser?.authorized) {
     checkGoogleToolsConnection({ quiet: true });
+  }
+});
+
+window.matchMedia?.("(prefers-color-scheme: light)")?.addEventListener?.("change", () => {
+  if (getSavedTheme() === "auto") {
+    applyTheme("auto");
   }
 });
 

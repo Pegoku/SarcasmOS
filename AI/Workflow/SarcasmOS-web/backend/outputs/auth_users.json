@@ -8,8 +8,12 @@
       "isAdmin": true,
       "developerMode": true,
       "developerRequested": false,
+      "supportAbuseCount": 0,
+      "supportBannedUntil": "",
+      "abuseBlockedUntil": "",
+      "abuseBlockedReason": "",
       "createdAt": "2026-05-24T17:37:51+00:00",
-      "lastLoginAt": "2026-05-29T17:08:26+00:00"
+      "lastLoginAt": "2026-06-05T17:01:07+00:00"
     },
     "elpepox1348@gmail.com": {
       "email": "elpepox1348@gmail.com",

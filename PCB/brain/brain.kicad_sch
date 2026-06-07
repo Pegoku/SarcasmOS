@@ -19135,6 +19135,30 @@
 			)
 		)
 	)
+	(global_label "TmcEN"
+		(shape input)
+		(at 461.01 331.47 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "17e3740c-72a4-403d-9382-8dd41833997b")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 451.7958 331.47 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+	)
 	(global_label "PMODE0"
 		(shape input)
 		(at 426.72 130.81 180)
@@ -19471,30 +19495,6 @@
 			)
 		)
 	)
-	(global_label "EN"
-		(shape input)
-		(at 397.51 377.19 180)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "2afea8dc-30b7-483d-86e8-c70c745c06d2")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 392.0453 377.19 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-	)
 	(global_label "RSTn"
 		(shape input)
 		(at 408.94 102.87 0)
@@ -19708,6 +19708,30 @@
 					(size 1.27 1.27)
 				)
 				(justify right)
+			)
+		)
+	)
+	(global_label "TmcEN"
+		(shape input)
+		(at 375.92 377.19 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "3989ca03-e9e3-4eab-93ad-f9809b1d0dd5")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 385.1342 377.19 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
 			)
 		)
 	)
@@ -19999,19 +20023,19 @@
 			)
 		)
 	)
-	(global_label "EN"
+	(global_label "TmcEN"
 		(shape input)
-		(at 375.92 377.19 0)
+		(at 397.51 377.19 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left)
+			(justify right)
 		)
-		(uuid "47b4ffff-12a9-47f2-8b54-975fe7a0ffde")
+		(uuid "4975664b-9d69-4690-990c-a7fc87b3de45")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 381.3847 377.19 0)
+			(at 388.2958 377.19 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -20019,7 +20043,7 @@
 				(font
 					(size 1.27 1.27)
 				)
-				(justify left)
+				(justify right)
 			)
 		)
 	)
@@ -20623,7 +20647,7 @@
 			)
 		)
 	)
-	(global_label "EN"
+	(global_label "TmcEN"
 		(shape input)
 		(at 101.6 58.42 0)
 		(fields_autoplaced yes)
@@ -20635,7 +20659,7 @@
 		)
 		(uuid "704e2ab6-47c5-4081-a0a6-56727aee8d04")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 107.0647 58.42 0)
+			(at 110.8142 58.42 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -21148,30 +21172,6 @@
 					(size 1.27 1.27)
 				)
 				(justify left)
-			)
-		)
-	)
-	(global_label "EN"
-		(shape input)
-		(at 461.01 331.47 180)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "963762f0-5418-4e3b-b62d-c53eefedcd16")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 455.5453 331.47 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
 			)
 		)
 	)
@@ -39022,6 +39022,7 @@
 		)
 		(property "LCSC Part" "C77020"
 			(at 0 629.92 0)
+			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -42973,6 +42974,7 @@
 		)
 		(property "LCSC Part" "C77020"
 			(at 0 662.94 0)
+			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -45001,7 +45003,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Connector_PinSocket_2.54mm:PinSocket_1x12_P2.54mm_Vertical"
+		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_2x06_P2.54mm_Vertical"
 			(at 466.09 321.31 0)
 			(hide yes)
 			(show_name no)

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import http.client
+import select
+import socket
 import socketserver
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
@@ -47,6 +49,12 @@ class SarcasmOSProxyHandler(BaseHTTPRequestHandler):
 
     protocol_version = "HTTP/1.1"
 
+    def handle_one_request(self) -> None:
+        try:
+            super().handle_one_request()
+        except ConnectionResetError:
+            self.close_connection = True
+
     def do_GET(self) -> None:
         self.proxy_request()
 
@@ -69,6 +77,10 @@ class SarcasmOSProxyHandler(BaseHTTPRequestHandler):
         self.proxy_request()
 
     def proxy_request(self) -> None:
+        if self.is_websocket_request():
+            self.proxy_websocket()
+            return
+
         target_host, target_port = self.target_for_path(self.path)
         body = self.read_body()
         headers = self.forward_headers(target_host, target_port)
@@ -92,6 +104,55 @@ class SarcasmOSProxyHandler(BaseHTTPRequestHandler):
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(response_body)
+
+    def is_websocket_request(self) -> bool:
+        return self.headers.get("Upgrade", "").lower() == "websocket"
+
+    def proxy_websocket(self) -> None:
+        target_host, target_port = self.target_for_path(self.path)
+        try:
+            upstream = socket.create_connection((target_host, target_port), timeout=20)
+        except OSError as exc:
+            self.send_error(502, f"WebSocket target unavailable: {exc}")
+            return
+
+        try:
+            request_lines = [f"{self.command} {self.path} {self.request_version}\r\n"]
+            for key, value in self.headers.items():
+                if key.lower() == "host":
+                    continue
+                request_lines.append(f"{key}: {value}\r\n")
+            request_lines.append(f"Host: {target_host}:{target_port}\r\n")
+            request_lines.append(f"X-Forwarded-Host: {self.headers.get('Host', '')}\r\n")
+            request_lines.append("X-Forwarded-Proto: http\r\n")
+            request_lines.append("\r\n")
+            upstream.sendall("".join(request_lines).encode("iso-8859-1"))
+            self.tunnel_sockets(self.connection, upstream)
+        finally:
+            upstream.close()
+
+    def tunnel_sockets(self, client: socket.socket, upstream: socket.socket) -> None:
+        sockets = [client, upstream]
+        for item in sockets:
+            item.setblocking(False)
+        while True:
+            readable, _, errored = select.select(sockets, [], sockets, 60)
+            if errored:
+                return
+            if not readable:
+                return
+            for source in readable:
+                try:
+                    data = source.recv(65536)
+                except OSError:
+                    return
+                if not data:
+                    return
+                target = upstream if source is client else client
+                try:
+                    target.sendall(data)
+                except OSError:
+                    return
 
     def target_for_path(self, path: str) -> tuple[str, int]:
         parsed = urlsplit(path)

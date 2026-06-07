@@ -14,14 +14,24 @@ from email.message import EmailMessage
 from urllib.parse import unquote, urlparse
 import uuid
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi import Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 import requests
 
-from .bender_core import load_dotenv, process_audio_file, process_text_message, robot_status, service_status
+from .bender_core import (
+    BenderConfig,
+    generate_text_answer,
+    load_dotenv,
+    process_audio_file,
+    process_text_message,
+    robot_status,
+    service_status,
+    strip_tts_markup,
+    synthesize_speech,
+)
 
 
 class TextRequest(BaseModel):
@@ -87,6 +97,14 @@ class SupportAnswerRequest(BaseModel):
 
 class SupportAbuseRequest(BaseModel):
     question: str | None = None
+
+
+class StreamTextRequest(BaseModel):
+    message: str
+    context: list[dict] | None = None
+    chatId: str | None = None
+    synthesizeAudio: bool = True
+    token: str | None = None
 
 
 DEFAULT_ADMIN_EMAILS = {"sarcasmosmail@gmail.com"}
@@ -1559,6 +1577,92 @@ async def chat_text(payload: TextRequest, authorization: str | None = Header(def
         return error_response(str(error.detail), status_code=error.status_code)
     except Exception as error:
         return error_response(str(error), status_code=500)
+
+
+def stream_text_chunks(text: str, chunk_size: int = 12) -> list[str]:
+    clean = str(text or "")
+    if not clean:
+        return []
+    chunks: list[str] = []
+    index = 0
+    while index < len(clean):
+        end = min(len(clean), index + chunk_size)
+        next_space = clean.find(" ", end)
+        if next_space != -1 and next_space - index <= chunk_size + 12:
+            end = next_space + 1
+        chunks.append(clean[index:end])
+        index = end
+    return chunks
+
+
+@app.websocket("/api/chat/text/stream")
+async def chat_text_stream(websocket: WebSocket) -> None:
+    await websocket.accept()
+    try:
+        raw_payload = await websocket.receive_json()
+        payload = StreamTextRequest(**raw_payload)
+        token = (payload.token or websocket.query_params.get("token") or "").strip()
+        user = current_auth_user(f"Bearer {token}")
+        if not payload.message.strip():
+            raise HTTPException(status_code=400, detail="Message cannot be empty.")
+        assert_user_has_minimum_credits(user)
+
+        await websocket.send_json({"type": "status", "message": "Bender está pensando..."})
+        loop = asyncio.get_running_loop()
+        config = BenderConfig.from_env(developer_config_for_user(user))
+        answer_with_tts_markup = await loop.run_in_executor(
+            CHAT_EXECUTOR,
+            generate_text_answer,
+            payload.message,
+            config,
+            best_chat_context(payload.context, payload.chatId, user["email"]),
+            tool_context_for_user(user),
+        )
+        answer = strip_tts_markup(answer_with_tts_markup)
+        await websocket.send_json({"type": "answer_start"})
+
+        tts_future = None
+        if payload.synthesizeAudio:
+            await websocket.send_json({"type": "status", "message": "Generando audio mientras lees..."})
+            tts_future = loop.run_in_executor(CHAT_EXECUTOR, synthesize_speech, answer_with_tts_markup, config)
+
+        chunks = stream_text_chunks(answer)
+        delay = 0.045 if payload.synthesizeAudio else 0.028
+        if len(answer) > 1400:
+            delay = 0.026
+        for chunk in chunks:
+            await websocket.send_json({"type": "answer_delta", "text": chunk})
+            await asyncio.sleep(delay)
+
+        output_name = ""
+        if tts_future:
+            output_path = await tts_future
+            output_name = Path(output_path).name
+
+        quota = consume_ai_credits(
+            user,
+            *shared_credit_charge_for_user(user, "text", payload.synthesizeAudio, answer_text=answer)[:2],
+        )
+        await websocket.send_json(
+            {
+                "type": "done",
+                "answer": answer,
+                "audio_url": f"/api/audio/{output_name}" if output_name else "",
+                "quota": quota,
+                "credit_notice": credit_notice_for_quota(quota),
+            }
+        )
+    except WebSocketDisconnect:
+        return
+    except HTTPException as error:
+        await websocket.send_json({"type": "error", "error": str(error.detail), "status": error.status_code})
+    except Exception as error:
+        await websocket.send_json({"type": "error", "error": str(error), "status": 500})
+    finally:
+        try:
+            await websocket.close()
+        except RuntimeError:
+            pass
 
 
 @app.get("/api/audio/{filename}")

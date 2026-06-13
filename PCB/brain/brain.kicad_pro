@@ -78,6 +78,50 @@
       ],
       "drc_exclusions": [
         [
+          "annular_width|102890000|144820000|f6b9bd8c-c440-4984-9d9a-a6a5e556f05a|00000000-0000-0000-0000-000000000000",
+          "comes with the footprint, can't do nothing"
+        ],
+        [
+          "annular_width|81200000|65522500|18649952-00c3-4a36-aef6-6f149b047095|00000000-0000-0000-0000-000000000000",
+          "trust, it is safe"
+        ],
+        [
+          "annular_width|81203768|66925000|16ca82a5-0d04-442a-96ec-8edfc383c112|00000000-0000-0000-0000-000000000000",
+          "trust, it is safe"
+        ],
+        [
+          "annular_width|81250000|65072500|e81dbc12-54f6-4e10-86f9-591327587f97|00000000-0000-0000-0000-000000000000",
+          "trust, it is safe"
+        ],
+        [
+          "annular_width|81253768|67375000|836462ac-84ba-4ae0-a5f9-a0ccb74fdff6|00000000-0000-0000-0000-000000000000",
+          "trust, it is safe"
+        ],
+        [
+          "annular_width|81600000|65772500|f291175e-ce4a-43d3-b371-e02645c3c9ba|00000000-0000-0000-0000-000000000000",
+          "trust, it is safe"
+        ],
+        [
+          "annular_width|81603768|66675000|f98b37ef-300a-4a0f-ac13-efe14e7da9d6|00000000-0000-0000-0000-000000000000",
+          "trust, it is safe"
+        ],
+        [
+          "annular_width|81650000|65272500|3900f35b-4348-450a-9833-8625d51af39a|00000000-0000-0000-0000-000000000000",
+          "trust, it is safe"
+        ],
+        [
+          "annular_width|81653768|67175000|71e6cf30-a3a0-41a0-aa46-3b89bfa8934c|00000000-0000-0000-0000-000000000000",
+          "trust, it is safe"
+        ],
+        [
+          "annular_width|97110000|144820000|9fa72d31-f84f-48c7-b0a6-980f539d8163|00000000-0000-0000-0000-000000000000",
+          "comes with the footprint, can't do nothing"
+        ],
+        [
+          "clearance|59725000|75350000|6870497a-e85d-4920-a697-ed051130f2c4|198d9fd7-aa7e-42d7-92fa-a6181a8feeac",
+          "trust, it is safe"
+        ],
+        [
           "courtyards_overlap|56765000|147297847|2720bc53-523a-4855-a20f-519fac221755|99fd975a-b4a8-42de-bac2-492dcef0246f",
           "trust, it is safe"
         ],
@@ -114,7 +158,7 @@
         "clearance": "error",
         "connection_width": "warning",
         "copper_edge_clearance": "error",
-        "copper_sliver": "warning",
+        "copper_sliver": "error",
         "courtyards_overlap": "error",
         "creepage": "error",
         "diff_pair_gap_out_of_range": "error",

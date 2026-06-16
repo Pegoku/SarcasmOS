@@ -10610,6 +10610,17 @@
 				)
 			)
 		)
+		(property "LCSC Part" "C1663"
+			(at 58.42 138.43 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "e5586648-6130-4dbb-a40f-b3985bc1504f")
 		)
@@ -14012,6 +14023,17 @@
 		)
 		(property "Description" "Unpolarized capacitor"
 			(at 58.42 125.73 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part" "C1663"
+			(at 58.42 125.73 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)

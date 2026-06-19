@@ -1,0 +1,23 @@
+Old LCSC,Value,Footprint,Qty,Alternative LCSC,Verified alternative specs,Stock,Recommendation note
+C14663,0.1uF,0603,28,C696916,CAP CER 100nF 100V X7R 0603,in stock,Drop-in/equal-or-better voltage; verify 100V height acceptable
+C22775,100R,0603,4,C5123610,RES 100Ω ±0.1% 100mW 0603,in stock,Drop-in/tighter tolerance
+C25803,100k,0603,3,C2906980,RES 100kΩ ±1% 100mW 0603,in stock,Drop-in
+C22859,10R,0603,1,C5123582,RES 10Ω ±0.1% 1/10W 0603,in stock,Drop-in/tighter tolerance
+C25804,10k,0603,17,C2930027,RES 10kΩ ±5% 100mW 0603,in stock,Approved fallback: 5% tolerance accepted
+C57112,10nF,0603,4,C309036,CAP CER 10nF 50V X7R 0603,in stock,Drop-in
+C15850,10uF,0805,9,C5448891,CAP CER 10uF 25V X5R 0805,in stock,Drop-in
+C22865,12.4k,0603,1,C2482548,RES 12.4kΩ ±1% 100mW 0603,in stock,Drop-in
+C22935,1M,0603,3,C163869,RES 1MΩ ±1% 100mW 0603,in stock,Drop-in
+C21190,1k,0603,18,C112433,RES 1kΩ ±1% 100mW 0603,in stock,Drop-in
+C15849,1uF,0603,10,C106858,CAP CER 1uF 25V X7R 0603,in stock,Approved: 25V is acceptable
+C4190,2.2k,0603,1,C7336403,RES 2.2kΩ ±1% 200mW 0603,in stock,Drop-in/equal-or-better power
+C4184,20k,0603,5,C4333405,RES 20kΩ ±1% 100mW 0603,in stock,Drop-in
+C23345,22R,0603,15,C103434,RES 22Ω ±1% 100mW 0603,in stock,Drop-in
+C23138,330R,0603,2,C859100,RES 330Ω ±1% 100mW 0603,in stock,Drop-in
+C4216,33k,0603,1,C881242,RES 33kΩ ±1% 100mW 0603,in stock,Drop-in
+C23162,4.7k,0603,2,C2904521,RES 4.7kΩ ±1% 100mW 0603,in stock,Drop-in
+C25819,47k,0603,1,C2907042,RES 47kΩ ±1% 100mW 0603,in stock,Drop-in
+C23212,6.8k,0603,2,C103776,RES 6.8kΩ ±1% 100mW 0603,in stock,Drop-in
+C2071517,AP64501SP-13,SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.29x3mm_ThermalVias,1,C5248549,"AP64501QSP-13 automotive 5A buck, SO-8-EP",in stock,Needs approval: variant/package naming differs; likely family-compatible but verify footprint/pinout
+C18185545,MAX17049G+T10,WSON-8_L2.0-W2.0-P0.50-BL-EP0.9,1,C2682616,MAX17048G+T10 DFN-8-EP(2x2),in stock,"Needs approval: related fuel gauge, not same MPN"
+C82344,W25Q32JVSS,SOIC-8_5.3x5.3mm_P1.27mm,2,C97521,W25Q128JVSIQ 128Mbit SOIC-8-208mil,in stock,Approved: larger flash accepted

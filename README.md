@@ -6,6 +6,7 @@ The core idea is simple: take a smart assistant like Alexa or Google Home, then 
 This project focusses on the software and AI side of the assistant, but it also includes various hardware elements, like multiple PCBs, sensors, motors, and quite a bit of 3D printing.
 The goal is to have a memorable, sarcastic, and show-like assistant that can be used both for fun and real tasks like controlling smart home devices, playing music reviewing your agenda, or answering questions.
 
+
 ## Why Build This?
 
 Futurama is a classic tv show we love (and you should too). Bender is the most memorable character, and his sarcastic personality is a perfect fit for a voice assistant.
@@ -15,8 +16,6 @@ We wanted to build a voice assistant that is not just a plain, neutral box, but 
 ## Images
 
 ![SarcasmOS Poster](media/SarcasmOS.png)
-
-
 
 <details>
   <summary>CAD - click to expand</summary>
@@ -95,6 +94,9 @@ The language model prompt, personality, expected user input, and generated respo
 - Syncs audio playback with an animated face.
 - Stores memory of past interactions.
 - Has a web interface for chat, audio, history and configuration.
+- Has integrated speaker and microphone support.
+- Custom animations for the eyes and mouth.
+- _8k display mouth display_ (128x64 pixels = 8192 pixels).
 
 ## Current State
 
@@ -112,28 +114,11 @@ SarcasmOS already has a working software demo available [here](https://sarcasmos
 The hardware firmware is still not finished, but a minimal prototype is already available at [Code/(Brain, Eye, Mouth)](Code) respectively for each PCB.
 
 
-## Repository Structure
-
-```text
-Code/AI/Workflow/SarcasmOS-web/   Main web app + backend
-  Piannote/                 Voice clip separation and preparation
-  Qwen3-TTS-Bender/         TTS / voice experiments
-  xtts/                     Alternative TTS tests
-
-CAD/                        FreeCAD models for the head, base, and parts
-PCB/
-  eye/                      Eye PCB
-  mouth/                    Mouth PCB
-
-animationVisualizer/        Animation prototype
-README.md                   This document
-```
-
 ## Web Demo
 
 The quickest way to try SarcasmOS is to run the local web app.
 
-From `AI/Workflow/SarcasmOS-web`:
+From `Code/AI/Workflow/SarcasmOS-web`:
 
 ```bat
 start-all.bat
@@ -161,10 +146,10 @@ python -m uvicorn backend.app:app --host 0.0.0.0 --port 8001
 
 The backend reads environment variables from `.env` files, especially:
 
-- `AI/Workflow/SarcasmOS-web/backend/.env`
-- `AI/Workflow/.env`
+- `Code/AI/Workflow/SarcasmOS-web/backend/.env`
+- `Code/AI/Workflow/.env`
 
-Important variables:
+**Important variables**:
 
 - `HACK_CLUB_AI_KEY`, or separate provider keys.
 - `OPENROUTER_API_TOKEN` for the language model.
@@ -174,8 +159,8 @@ Important variables:
 
 More technical detail:
 
-- `AI/Workflow/SarcasmOS-web/README.md`
-- `AI/Workflow/SarcasmOS-web/PROJECT_OVERVIEW.md`
+- `Code/AI/Workflow/SarcasmOS-web/README.md`
+- `Code/AI/Workflow/SarcasmOS-web/PROJECT_OVERVIEW.md`
 
 ## Architecture
 
@@ -189,7 +174,7 @@ Web frontend
 FastAPI backend
       |
       +--> STT: speech to text
-      +--> LLM: Spanish personality response
+      +--> LLM: Spanish personality response + tools (e.g. google calendar)
       +--> TTS: spoken answer
       +--> Local JSON history
       |
@@ -197,34 +182,7 @@ FastAPI backend
 Audio + animated face + future hardware expressions
 ```
 
-## Hardware
-
-The physical goal is an expressive robotic head:
-
-- Eyes using round displays or dedicated visual modules.
-- Mouth with a separate display/board for animation.
-- Enclosure designed in FreeCAD.
-- KiCad PCBs for splitting the visual system into manufacturable modules.
-
-PCB production files live in `PCB/*/production`, including BOMs, placement files, netlists, and fabrication ZIPs.
-
-## Development Notes
-
-- The main web app does not use a frontend framework; it is static HTML, CSS, and JS.
-- The backend uses Python + FastAPI.
-- Generated audio and history are stored locally in `backend/outputs`.
-- Uploaded audio is stored in `backend/uploads`.
-- Some folders contain experiments, generated audio, and process artifacts rather than stable APIs.
-
-## Roadmap
-
-- Integrate real display control for the eyes and mouth.
-- Polish the Spanish personality prompt.
-- Improve generated audio and history cleanup.
-- Document the hardware assembly.
-- Separate source files, generated artifacts, and fabrication backups more cleanly.
-- Prepare a reproducible presentation demo.
-
 ## Credits
 
-Built as a physical AI assistant experiment for Hack Club / Fallout. SarcasmOS is not trying to be polite. It is trying to be memorable.
+Built as a physical AI assistant project for Hack Club / Fallout. 
+SarcasmOS is not trying to be polite. It is trying to be memorable.

@@ -1663,7 +1663,7 @@ h2 {
 .floating-credit {
   position: fixed;
   top: 18px;
-  right: 18px;
+  left: 18px;
   z-index: 30;
   min-width: 220px;
   max-width: min(320px, calc(100vw - 36px));

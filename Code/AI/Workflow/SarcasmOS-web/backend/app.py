@@ -57,6 +57,10 @@ class UserUpdateRequest(BaseModel):
     developerMode: bool | None = None
 
 
+class AdminSettingsUpdate(BaseModel):
+    autoAuth: bool | None = None
+
+
 class GoogleToolTokenRequest(BaseModel):
     accessToken: str
     expiresIn: int | None = None
@@ -270,19 +274,29 @@ def load_auth_users() -> dict:
     with AUTH_USERS_LOCK:
         path = auth_users_path()
         if not path.is_file():
-            return {"users": {}}
+            return {"users": {}, "settings": {}}
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
-            return {"users": {}}
+            return {"users": {}, "settings": {}}
         if not isinstance(data, dict) or not isinstance(data.get("users"), dict):
-            return {"users": {}}
+            return {"users": {}, "settings": {}}
+        if not isinstance(data.get("settings"), dict):
+            data["settings"] = {}
         return data
 
 
 def save_auth_users(data: dict) -> None:
     with AUTH_USERS_LOCK:
         auth_users_path().write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def auth_settings(data: dict | None = None) -> dict:
+    source = data if isinstance(data, dict) else load_auth_users()
+    settings = source.get("settings", {})
+    if not isinstance(settings, dict):
+        settings = {}
+    return {"autoAuth": bool(settings.get("autoAuth"))}
 
 
 def load_auth_sessions() -> dict:
@@ -1125,12 +1139,14 @@ def upsert_auth_user(email: str, name: str, picture: str) -> dict:
         data = load_auth_users()
         users = data.setdefault("users", {})
         existing = users.get(normalized_email, {})
+        is_new_user = not bool(existing)
+        settings = auth_settings(data)
         is_bootstrap_admin = normalized_email in admins
         user = {
             "email": normalized_email,
             "name": name or existing.get("name") or normalized_email,
             "picture": picture or existing.get("picture", ""),
-            "authorized": bool(existing.get("authorized")) or is_bootstrap_admin,
+            "authorized": bool(existing.get("authorized")) or is_bootstrap_admin or (is_new_user and settings["autoAuth"]),
             "isAdmin": bool(existing.get("isAdmin")) or is_bootstrap_admin,
             "developerMode": bool(existing.get("developerMode")),
             "developerRequested": bool(existing.get("developerRequested")),
@@ -1888,7 +1904,8 @@ async def reset_developer_mode_settings(authorization: str | None = Header(defau
 async def admin_list_users(authorization: str | None = Header(default=None)) -> JSONResponse:
     try:
         require_admin_user(authorization)
-        users = load_auth_users().get("users", {})
+        data = load_auth_users()
+        users = data.get("users", {})
         enriched = []
         for user in users.values():
             summary = chat_summary_for_email(user.get("email", ""))
@@ -1903,7 +1920,25 @@ async def admin_list_users(authorization: str | None = Header(default=None)) -> 
                     },
                 }
             )
-        return JSONResponse(content={"users": enriched})
+        return JSONResponse(content={"users": enriched, "settings": auth_settings(data)})
+    except HTTPException as error:
+        return error_response(str(error.detail), status_code=error.status_code)
+
+
+@app.patch("/api/admin/settings")
+async def admin_update_settings(
+    payload: AdminSettingsUpdate,
+    authorization: str | None = Header(default=None),
+) -> JSONResponse:
+    try:
+        require_admin_user(authorization)
+        with AUTH_USERS_LOCK:
+            data = load_auth_users()
+            settings = data.setdefault("settings", {})
+            if payload.autoAuth is not None:
+                settings["autoAuth"] = bool(payload.autoAuth)
+            save_auth_users(data)
+        return JSONResponse(content={"settings": auth_settings(data)})
     except HTTPException as error:
         return error_response(str(error.detail), status_code=error.status_code)
 

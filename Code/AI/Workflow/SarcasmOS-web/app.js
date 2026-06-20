@@ -42,6 +42,10 @@ const adminLanguageToggle = document.getElementById("adminLanguageToggle");
 const openSarcasmConsole = document.getElementById("openSarcasmConsole");
 const adminPanel = document.getElementById("adminPanel");
 const adminRefresh = document.getElementById("adminRefresh");
+const autoAuthToggle = document.getElementById("autoAuthToggle");
+const autoAuthTitle = document.getElementById("autoAuthTitle");
+const autoAuthHelp = document.getElementById("autoAuthHelp");
+const autoAuthState = document.getElementById("autoAuthState");
 const adminUsersList = document.getElementById("adminUsersList");
 const developerRequestsNotice = document.getElementById("developerRequestsNotice");
 const adminSupportPanel = document.getElementById("adminSupportPanel");
@@ -407,6 +411,7 @@ let developerModeState = null;
 let googleToolsMonitor = null;
 let currentQuota = null;
 let lastAdminUsers = [];
+let adminSettings = { autoAuth: false };
 let adminConsoleOverride = false;
 let developerViewOverride = false;
 let currentLanguage = "en";
@@ -1205,6 +1210,10 @@ const HOME_TRANSLATIONS = {
     sarcasmosHome: "SarcasmOS Home",
     adminPanelTitle: "Admin Panel",
     adminPanelHelp: "Authorize users and manage admin access.",
+    autoAuthTitle: "AutoAuth",
+    autoAuthHelp: "Automatically authorize new Google sign-ins.",
+    autoAuthOn: "On",
+    autoAuthOff: "Off",
     refreshUsers: "Refresh users",
     apiHealthTitle: "API Health",
     apiHealthHelp: "Endpoint checks for the backend services used by this console.",
@@ -1397,6 +1406,10 @@ const HOME_TRANSLATIONS = {
     sarcasmosHome: "Inicio de SarcasmOS",
     adminPanelTitle: "Panel de Administración",
     adminPanelHelp: "Autoriza usuarios y gestiona el acceso de administradores.",
+    autoAuthTitle: "AutoAuth",
+    autoAuthHelp: "Autoriza automáticamente los nuevos inicios de sesión con Google.",
+    autoAuthOn: "Activo",
+    autoAuthOff: "Inactivo",
     refreshUsers: "Refrescar usuarios",
     apiHealthTitle: "Salud de la API",
     apiHealthHelp: "Comprobaciones de endpoints para los servicios del backend usados por esta consola.",
@@ -2237,6 +2250,9 @@ function applyLanguage(language) {
   setText("#adminView .hero-copy .subtitle", t.adminConsoleSubtitle);
   setText("#adminPanel h2", t.adminPanelTitle);
   setText("#adminPanel .helper-text", t.adminPanelHelp);
+  setText("#autoAuthTitle", t.autoAuthTitle);
+  setText("#autoAuthHelp", t.autoAuthHelp);
+  renderAdminSettings(adminSettings);
   setText("#adminRefresh", t.refreshUsers);
   setText("#adminSupportPanel h2", t.adminSupportTitle);
   setText("#adminSupportPanel .helper-text", t.adminSupportHelp);
@@ -3163,9 +3179,54 @@ async function loadAdminUsers() {
       throw new Error(data.error || "Failed to load users.");
     }
     lastAdminUsers = data.users || [];
+    adminSettings = { autoAuth: Boolean(data.settings?.autoAuth) };
+    renderAdminSettings(adminSettings);
     renderAdminUsers(lastAdminUsers);
   } catch (error) {
     adminUsersList.innerHTML = `<p class="error">${escapeHtml(error.message || "Failed to load users.")}</p>`;
+  }
+}
+
+function renderAdminSettings(settings = adminSettings) {
+  adminSettings = { autoAuth: Boolean(settings?.autoAuth) };
+  if (autoAuthToggle) {
+    autoAuthToggle.checked = adminSettings.autoAuth;
+  }
+  if (autoAuthState) {
+    autoAuthState.textContent = adminSettings.autoAuth ? tr("autoAuthOn") : tr("autoAuthOff");
+  }
+}
+
+async function updateAdminSettings(patch) {
+  if (!currentUser?.isAdmin) {
+    return;
+  }
+  const previousSettings = { ...adminSettings };
+  adminSettings = { ...adminSettings, ...patch };
+  renderAdminSettings(adminSettings);
+  if (autoAuthToggle) {
+    autoAuthToggle.disabled = true;
+  }
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/settings`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(patch),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to update admin settings.");
+    }
+    adminSettings = { autoAuth: Boolean(data.settings?.autoAuth) };
+    renderAdminSettings(adminSettings);
+  } catch (error) {
+    adminSettings = previousSettings;
+    renderAdminSettings(adminSettings);
+    showError(error.message || "Failed to update admin settings.");
+  } finally {
+    if (autoAuthToggle) {
+      autoAuthToggle.disabled = false;
+    }
   }
 }
 
@@ -4830,6 +4891,7 @@ openAdminConsole.addEventListener("click", () => {
   loadAdminSupportRequests();
 });
 adminRefresh.addEventListener("click", loadAdminUsers);
+autoAuthToggle?.addEventListener("change", () => updateAdminSettings({ autoAuth: autoAuthToggle.checked }));
 adminSupportRefresh?.addEventListener("click", loadAdminSupportRequests);
 googleToolsRefresh.addEventListener("click", () => loadGoogleToolsStatus({ check: true }));
 connectGoogleCalendar.addEventListener("click", connectCalendarTool);

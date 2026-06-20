@@ -192,6 +192,7 @@ input[type="password"]:focus {
 :root[data-theme="light"] .console-home .status-card,
 :root[data-theme="light"] .face-callout,
 :root[data-theme="light"] .google-tool-row,
+:root[data-theme="light"] .admin-settings-bar,
 :root[data-theme="light"] .admin-user,
 :root[data-theme="light"] .admin-chat-item,
 :root[data-theme="light"] .support-panel,
@@ -242,6 +243,7 @@ input[type="password"]:focus {
 :root[data-theme="light"] .developer-request-badge,
 :root[data-theme="light"] .admin-notice,
 :root[data-theme="light"] .admin-user-credits,
+:root[data-theme="light"] .switch-control small,
 :root[data-theme="light"] .credit-amount,
 :root[data-theme="light"] .credit-detail {
   color: #8b5a00;
@@ -1706,6 +1708,103 @@ h2 {
   background:
     linear-gradient(90deg, rgba(246, 196, 69, 0.1), transparent 46%),
     rgba(255, 255, 255, 0.04);
+}
+
+.admin-settings-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 14px 0 16px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.admin-settings-bar strong {
+  display: block;
+  color: var(--text);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.9rem;
+  letter-spacing: 0;
+}
+
+.admin-settings-bar .helper-text {
+  margin: 4px 0 0;
+}
+
+.switch-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 104px;
+  justify-content: flex-end;
+  cursor: pointer;
+  user-select: none;
+}
+
+.switch-control input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.switch-control span {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 52px;
+  width: 52px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(4, 8, 13, 0.74);
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.switch-control span::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #e8f0f8;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+
+.switch-control input:checked + span {
+  border-color: rgba(246, 196, 69, 0.62);
+  background: rgba(246, 196, 69, 0.24);
+}
+
+.switch-control input:checked + span::after {
+  transform: translateX(22px);
+  background: #ffd765;
+}
+
+.switch-control input:focus-visible + span {
+  outline: 2px solid rgba(246, 196, 69, 0.75);
+  outline-offset: 3px;
+}
+
+.switch-control input:disabled + span,
+.switch-control input:disabled ~ small {
+  opacity: 0.56;
+  cursor: wait;
+}
+
+.switch-control small {
+  min-width: 42px;
+  color: #ffd765;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-align: right;
 }
 
 .admin-notice,
@@ -3231,6 +3330,16 @@ body.konami-open {
 
   .admin-user {
     grid-template-columns: 36px minmax(0, 1fr);
+  }
+
+  .admin-settings-bar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .switch-control {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .google-tool-row {

@@ -1,0 +1,31 @@
+menu "SarcasmOS Brain"
+
+config SARCASMOS_WIFI_SSID
+    string "Wi-Fi SSID"
+    default ""
+
+config SARCASMOS_WIFI_PASSWORD
+    string "Wi-Fi password"
+    default ""
+
+config SARCASMOS_ENABLE_WIFI
+    bool "Enable Wi-Fi station at boot"
+    default y
+
+config SARCASMOS_ENABLE_ETHERNET
+    bool "Enable W5500 Ethernet at boot"
+    default n
+
+config SARCASMOS_W5500_SPI_FREQ_HZ
+    int "W5500 SPI frequency"
+    default 20000000
+
+config SARCASMOS_I2C_FREQ_HZ
+    int "I2C bus frequency"
+    default 400000
+
+config SARCASMOS_HTTP_PORT
+    int "HTTP API port"
+    default 80
+
+endmenu

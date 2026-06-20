@@ -1,7 +1,43 @@
-.venv
+.venv/
+Code/.venv/
+
+# Local secrets and OAuth/API credentials
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+**/*secret*.json
+**/*credential*.json
+**/*developer_keys*.json
+**/google_tools.json
+**/auth_sessions.json
+*.7z
+*.zip
+*.rar
+
+# SarcasmOS local runtime state and private user data
+Code/AI/Workflow/SarcasmOS-web/.sarcasmos-run/
+Code/AI/Workflow/SarcasmOS-web/backend/outputs/auth_sessions.json
+Code/AI/Workflow/SarcasmOS-web/backend/outputs/auth_users.json
+Code/AI/Workflow/SarcasmOS-web/backend/outputs/google_tools.json
+Code/AI/Workflow/SarcasmOS-web/backend/outputs/developer_keys.json
+Code/AI/Workflow/SarcasmOS-web/backend/outputs/chat_usage.json
+Code/AI/Workflow/SarcasmOS-web/backend/outputs/histories/
+Code/AI/Workflow/SarcasmOS-web/backend/outputs/support_requests.json
+Code/AI/Workflow/SarcasmOS-web/backend/outputs/answer-*.wav
+Code/AI/Workflow/SarcasmOS-web/backend/outputs/recovered_config_backup/
+Code/AI/Workflow/SarcasmOS-web/backend/outputs/history_*backup*/
+Code/AI/Workflow/SarcasmOS-web/backend/uploads/
+
+# Legacy path kept for older checkouts
 AI/Workflow/SarcasmOS-web/.sarcasmos-run/
 AI/Workflow/SarcasmOS-web/backend/outputs/auth_sessions.json
+AI/Workflow/SarcasmOS-web/backend/outputs/auth_users.json
 AI/Workflow/SarcasmOS-web/backend/outputs/google_tools.json
 AI/Workflow/SarcasmOS-web/backend/outputs/developer_keys.json
 AI/Workflow/SarcasmOS-web/backend/outputs/chat_usage.json
 AI/Workflow/SarcasmOS-web/backend/outputs/histories/
+AI/Workflow/SarcasmOS-web/backend/outputs/support_requests.json
+AI/Workflow/SarcasmOS-web/backend/outputs/answer-*.wav

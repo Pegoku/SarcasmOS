@@ -1242,7 +1242,6 @@ def upsert_auth_user(email: str, name: str, picture: str) -> dict:
         data = load_auth_users()
         users = data.setdefault("users", {})
         existing = users.get(normalized_email, {})
-        is_new_user = not bool(existing)
         settings = auth_settings(data)
         is_bootstrap_admin = normalized_email in admins
         auto_auth = bool(settings["autoAuth"])

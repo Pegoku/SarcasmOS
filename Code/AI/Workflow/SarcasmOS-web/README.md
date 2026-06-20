@@ -126,6 +126,7 @@ Required environment variables go in `backend/.env`, copied from `backend/.env.e
 - `MINIMAX_VOICE_ID`
 - `GOOGLE_CLIENT_ID` for Google Sign-In. Create a Web OAuth client in Google Cloud and add `http://localhost:5173` as an authorized JavaScript origin.
 - `ADMIN_EMAILS` comma-separated Google accounts that start as authorized admins.
+- `AUTO_AUTH=true` to authorize every Google sign-in automatically and let users configure their own API endpoints/keys.
 - Optional: `OPENROUTER_BASE_URL`, `REPLICATE_BASE_URL`, `HF_TOKEN`
 
 For Google Tools such as Calendar, add these JavaScript origins to the same Google OAuth client:

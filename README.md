@@ -94,9 +94,9 @@ The language model prompt, personality, expected user input, and generated respo
 - Syncs audio playback with an animated face.
 - Stores memory of past interactions.
 - Has a web interface for chat, audio, history and configuration.
-- Has integrated speaker and microphone support.
+- Has integrated speaker and microphone.
 - Custom animations for the eyes and mouth.
-- _8k display mouth display_ (128x64 pixels = 8192 pixels).
+- _8k  mouth display_ (128x64 pixels = 8192 pixels).
 
 ## Current State
 

@@ -6,7 +6,7 @@ The core idea is simple: take a smart assistant like Alexa or Google Home, then 
 This project focusses on the software and AI side of the assistant, but it also includes various hardware elements, like multiple PCBs, sensors, motors, and quite a bit of 3D printing.
 The goal is to have a memorable, sarcastic, and show-like assistant that can be used both for fun and real tasks like controlling smart home devices, playing music reviewing your agenda, or answering questions.
 
-## Why Build This?
+## Why did we Build This?
 
 Futurama is a classic tv show we love (and you should too). Bender is the most memorable character, and his sarcastic personality is a perfect fit for a voice assistant.
 We wanted to build a voice assistant that is not just a plain, neutral box, but one that has a personality and you won't just use it to get things done, but also to have fun and be entertained

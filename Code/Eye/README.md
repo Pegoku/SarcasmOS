@@ -22,4 +22,4 @@ cmake --build build-right
 
 - I2C slave uses `GPIO4`/`GPIO5`.
 - Display SPI uses `GPIO17`/`GPIO18`/`GPIO19` plus `DC=GPIO20`, `RST=GPIO21`, `BL=GPIO22`.
-- The LH128 controller was not fully specified in the docs. This firmware uses a common 240x240 RGB565 ST7789-style init sequence, which should be adjusted if the final LH128 module uses a different controller.
+- LH128 display output uses the 240x240 RGB565 ST7789-compatible SPI init and rendering path.

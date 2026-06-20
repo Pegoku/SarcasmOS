@@ -1,8 +1,30 @@
 # SarcasmOS
 
-SarcasmOS is a personality-driven voice assistant built as a Hack Club / Fallout project. The core idea is simple: take a smart assistant like Alexa or Google Home, then give it a face, a voice, and an attitude. Instead of answering like a neutral corporate box, SarcasmOS replies in Spanish with dry humor, sarcasm, and animated expressions inspired by Bender.
+SarcasmOS is a personality-first voice assistant.
+The core idea is simple: take a smart assistant like Alexa or Google Home, then give it a face, a voice, and most importantly, a personality. Instead of answering like a neutral corporate box, SarcasmOS replies in Spanish with dry humor, sarcasm, and animated expressions inspired by [Bender](https://futurama.fandom.com/wiki/Bender).
 
-The project combines software, AI, mechanical design, and electronics: a robotic head with displays for the eyes and mouth, a local web interface for testing conversations, a FastAPI backend for voice/text processing, and custom PCBs for the visual hardware.
+This project focusses on the software and AI side of the assistant, but it also includes various hardware elements, like multiple PCBs, sensors, motors, and quite a bit of 3D printing.
+The goal is to have a memorable, sarcastic, and show-like assistant that can be used both for fun and real tasks like controlling smart home devices, playing music reviewing your agenda, or answering questions.
+
+## Why Build This?
+
+Futurama is a classic tv show we love (and you should too). Bender is the most memorable character, and his sarcastic personality is a perfect fit for a voice assistant.
+We wanted to build a voice assistant that is not just a plain, neutral box, but one that has a personality and you won't just use it to get things done, but also to have fun and be entertained 
+
+
+## Images
+
+![SarcasmOS Poster](media/SarcasmOS.png)
+
+
+
+<details>
+  <summary>CAD - click to expand</summary>
+  
+![CAD](media/CAD.png)
+
+</details>
+
 
 ## Language Scope
 
@@ -10,21 +32,21 @@ SarcasmOS is designed to work in Spanish only.
 
 The language model prompt, personality, expected user input, and generated responses are all tuned for Spanish. Other languages may work accidentally depending on the upstream model, but they are outside the intended behavior of this project.
 
-## What It Does
+## Features
 
-- Listens to audio or accepts text from a local web interface.
+- Listens to speech input.
 - Transcribes speech to text.
 - Generates Spanish answers with a sarcastic character voice.
 - Converts the answer back to speech.
 - Syncs audio playback with an animated face.
-- Stores chat history locally.
-- Includes command/status hooks intended for expressions, eye movement, and robot behavior.
+- Stores memory of past interactions.
+- Has a web interface for chat, audio, history and configuration.
 
 ## Current State
 
-SarcasmOS already has a working software demo:
+SarcasmOS already has a working software demo available [here](https://sarcasmos.pegoku.com/):
 
-- Static web UI in `AI/Workflow/SarcasmOS-web`.
+- Static web UI in `Code/AI/Workflow/SarcasmOS-web`.
 - Local FastAPI backend with chat, audio, history, and status endpoints.
 - STT, LLM, and TTS pipeline using configurable external services.
 - Console view, full face view, and voice chat view.
@@ -32,13 +54,14 @@ SarcasmOS already has a working software demo:
 - KiCad designs for the eye and mouth boards.
 - Voice synthesis/cloning experiments and clip preparation tools.
 
-The hardware is still in development. This repository contains design, fabrication, and test files, but it should not be treated as a finished product yet.
+
+The hardware firmware is still not finished, but a minimal prototype is already available at [Code/(Brain, Eye, Mouth)](Code) respectively for each PCB.
+
 
 ## Repository Structure
 
 ```text
-AI/
-  Workflow/SarcasmOS-web/   Main web app + backend
+Code/AI/Workflow/SarcasmOS-web/   Main web app + backend
   Piannote/                 Voice clip separation and preparation
   Qwen3-TTS-Bender/         TTS / voice experiments
   xtts/                     Alternative TTS tests

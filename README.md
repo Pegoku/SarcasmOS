@@ -25,6 +25,60 @@ We wanted to build a voice assistant that is not just a plain, neutral box, but 
 
 </details>
 
+### Brain PCB
+
+![3d brain pcb](media/3d-brain.png)
+
+<details>
+  <summary>Brain PCB schematic - click to expand</summary>
+  
+![Brain PCB schematic](media/brain-schematic.png)
+
+</details>
+
+<details>
+  <summary>Brain PCB layout - click to expand</summary>
+
+![Brain PCB layout](media/brain-layout.png)
+
+</details>
+
+### Eye PCB
+
+![3d eye pcb](media/3d-eye.png)
+
+<details>
+  <summary>Eye PCB schematic - click to expand</summary>
+  
+![Eye PCB schematic](media/eye-schematic.png)
+
+</details>
+
+<details>
+  <summary>Eye PCB layout - click to expand</summary>
+
+![Eye PCB layout](media/eye-layout.png)
+
+</details>
+
+### Mouth PCB
+
+![3d mouth pcb](media/3d-mouth.png)
+
+<details>
+  <summary>Mouth PCB schematic - click to expand</summary>
+
+![Mouth PCB schematic](media/mouth-schematic.png)
+
+</details>
+
+<details>
+  <summary>Mouth PCB layout - click to expand</summary>
+  
+![Mouth PCB layout](media/mouth-layout.png)
+
+</details>
+
 
 ## Language Scope
 

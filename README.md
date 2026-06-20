@@ -81,7 +81,7 @@ We wanted to build a voice assistant that is not just a plain, neutral box, but 
 
 ## Language Scope
 
-SarcasmOS is designed to work in Spanish only.
+SarcasmOS is designed to work in Spanish first.
 
 The language model prompt, personality, expected user input, and generated responses are all tuned for Spanish. Other languages may work accidentally depending on the upstream model, but they are outside the intended behavior of this project.
 
@@ -100,7 +100,7 @@ The language model prompt, personality, expected user input, and generated respo
 
 ## Current State
 
-SarcasmOS already has a working software demo available [here](https://sarcasmos.pegoku.com/):
+SarcasmOS already has a working web demo available [here](https://sarcasmos.pegoku.com/):
 
 - Static web UI in `Code/AI/Workflow/SarcasmOS-web`.
 - Local FastAPI backend with chat, audio, history, and status endpoints.

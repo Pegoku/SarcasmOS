@@ -1,0 +1,22 @@
+cmake_minimum_required(VERSION 3.13)
+
+include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
+project(sarcasmos_eye C CXX ASM)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
+
+pico_sdk_init()
+
+add_executable(sarcasmos_eye src/main.cpp)
+target_include_directories(sarcasmos_eye PRIVATE include)
+if(NOT DEFINED DEVICE_ROLE)
+    set(DEVICE_ROLE 0)
+endif()
+if(NOT DEFINED I2C_ADDRESS)
+    set(I2C_ADDRESS 0x30)
+endif()
+target_compile_definitions(sarcasmos_eye PRIVATE DEVICE_ROLE=${DEVICE_ROLE} I2C_ADDRESS=${I2C_ADDRESS})
+target_link_libraries(sarcasmos_eye pico_stdlib hardware_i2c hardware_spi hardware_pwm hardware_watchdog)
+pico_enable_stdio_uart(sarcasmos_eye 1)
+pico_enable_stdio_usb(sarcasmos_eye 0)
+pico_add_extra_outputs(sarcasmos_eye)

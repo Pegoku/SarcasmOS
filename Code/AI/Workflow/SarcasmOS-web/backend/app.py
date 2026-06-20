@@ -273,6 +273,14 @@ def admin_emails() -> set[str]:
     return emails | DEFAULT_ADMIN_EMAILS
 
 
+def env_flag(name: str, default: bool = False) -> bool:
+    load_public_env()
+    raw = os.environ.get(name, "")
+    if raw == "":
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def load_auth_users() -> dict:
     with AUTH_USERS_LOCK:
         path = auth_users_path()
@@ -299,7 +307,8 @@ def auth_settings(data: dict | None = None) -> dict:
     settings = source.get("settings", {})
     if not isinstance(settings, dict):
         settings = {}
-    return {"autoAuth": bool(settings.get("autoAuth"))}
+    env_auto_auth = env_flag("AUTO_AUTH") or env_flag("AUTOAUTH")
+    return {"autoAuth": env_auto_auth or bool(settings.get("autoAuth"))}
 
 
 def load_auth_sessions() -> dict:
@@ -1241,9 +1250,9 @@ def upsert_auth_user(email: str, name: str, picture: str) -> dict:
             "email": normalized_email,
             "name": name or existing.get("name") or normalized_email,
             "picture": picture or existing.get("picture", ""),
-            "authorized": bool(existing.get("authorized")) or is_bootstrap_admin or (is_new_user and auto_auth),
+            "authorized": bool(existing.get("authorized")) or is_bootstrap_admin or auto_auth,
             "isAdmin": bool(existing.get("isAdmin")) or is_bootstrap_admin,
-            "developerMode": bool(existing.get("developerMode")) or (is_new_user and auto_auth),
+            "developerMode": bool(existing.get("developerMode")) or auto_auth,
             "developerRequested": bool(existing.get("developerRequested")),
             "supportAbuseCount": int(existing.get("supportAbuseCount", 0) or 0),
             "supportBannedUntil": existing.get("supportBannedUntil", ""),

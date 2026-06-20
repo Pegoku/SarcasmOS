@@ -317,6 +317,16 @@
         </div>
         <audio id="audioPlayer" controls></audio>
         <p id="errorOutput" class="error"></p>
+        <div id="apiSetupPrompt" class="api-setup-prompt hidden" role="status" aria-live="polite">
+          <div>
+            <strong id="apiSetupTitle">Use your own APIs?</strong>
+            <p id="apiSetupText" class="helper-text"></p>
+          </div>
+          <div class="api-setup-actions">
+            <button id="apiSetupOpen" class="accent" type="button">Set up APIs</button>
+            <button id="apiSetupDismiss" class="ghost" type="button">Not now</button>
+          </div>
+        </div>
       </section>
 
     </main>

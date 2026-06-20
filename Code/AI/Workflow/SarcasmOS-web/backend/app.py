@@ -190,8 +190,11 @@ def load_public_env() -> None:
         load_dotenv(env_path)
 
 
-def error_response(message: str, status_code: int = 400) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": message})
+def error_response(message: str, status_code: int = 400, extra: dict | None = None) -> JSONResponse:
+    content = {"error": message}
+    if extra:
+        content.update(extra)
+    return JSONResponse(status_code=status_code, content=content)
 
 
 def outputs_dir() -> Path:
@@ -478,8 +481,16 @@ def developer_settings_public(email: str) -> dict:
     }
 
 
+def auto_auth_enabled() -> bool:
+    return bool(auth_settings().get("autoAuth"))
+
+
+def user_can_use_developer_keys(user: dict) -> bool:
+    return bool(user.get("developerMode")) or auto_auth_enabled()
+
+
 def developer_config_for_user(user: dict) -> dict:
-    if not user.get("developerMode"):
+    if not user_can_use_developer_keys(user):
         return {}
     settings = developer_settings_for_email(str(user.get("email", "")))
     config = {key: value.strip() for key, value in settings.items() if value.strip()}
@@ -784,6 +795,89 @@ def assert_user_has_minimum_credits(user: dict) -> None:
             status_code=429,
             detail="Se te han acabado los créditos IA para esta semana. Pide a un admin que te añada más créditos.",
         )
+
+
+def setup_services_for_request(kind: str, synthesize_audio: bool) -> list[str]:
+    services = ["openrouter"]
+    if kind == "audio" or synthesize_audio:
+        services.append("replicate")
+    return services
+
+
+def developer_setup_prompt(user: dict | None, services: list[str], reason: str) -> dict:
+    unique_services = []
+    for service in services:
+        if service not in unique_services:
+            unique_services.append(service)
+    labels = {
+        "openrouter": "OpenRouter or another OpenAI-compatible completions endpoint",
+        "replicate": "Replicate-compatible audio endpoint",
+    }
+    provider_text = ", ".join(labels.get(service, service) for service in unique_services)
+    allowed = bool(user and user_can_use_developer_keys(user))
+    return {
+        "setupPrompt": {
+            "type": "developer_api_setup",
+            "reason": reason,
+            "services": unique_services,
+            "developerMode": allowed,
+            "message": (
+                f"This failed because {reason}. Add your own {provider_text} URL and API key to keep using SarcasmOS."
+                if allowed
+                else f"This failed because {reason}. Developer API setup is not enabled for this account yet."
+            ),
+        }
+    }
+
+
+def provider_setup_services_from_error(error: Exception, fallback_services: list[str]) -> list[str]:
+    response = getattr(error, "response", None)
+    status_code = getattr(response, "status_code", None)
+    url = str(getattr(response, "url", "") or "").lower()
+    text = str(error or "").lower()
+    if status_code in {401, 402, 403, 429}:
+        if "replicate" in url or "/predictions" in url or "/models/" in url:
+            return ["replicate"]
+        if "openrouter" in url or "/chat/completions" in url:
+            return ["openrouter"]
+        return fallback_services
+    if "replicate api" in text or "prediction" in text:
+        return ["replicate"]
+    if "completions api" in text or "openrouter" in text or "llm providers unavailable" in text:
+        return ["openrouter"]
+    return []
+
+
+def provider_credit_or_auth_failure(error: Exception) -> bool:
+    response = getattr(error, "response", None)
+    status_code = getattr(response, "status_code", None)
+    if status_code in {401, 402, 403, 429}:
+        return True
+    text = str(error or "").lower()
+    return any(
+        marker in text
+        for marker in (
+            "status: 401",
+            "status: 402",
+            "status: 403",
+            "status: 429",
+            "insufficient",
+            "quota",
+            "credit",
+            "payment",
+            "billing",
+            "rate limit",
+        )
+    )
+
+
+def chat_error_extra(user: dict | None, error: Exception, fallback_services: list[str]) -> dict:
+    if isinstance(error, HTTPException) and error.status_code == 429:
+        return developer_setup_prompt(user, fallback_services, "the shared weekly credits are exhausted")
+    if provider_credit_or_auth_failure(error):
+        services = provider_setup_services_from_error(error, fallback_services) or fallback_services
+        return developer_setup_prompt(user, services, "the API provider rejected the request or has no available credits")
+    return {}
 
 
 def reset_chat_quota(email: str) -> dict:
@@ -1142,13 +1236,14 @@ def upsert_auth_user(email: str, name: str, picture: str) -> dict:
         is_new_user = not bool(existing)
         settings = auth_settings(data)
         is_bootstrap_admin = normalized_email in admins
+        auto_auth = bool(settings["autoAuth"])
         user = {
             "email": normalized_email,
             "name": name or existing.get("name") or normalized_email,
             "picture": picture or existing.get("picture", ""),
-            "authorized": bool(existing.get("authorized")) or is_bootstrap_admin or (is_new_user and settings["autoAuth"]),
+            "authorized": bool(existing.get("authorized")) or is_bootstrap_admin or (is_new_user and auto_auth),
             "isAdmin": bool(existing.get("isAdmin")) or is_bootstrap_admin,
-            "developerMode": bool(existing.get("developerMode")),
+            "developerMode": bool(existing.get("developerMode")) or (is_new_user and auto_auth),
             "developerRequested": bool(existing.get("developerRequested")),
             "supportAbuseCount": int(existing.get("supportAbuseCount", 0) or 0),
             "supportBannedUntil": existing.get("supportBannedUntil", ""),
@@ -1504,6 +1599,8 @@ async def chat_audio(
     audioDurationSeconds: float | None = Form(default=None),
     authorization: str | None = Header(default=None),
 ) -> JSONResponse:
+    user = None
+    fallback_services = setup_services_for_request("audio", synthesizeAudio)
     try:
         user = current_auth_user(authorization)
         suffix = Path(audio.filename or "").suffix
@@ -1552,13 +1649,15 @@ async def chat_audio(
             }
         )
     except HTTPException as error:
-        return error_response(str(error.detail), status_code=error.status_code)
+        return error_response(str(error.detail), status_code=error.status_code, extra=chat_error_extra(user, error, fallback_services))
     except Exception as error:
-        return error_response(str(error), status_code=500)
+        return error_response(str(error), status_code=500, extra=chat_error_extra(user, error, fallback_services))
 
 
 @app.post("/api/chat/text")
 async def chat_text(payload: TextRequest, authorization: str | None = Header(default=None)) -> JSONResponse:
+    user = None
+    fallback_services = setup_services_for_request("text", payload.synthesizeAudio)
     try:
         user = current_auth_user(authorization)
         if not payload.message.strip():
@@ -1590,9 +1689,9 @@ async def chat_text(payload: TextRequest, authorization: str | None = Header(def
             }
         )
     except HTTPException as error:
-        return error_response(str(error.detail), status_code=error.status_code)
+        return error_response(str(error.detail), status_code=error.status_code, extra=chat_error_extra(user, error, fallback_services))
     except Exception as error:
-        return error_response(str(error), status_code=500)
+        return error_response(str(error), status_code=500, extra=chat_error_extra(user, error, fallback_services))
 
 
 def stream_text_chunks(text: str, chunk_size: int = 12) -> list[str]:
@@ -1614,9 +1713,12 @@ def stream_text_chunks(text: str, chunk_size: int = 12) -> list[str]:
 @app.websocket("/api/chat/text/stream")
 async def chat_text_stream(websocket: WebSocket) -> None:
     await websocket.accept()
+    user = None
+    synthesize_audio = True
     try:
         raw_payload = await websocket.receive_json()
         payload = StreamTextRequest(**raw_payload)
+        synthesize_audio = payload.synthesizeAudio
         token = (payload.token or websocket.query_params.get("token") or "").strip()
         user = current_auth_user(f"Bearer {token}")
         if not payload.message.strip():
@@ -1671,9 +1773,19 @@ async def chat_text_stream(websocket: WebSocket) -> None:
     except WebSocketDisconnect:
         return
     except HTTPException as error:
-        await websocket.send_json({"type": "error", "error": str(error.detail), "status": error.status_code})
+        await websocket.send_json({
+            "type": "error",
+            "error": str(error.detail),
+            "status": error.status_code,
+            **chat_error_extra(user, error, setup_services_for_request("text", synthesize_audio)),
+        })
     except Exception as error:
-        await websocket.send_json({"type": "error", "error": str(error), "status": 500})
+        await websocket.send_json({
+            "type": "error",
+            "error": str(error),
+            "status": 500,
+            **chat_error_extra(user, error, setup_services_for_request("text", synthesize_audio)),
+        })
     finally:
         try:
             await websocket.close()
@@ -1813,10 +1925,12 @@ async def disconnect_google_calendar(authorization: str | None = Header(default=
 async def get_developer_mode(authorization: str | None = Header(default=None)) -> JSONResponse:
     try:
         user = current_auth_user(authorization)
+        developer_allowed = user_can_use_developer_keys(user)
         return JSONResponse(
             content={
-                "developerMode": bool(user.get("developerMode")),
+                "developerMode": developer_allowed,
                 "developerRequested": bool(user.get("developerRequested")),
+                "autoAuthDeveloperMode": developer_allowed and not bool(user.get("developerMode")),
                 "ready": developer_mode_ready(user),
                 "settings": developer_settings_public(user["email"]),
             }
@@ -1834,7 +1948,11 @@ async def request_developer_mode(authorization: str | None = Header(default=None
             stored_user = data.setdefault("users", {}).get(user["email"])
             if not stored_user:
                 raise HTTPException(status_code=404, detail="User not found.")
-            stored_user["developerRequested"] = True
+            if auth_settings(data)["autoAuth"]:
+                stored_user["developerMode"] = True
+                stored_user["developerRequested"] = False
+            else:
+                stored_user["developerRequested"] = True
             data["users"][user["email"]] = stored_user
             save_auth_users(data)
         return JSONResponse(content={"user": public_user(stored_user)})
@@ -1849,7 +1967,7 @@ async def save_developer_mode_settings(
 ) -> JSONResponse:
     try:
         user = current_auth_user(authorization)
-        if not user.get("developerMode"):
+        if not user_can_use_developer_keys(user):
             raise HTTPException(status_code=403, detail="Developer mode must be approved by an admin first.")
         settings = {
             key: str(value or "").strip()
@@ -1880,7 +1998,7 @@ async def save_developer_mode_settings(
 async def reset_developer_mode_settings(authorization: str | None = Header(default=None)) -> JSONResponse:
     try:
         user = current_auth_user(authorization)
-        if not user.get("developerMode"):
+        if not user_can_use_developer_keys(user):
             raise HTTPException(status_code=403, detail="Developer mode must be approved by an admin first.")
         with DEVELOPER_KEYS_LOCK:
             data = load_developer_keys()

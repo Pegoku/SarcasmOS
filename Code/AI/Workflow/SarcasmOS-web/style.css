@@ -192,6 +192,7 @@ input[type="password"]:focus {
 :root[data-theme="light"] .console-home .status-card,
 :root[data-theme="light"] .face-callout,
 :root[data-theme="light"] .google-tool-row,
+:root[data-theme="light"] .api-setup-prompt,
 :root[data-theme="light"] .admin-settings-bar,
 :root[data-theme="light"] .admin-user,
 :root[data-theme="light"] .admin-chat-item,
@@ -242,6 +243,7 @@ input[type="password"]:focus {
 
 :root[data-theme="light"] .developer-request-badge,
 :root[data-theme="light"] .admin-notice,
+:root[data-theme="light"] .api-setup-prompt strong,
 :root[data-theme="light"] .admin-user-credits,
 :root[data-theme="light"] .switch-control small,
 :root[data-theme="light"] .credit-amount,
@@ -1708,6 +1710,40 @@ h2 {
   background:
     linear-gradient(90deg, rgba(246, 196, 69, 0.1), transparent 46%),
     rgba(255, 255, 255, 0.04);
+}
+
+.api-setup-prompt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(246, 196, 69, 0.36);
+  background:
+    linear-gradient(90deg, rgba(246, 196, 69, 0.14), rgba(255, 255, 255, 0.035)),
+    rgba(4, 8, 13, 0.78);
+}
+
+.api-setup-prompt strong {
+  display: block;
+  color: #ffd765;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.88rem;
+  letter-spacing: 0;
+}
+
+.api-setup-prompt .helper-text {
+  margin: 4px 0 0;
+}
+
+.api-setup-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
 }
 
 .admin-settings-bar {
@@ -3335,6 +3371,20 @@ body.konami-open {
   .admin-settings-bar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .api-setup-prompt {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .api-setup-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .api-setup-actions button {
+    flex: 1 1 150px;
   }
 
   .switch-control {

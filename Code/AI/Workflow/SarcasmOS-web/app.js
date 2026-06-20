@@ -92,6 +92,11 @@ const transcriptOutput = document.getElementById("transcriptOutput");
 const answerOutput = document.getElementById("answerOutput");
 const audioPlayer = document.getElementById("audioPlayer");
 const errorOutput = document.getElementById("errorOutput");
+const apiSetupPrompt = document.getElementById("apiSetupPrompt");
+const apiSetupTitle = document.getElementById("apiSetupTitle");
+const apiSetupText = document.getElementById("apiSetupText");
+const apiSetupOpen = document.getElementById("apiSetupOpen");
+const apiSetupDismiss = document.getElementById("apiSetupDismiss");
 const statusBtn = document.getElementById("statusBtn");
 const statusOutput = document.getElementById("statusOutput");
 const apiHealthRefresh = document.getElementById("apiHealthRefresh");
@@ -431,6 +436,7 @@ let supportConversation = [];
 let supportChats = [];
 let activeSupportChatId = "";
 let supportWidgetOpen = false;
+let pendingApiSetupPrompt = null;
 
 audioPlayer.crossOrigin = "anonymous";
 faceAudioPlayer.crossOrigin = "anonymous";
@@ -830,6 +836,65 @@ function setLoading(isLoading, label, mode = "") {
 
 function showError(message) {
   errorOutput.textContent = message || "";
+  if (!message) {
+    hideApiSetupPrompt();
+  }
+}
+
+function apiSetupServiceLabel(service) {
+  if (service === "replicate") {
+    return tr("apiSetupReplicate");
+  }
+  if (service === "openrouter") {
+    return tr("apiSetupOpenrouter");
+  }
+  return String(service || "").trim();
+}
+
+function renderApiSetupPrompt() {
+  if (!apiSetupPrompt || !pendingApiSetupPrompt) {
+    return;
+  }
+  const services = Array.isArray(pendingApiSetupPrompt.services)
+    ? pendingApiSetupPrompt.services.map(apiSetupServiceLabel).filter(Boolean)
+    : [];
+  const serviceText = services.length ? services.join(" + ") : tr("apiSetupOpenrouter");
+  apiSetupTitle.textContent = tr("apiSetupTitle");
+  apiSetupText.textContent = pendingApiSetupPrompt.message || formatTemplate(tr("apiSetupText"), { services: serviceText });
+  apiSetupOpen.textContent = pendingApiSetupPrompt.developerMode ? tr("apiSetupOpen") : tr("requestAccess");
+  apiSetupDismiss.textContent = tr("apiSetupDismiss");
+  apiSetupPrompt.classList.remove("hidden");
+}
+
+function showApiSetupPrompt(prompt) {
+  if (!prompt) {
+    return;
+  }
+  pendingApiSetupPrompt = prompt;
+  renderApiSetupPrompt();
+}
+
+function hideApiSetupPrompt() {
+  pendingApiSetupPrompt = null;
+  apiSetupPrompt?.classList.add("hidden");
+}
+
+async function openApiSetupFromPrompt() {
+  if (!pendingApiSetupPrompt) {
+    return;
+  }
+  if (!pendingApiSetupPrompt.developerMode) {
+    await requestDeveloperMode();
+  }
+  adminConsoleOverride = false;
+  developerViewOverride = true;
+  renderAuthState();
+  await loadDeveloperModeStatus();
+  window.setTimeout(() => {
+    const wantsReplicate = pendingApiSetupPrompt?.services?.includes("replicate");
+    const target = wantsReplicate ? developerReplicateUrl : developerCompletionsUrl;
+    target?.focus();
+  }, 0);
 }
 
 function showBenderWarning(message) {
@@ -913,6 +978,9 @@ function annoyHomeBender() {
 
 function friendlyRequestError(response, data, fallback) {
   if (response?.status === 429) {
+    if (data?.setupPrompt?.developerMode) {
+      return "Se te han acabado los créditos IA compartidos. Puedes añadir tus propias APIs para seguir usando SarcasmOS.";
+    }
     return "Se te han acabado los créditos IA de esta semana. Hasta la semana que viene no tendrás más, salvo que un admin te añada créditos desde el panel.";
   }
   return data?.error || fallback;
@@ -1293,6 +1361,12 @@ const HOME_TRANSLATIONS = {
     adminCreditsLine: "{remaining} credits available",
     aiCreditsDetail: "Credits renew every week.",
     aiCreditsLastCost: "Last use: {cost} credits.",
+    apiSetupTitle: "Use your own APIs?",
+    apiSetupText: "This request needs {services}. Add your own endpoint and key to keep going without shared credits.",
+    apiSetupOpen: "Set up APIs",
+    apiSetupDismiss: "Not now",
+    apiSetupOpenrouter: "OpenRouter/completions",
+    apiSetupReplicate: "Replicate/audio",
     addCredits: "+",
     removeCredits: "-",
     addCreditsLabel: "Add credits",
@@ -1489,6 +1563,12 @@ const HOME_TRANSLATIONS = {
     adminCreditsLine: "{remaining} créditos disponibles",
     aiCreditsDetail: "Los créditos se renuevan cada semana.",
     aiCreditsLastCost: "Último uso: {cost} créditos.",
+    apiSetupTitle: "¿Usar tus propias APIs?",
+    apiSetupText: "Esta petición necesita {services}. Añade tu endpoint y clave para seguir sin créditos compartidos.",
+    apiSetupOpen: "Configurar APIs",
+    apiSetupDismiss: "Ahora no",
+    apiSetupOpenrouter: "OpenRouter/completions",
+    apiSetupReplicate: "Replicate/audio",
     addCredits: "+",
     removeCredits: "-",
     addCreditsLabel: "Añadir créditos",
@@ -2265,6 +2345,7 @@ function applyLanguage(language) {
   setText("#clearHistory", t.clearHistory);
   renderGoogleToolsStatus(googleToolsState);
   renderDeveloperModeStatus(developerModeState);
+  renderApiSetupPrompt();
   if (lastAdminUsers.length) {
     renderAdminUsers(lastAdminUsers);
   }
@@ -4577,6 +4658,7 @@ async function sendAudioBlob(blob, filename) {
     });
     const data = await response.json();
     if (!response.ok) {
+      showApiSetupPrompt(data.setupPrompt);
       throw new Error(friendlyRequestError(response, data, "Audio request failed"));
     }
     updateResult(data);
@@ -4608,6 +4690,7 @@ async function sendTextMessage(message, context = getActiveChatContext()) {
     });
     const data = await response.json();
     if (!response.ok) {
+      showApiSetupPrompt(data.setupPrompt);
       throw new Error(friendlyRequestError(response, data, "Text request failed"));
     }
     updateResult(data);
@@ -4713,6 +4796,7 @@ function sendTextMessageStreaming(message, context = getActiveChatContext()) {
 
       if (data.type === "error") {
         const error = new Error(data.error || "Text stream failed");
+        showApiSetupPrompt(data.setupPrompt);
         failPendingTextMessage(error.message);
         showError(error.message);
         finish(true);
@@ -4899,6 +4983,8 @@ disconnectGoogleCalendar.addEventListener("click", disconnectCalendarTool);
 developerModeRequest?.addEventListener("click", requestDeveloperMode);
 developerModeForm?.addEventListener("submit", saveDeveloperModeSettings);
 developerModeReset?.addEventListener("click", resetDeveloperModeSettings);
+apiSetupOpen?.addEventListener("click", openApiSetupFromPrompt);
+apiSetupDismiss?.addEventListener("click", hideApiSetupPrompt);
 profileGender?.addEventListener("change", () => {
   profileExtraPronounsWrap?.classList.add("hidden");
   profileMorePronouns?.classList.remove("active");

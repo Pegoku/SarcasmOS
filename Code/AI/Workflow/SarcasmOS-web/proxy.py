@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """Tiny reverse proxy for SarcasmOS.
 
 Routes API requests to the FastAPI backend and everything else to the static

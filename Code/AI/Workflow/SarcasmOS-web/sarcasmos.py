@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """Start, stop, restart, and inspect SarcasmOS local services."""
 
 from __future__ import annotations
@@ -309,9 +309,9 @@ def main() -> int:
 
     if action == "start" and "proxy" in services:
         print(f"Open the app through the proxy: http://localhost:{PORTS['proxy']}")
-        print("To share it: python sarcasmos.py --start --ngrok")
+        print("To share it: python3 sarcasmos.py --start --ngrok")
         if "watchdog" in services:
-            print("Keepalive is active. Stop it with: python sarcasmos.py --stop --keepalive")
+            print("Keepalive is active. Stop it with: python3 sarcasmos.py --stop --keepalive")
     return 0
 
 

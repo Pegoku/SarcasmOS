@@ -74,6 +74,19 @@ def ensure_environment() -> None:
         print(f"Creating virtual environment at {VENV_DIR}")
         subprocess.check_call([sys.executable, "-m", "venv", str(VENV_DIR)])
 
+    try:
+        subprocess.check_call([str(py), "-m", "pip", "--version"], stdout=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        print("Virtual environment is missing pip. Trying to install pip with ensurepip...")
+        try:
+            subprocess.check_call([str(py), "-m", "ensurepip", "--upgrade"])
+        except subprocess.CalledProcessError as exc:
+            raise RuntimeError(
+                "Could not install pip in the virtual environment. On Debian/Ubuntu, install "
+                "the venv support package with: apt install python3-venv python3-pip. "
+                f"Then remove {VENV_DIR} and run this script again."
+            ) from exc
+
     reqs = WEB_DIR / "backend" / "requirements.txt"
     subprocess.check_call([str(py), "-m", "pip", "install", "-r", str(reqs)])
     try:

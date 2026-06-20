@@ -116,7 +116,9 @@ The hardware firmware is still not finished, but a minimal prototype is already 
 
 ## Web Demo
 
-The quickest way to try SarcasmOS is to run the local web app.
+For the already setup web demo, visit [https://sarcasmos.pegoku.com/](https://sarcasmos.pegoku.com/).
+
+For the best experience and no ratelimiting, run the local web app.
 
 From `Code/AI/Workflow/SarcasmOS-web`:
 
@@ -132,6 +134,7 @@ On macOS/Linux:
 
 This starts:
 
+- Proxy (combines all services into 1 port for easy access): `http://localhost:9000`
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:8001`
 

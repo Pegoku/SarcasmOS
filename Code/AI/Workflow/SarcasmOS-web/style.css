@@ -1746,6 +1746,11 @@ h2 {
   flex: 0 0 auto;
 }
 
+.voice-api-setup-prompt {
+  grid-column: 2;
+  margin: 0 24px 0 18px;
+}
+
 .admin-settings-bar {
   display: flex;
   align-items: center;
@@ -3486,6 +3491,11 @@ body.konami-open {
     --voice-chat-font-size: 1rem;
     padding-left: 14px;
     padding-right: 6px;
+  }
+
+  .voice-api-setup-prompt {
+    grid-column: 1;
+    margin: 0 14px;
   }
 
   .voice-chat-input {

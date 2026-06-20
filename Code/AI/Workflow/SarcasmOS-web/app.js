@@ -97,6 +97,7 @@ const apiSetupTitle = document.getElementById("apiSetupTitle");
 const apiSetupText = document.getElementById("apiSetupText");
 const apiSetupOpen = document.getElementById("apiSetupOpen");
 const apiSetupDismiss = document.getElementById("apiSetupDismiss");
+const voiceApiSetupPrompt = document.getElementById("voiceApiSetupPrompt");
 const statusBtn = document.getElementById("statusBtn");
 const statusOutput = document.getElementById("statusOutput");
 const apiHealthRefresh = document.getElementById("apiHealthRefresh");
@@ -852,18 +853,39 @@ function apiSetupServiceLabel(service) {
 }
 
 function renderApiSetupPrompt() {
-  if (!apiSetupPrompt || !pendingApiSetupPrompt) {
+  if (!pendingApiSetupPrompt) {
     return;
   }
   const services = Array.isArray(pendingApiSetupPrompt.services)
     ? pendingApiSetupPrompt.services.map(apiSetupServiceLabel).filter(Boolean)
     : [];
   const serviceText = services.length ? services.join(" + ") : tr("apiSetupOpenrouter");
-  apiSetupTitle.textContent = tr("apiSetupTitle");
-  apiSetupText.textContent = pendingApiSetupPrompt.message || formatTemplate(tr("apiSetupText"), { services: serviceText });
-  apiSetupOpen.textContent = pendingApiSetupPrompt.developerMode ? tr("apiSetupOpen") : tr("requestAccess");
-  apiSetupDismiss.textContent = tr("apiSetupDismiss");
-  apiSetupPrompt.classList.remove("hidden");
+  const title = tr("apiSetupTitle");
+  const text = pendingApiSetupPrompt.message || formatTemplate(tr("apiSetupText"), { services: serviceText });
+  const openLabel = pendingApiSetupPrompt.developerMode ? tr("apiSetupOpen") : tr("requestAccess");
+  const dismissLabel = tr("apiSetupDismiss");
+  for (const prompt of [apiSetupPrompt, voiceApiSetupPrompt]) {
+    if (!prompt) {
+      continue;
+    }
+    const titleTarget = prompt.querySelector(".api-setup-title") || (prompt === apiSetupPrompt ? apiSetupTitle : null);
+    const textTarget = prompt.querySelector(".api-setup-text") || (prompt === apiSetupPrompt ? apiSetupText : null);
+    const openTarget = prompt.querySelector(".api-setup-open") || (prompt === apiSetupPrompt ? apiSetupOpen : null);
+    const dismissTarget = prompt.querySelector(".api-setup-dismiss") || (prompt === apiSetupPrompt ? apiSetupDismiss : null);
+    if (titleTarget) {
+      titleTarget.textContent = title;
+    }
+    if (textTarget) {
+      textTarget.textContent = text;
+    }
+    if (openTarget) {
+      openTarget.textContent = openLabel;
+    }
+    if (dismissTarget) {
+      dismissTarget.textContent = dismissLabel;
+    }
+    prompt.classList.remove("hidden");
+  }
 }
 
 function showApiSetupPrompt(prompt) {
@@ -877,6 +899,7 @@ function showApiSetupPrompt(prompt) {
 function hideApiSetupPrompt() {
   pendingApiSetupPrompt = null;
   apiSetupPrompt?.classList.add("hidden");
+  voiceApiSetupPrompt?.classList.add("hidden");
 }
 
 async function openApiSetupFromPrompt() {
@@ -4983,8 +5006,10 @@ disconnectGoogleCalendar.addEventListener("click", disconnectCalendarTool);
 developerModeRequest?.addEventListener("click", requestDeveloperMode);
 developerModeForm?.addEventListener("submit", saveDeveloperModeSettings);
 developerModeReset?.addEventListener("click", resetDeveloperModeSettings);
-apiSetupOpen?.addEventListener("click", openApiSetupFromPrompt);
-apiSetupDismiss?.addEventListener("click", hideApiSetupPrompt);
+for (const prompt of [apiSetupPrompt, voiceApiSetupPrompt]) {
+  prompt?.querySelector(".api-setup-open, #apiSetupOpen")?.addEventListener("click", openApiSetupFromPrompt);
+  prompt?.querySelector(".api-setup-dismiss, #apiSetupDismiss")?.addEventListener("click", hideApiSetupPrompt);
+}
 profileGender?.addEventListener("change", () => {
   profileExtraPronounsWrap?.classList.add("hidden");
   profileMorePronouns?.classList.remove("active");

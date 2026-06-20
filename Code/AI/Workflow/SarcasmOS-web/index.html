@@ -603,6 +603,16 @@
           <div id="voiceChatSessions" class="voice-chat-sessions"></div>
         </aside>
         <div class="voice-chat-messages" id="voiceChatList"></div>
+        <div id="voiceApiSetupPrompt" class="api-setup-prompt voice-api-setup-prompt hidden" role="status" aria-live="polite">
+          <div>
+            <strong class="api-setup-title">Use your own APIs?</strong>
+            <p class="api-setup-text helper-text"></p>
+          </div>
+          <div class="api-setup-actions">
+            <button class="api-setup-open accent" type="button">Set up APIs</button>
+            <button class="api-setup-dismiss ghost" type="button">Not now</button>
+          </div>
+        </div>
         <div class="voice-chat-input">
           <div class="controls">
           <button id="voiceChatRecordBtn" class="accent">Record</button>

@@ -3,13 +3,12 @@
 
 #include "hardware/i2c.h"
 #include "hardware/irq.h"
-#include "hardware/pwm.h"
 #include "hardware/regs/i2c.h"
-#include "hardware/spi.h"
 #include "hardware/structs/i2c.h"
 #include "hardware/watchdog.h"
 #include "pico/stdlib.h"
 
+#include "gc9a01.hpp"
 #include "protocol.hpp"
 
 #ifndef DEVICE_ROLE
@@ -22,14 +21,8 @@
 constexpr uint LED_PIN = 2;
 constexpr uint I2C_SDA_PIN = 4;
 constexpr uint I2C_SCL_PIN = 5;
-constexpr uint DISP_CS_PIN = 17;
-constexpr uint DISP_SCK_PIN = 18;
-constexpr uint DISP_MOSI_PIN = 19;
-constexpr uint DISP_DC_PIN = 20;
-constexpr uint DISP_RST_PIN = 21;
-constexpr uint DISP_BL_PIN = 22;
-constexpr int WIDTH = 240;
-constexpr int HEIGHT = 240;
+constexpr int WIDTH = eye_display::WIDTH;
+constexpr int HEIGHT = eye_display::HEIGHT;
 
 static volatile uint8_t rx_buf[80];
 static volatile uint8_t rx_len;
@@ -91,57 +84,13 @@ static void i2c_slave_init() {
     irq_set_enabled(I2C0_IRQ, true);
 }
 
-static void spi_write_cmd(uint8_t cmd) {
-    gpio_put(DISP_DC_PIN, 0);
-    gpio_put(DISP_CS_PIN, 0);
-    spi_write_blocking(spi0, &cmd, 1);
-    gpio_put(DISP_CS_PIN, 1);
-}
-
-static void spi_write_data(const uint8_t *data, size_t len) {
-    gpio_put(DISP_DC_PIN, 1);
-    gpio_put(DISP_CS_PIN, 0);
-    spi_write_blocking(spi0, data, len);
-    gpio_put(DISP_CS_PIN, 1);
-}
-
 static void display_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
-    uint8_t data[4];
-    spi_write_cmd(0x2A);
-    data[0] = x0 >> 8; data[1] = x0 & 0xff; data[2] = x1 >> 8; data[3] = x1 & 0xff;
-    spi_write_data(data, 4);
-    spi_write_cmd(0x2B);
-    data[0] = y0 >> 8; data[1] = y0 & 0xff; data[2] = y1 >> 8; data[3] = y1 & 0xff;
-    spi_write_data(data, 4);
-    spi_write_cmd(0x2C);
+    eye_display::set_window(x0, y0, x1, y1);
 }
 
 static void display_init() {
-    spi_init(spi0, 40000000);
-    gpio_set_function(DISP_SCK_PIN, GPIO_FUNC_SPI);
-    gpio_set_function(DISP_MOSI_PIN, GPIO_FUNC_SPI);
-    gpio_init(DISP_CS_PIN); gpio_set_dir(DISP_CS_PIN, GPIO_OUT); gpio_put(DISP_CS_PIN, 1);
-    gpio_init(DISP_DC_PIN); gpio_set_dir(DISP_DC_PIN, GPIO_OUT);
-    gpio_init(DISP_RST_PIN); gpio_set_dir(DISP_RST_PIN, GPIO_OUT);
-    gpio_set_function(DISP_BL_PIN, GPIO_FUNC_PWM);
-    uint slice = pwm_gpio_to_slice_num(DISP_BL_PIN);
-    pwm_set_wrap(slice, 255);
-    pwm_set_gpio_level(DISP_BL_PIN, brightness);
-    pwm_set_enabled(slice, true);
-
-    gpio_put(DISP_RST_PIN, 0); sleep_ms(30);
-    gpio_put(DISP_RST_PIN, 1); sleep_ms(120);
-    spi_write_cmd(0x01); sleep_ms(120);
-    uint8_t colmod = 0x55;
-    spi_write_cmd(0x3A); spi_write_data(&colmod, 1);
-    uint8_t madctl = (DEVICE_ROLE == kRoleRightEye) ? 0x60 : 0x00;
-    spi_write_cmd(0x36); spi_write_data(&madctl, 1);
-    spi_write_cmd(0x11); sleep_ms(120);
-    spi_write_cmd(0x29);
-}
-
-static uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
-    return static_cast<uint16_t>(((r & 0xf8) << 8) | ((g & 0xfc) << 3) | (b >> 3));
+    const uint8_t madctl = (DEVICE_ROLE == kRoleRightEye) ? 0x88 : 0x48;
+    eye_display::init(brightness, madctl);
 }
 
 static void fill_screen(uint16_t color) {
@@ -151,17 +100,17 @@ static void fill_screen(uint16_t color) {
         line[x * 2] = color >> 8;
         line[x * 2 + 1] = color & 0xff;
     }
-    for (int y = 0; y < HEIGHT; ++y) spi_write_data(line, sizeof(line));
+    for (int y = 0; y < HEIGHT; ++y) eye_display::write_data(line, sizeof(line));
 }
 
 static void draw_eye(uint32_t tick) {
-    uint16_t bg = rgb565(4, 6, 10);
-    uint16_t iris = rgb565(0, 190, 255);
-    uint16_t pupil = rgb565(0, 0, 0);
+    uint16_t bg = eye_display::rgb565(4, 6, 10);
+    uint16_t iris = eye_display::rgb565(0, 190, 255);
+    uint16_t pupil = eye_display::rgb565(0, 0, 0);
     if (current_animation == kAnimSleep) { fill_screen(0); return; }
-    if (current_animation == kAnimError) { fill_screen(rgb565(120, 0, 0)); return; }
-    if (current_animation == kAnimAngry) iris = rgb565(255, 48, 0);
-    if (current_animation == kAnimHappy) iris = rgb565(80, 255, 90);
+    if (current_animation == kAnimError) { fill_screen(eye_display::rgb565(120, 0, 0)); return; }
+    if (current_animation == kAnimAngry) iris = eye_display::rgb565(255, 48, 0);
+    if (current_animation == kAnimHappy) iris = eye_display::rgb565(80, 255, 90);
 
     display_set_window(0, 0, WIDTH - 1, HEIGHT - 1);
     uint8_t line[WIDTH * 2];
@@ -175,13 +124,13 @@ static void draw_eye(uint32_t tick) {
             int dx = x - cx;
             int dy = y - cy;
             uint16_t color = bg;
-            if ((dx * dx) / 85 + (dy * dy) / blink < 74) color = rgb565(220, 245, 255);
+            if ((dx * dx) / 85 + (dy * dy) / blink < 74) color = eye_display::rgb565(220, 245, 255);
             if (dx * dx + dy * dy < 34 * 34) color = iris;
             if (dx * dx + dy * dy < 15 * 15) color = pupil;
             line[x * 2] = color >> 8;
             line[x * 2 + 1] = color & 0xff;
         }
-        spi_write_data(line, sizeof(line));
+        eye_display::write_data(line, sizeof(line));
     }
 }
 
@@ -209,7 +158,7 @@ static void parse_command() {
     case kCmdGetInfo:
         break;
     case kCmdSetBrightness:
-        if (local[3] >= 1) { brightness = payload[0]; pwm_set_gpio_level(DISP_BL_PIN, brightness); }
+        if (local[3] >= 1) { brightness = payload[0]; eye_display::set_brightness(brightness); }
         break;
     case kCmdSetAnimation:
     case kCmdSetExpression:

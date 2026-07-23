@@ -33,4 +33,4 @@ a grayscale gradient, and a two-axis RGB gradient.
 
 - I2C slave uses `GPIO4`/`GPIO5`.
 - Display SPI uses `GPIO17`/`GPIO18`/`GPIO19` plus `DC=GPIO20`, `RST=GPIO21`, `BL=GPIO22`.
-- LH128 display output uses the 240x240 RGB565 ST7789-compatible SPI init and rendering path.
+- The round 240x240 RGB565 display uses a GC9A01A controller.

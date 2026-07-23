@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 pico_sdk_init()
 
-add_executable(sarcasmos_eye src/main.cpp)
+add_executable(sarcasmos_eye src/main.cpp src/gc9a01.cpp)
 target_include_directories(sarcasmos_eye PRIVATE include)
 if(NOT DEFINED DEVICE_ROLE)
     set(DEVICE_ROLE 0)
@@ -21,7 +21,8 @@ pico_enable_stdio_uart(sarcasmos_eye 1)
 pico_enable_stdio_usb(sarcasmos_eye 0)
 pico_add_extra_outputs(sarcasmos_eye)
 
-add_executable(sarcasmos_eye_display_test src/display_test.cpp)
+add_executable(sarcasmos_eye_display_test src/display_test.cpp src/gc9a01.cpp)
+target_include_directories(sarcasmos_eye_display_test PRIVATE include)
 target_link_libraries(sarcasmos_eye_display_test
     pico_stdlib
     hardware_pwm

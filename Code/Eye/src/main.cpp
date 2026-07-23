@@ -85,10 +85,10 @@ static void i2c_slave_init() {
     i2c_set_slave_mode(i2c0, true, I2C_ADDRESS);
     prepare_status_response();
     irq_set_exclusive_handler(I2C0_IRQ, i2c_irq_handler);
-    irq_set_enabled(I2C0_IRQ, true);
     i2c_get_hw(i2c0)->intr_mask = I2C_IC_INTR_MASK_M_RX_FULL_BITS |
                                   I2C_IC_INTR_MASK_M_RD_REQ_BITS |
                                   I2C_IC_INTR_MASK_M_STOP_DET_BITS;
+    irq_set_enabled(I2C0_IRQ, true);
 }
 
 static void spi_write_cmd(uint8_t cmd) {

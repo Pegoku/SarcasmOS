@@ -20,3 +20,14 @@ target_link_libraries(sarcasmos_eye pico_stdlib hardware_i2c hardware_spi hardwa
 pico_enable_stdio_uart(sarcasmos_eye 1)
 pico_enable_stdio_usb(sarcasmos_eye 0)
 pico_add_extra_outputs(sarcasmos_eye)
+
+add_executable(sarcasmos_eye_display_test src/display_test.cpp)
+target_link_libraries(sarcasmos_eye_display_test
+    pico_stdlib
+    hardware_pwm
+    hardware_spi
+    hardware_watchdog
+)
+pico_enable_stdio_uart(sarcasmos_eye_display_test 1)
+pico_enable_stdio_usb(sarcasmos_eye_display_test 0)
+pico_add_extra_outputs(sarcasmos_eye_display_test)

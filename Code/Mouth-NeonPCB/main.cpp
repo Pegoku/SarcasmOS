@@ -9,21 +9,22 @@ constexpr int kPanelWidth = 64;
 constexpr int kPanelHeight = 32;
 constexpr int kPanelChain = 1;
 
-// Adafruit MatrixPortal S3 HUB75 pin mapping.
-constexpr int kR1Pin = 42;
-constexpr int kG1Pin = 41;
-constexpr int kB1Pin = 40;
-constexpr int kR2Pin = 38;
-constexpr int kG2Pin = 39;
-constexpr int kB2Pin = 37;
-constexpr int kAPin = 45;
-constexpr int kBPin = 36;
-constexpr int kCPin = 48;
-constexpr int kDPin = 35;
+// Custom driver PCB pin mapping, traced from the ESP32-S3-MINI-1-N8
+// through U5/U1 (SN74AHCT245) to the HUB75 connector.
+constexpr int kR1Pin = 1;
+constexpr int kG1Pin = 2;
+constexpr int kB1Pin = 3;
+constexpr int kR2Pin = 5;
+constexpr int kG2Pin = 4;
+constexpr int kB2Pin = 6;
+constexpr int kAPin = 8;
+constexpr int kBPin = 7;
+constexpr int kCPin = 10;
+constexpr int kDPin = 9;
 constexpr int kEPin = -1;  // A 64x32, 1/16-scan panel does not use E.
-constexpr int kLatchPin = 47;
-constexpr int kOePin = 14;
-constexpr int kClockPin = 2;
+constexpr int kLatchPin = 11;  // STROBE on the schematic.
+constexpr int kOePin = 13;     // OE- is active low.
+constexpr int kClockPin = 12;
 
 constexpr uint8_t kBrightness = 64;
 constexpr uint32_t kSolidDurationMs = 1200;
@@ -42,7 +43,6 @@ void present() {
 
 void announce(const char *name) {
     Serial.printf("RGB panel test: %s\n", name);
-    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
 }
 
 void showSolid(const char *name, uint8_t red, uint8_t green, uint8_t blue,
@@ -146,8 +146,6 @@ void setup() {
     Serial.begin(115200);
     delay(250);
 
-    pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, LOW);
     Serial.println("\n64x32 HUB75 continuous RGB panel test");
 
     HUB75_I2S_CFG::i2s_pins pins = {
@@ -161,8 +159,7 @@ void setup() {
     if (matrix == nullptr || !matrix->begin()) {
         Serial.println("ERROR: matrix DMA initialization failed");
         while (true) {
-            digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-            delay(100);
+            delay(1000);
         }
     }
 

@@ -29,6 +29,29 @@ The display test cycles every three seconds through black, white, red, green,
 blue, vertical and horizontal color bars, a checkerboard, an alignment screen,
 a grayscale gradient, and a two-axis RGB gradient.
 
+## Upload with J-LinkOB
+
+The old J-LinkOB firmware cannot configure the RP2040 through J-Link Commander,
+but OpenOCD can access core 0 directly. From this directory, upload the display
+test with:
+
+```sh
+OPENOCD_ROOT=/home/pegoku/.espressif/tools/openocd-esp32/v0.12.0-esp32-20260424/openocd-esp32
+EYE_IMAGE=build-test/sarcasmos_eye_display_test.elf
+"${OPENOCD_ROOT}/bin/openocd" \
+  -s "${OPENOCD_ROOT}/share/openocd/scripts" \
+  -f interface/jlink.cfg \
+  -c "adapter speed 100" \
+  -c "set USE_CORE 0" \
+  -f target/rp2040.cfg \
+  -c "program ${EYE_IMAGE} verify reset exit"
+```
+
+Use `EYE_IMAGE=build-left/sarcasmos_eye.elf` or
+`EYE_IMAGE=build-right/sarcasmos_eye.elf` to upload the normal left- or
+right-eye firmware. OpenOCD verifies the flash and resets the RP2040; the RUN
+and BOOT buttons are not required.
+
 ## Notes
 
 - I2C slave uses `GPIO4`/`GPIO5`.

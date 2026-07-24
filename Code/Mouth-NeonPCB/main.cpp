@@ -26,7 +26,7 @@ constexpr int kLatchPin = 11;  // STROBE on the schematic.
 constexpr int kOePin = 13;     // OE- is active low.
 constexpr int kClockPin = 12;
 
-constexpr uint8_t kBrightness = 255;
+constexpr uint8_t kBrightness = 64;
 constexpr uint32_t kSolidDurationMs = 1200;
 constexpr uint32_t kPatternDurationMs = 2500;
 

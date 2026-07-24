@@ -12,7 +12,8 @@ It continuously repeats:
 5. An RGBW checkerboard.
 6. A border, grid, diagonals, and four uniquely colored corners.
 
-The test uses the maximum brightness of 255/255.
+The test uses a conservative brightness of 64/255. Change `kBrightness` in
+`main.cpp` if needed.
 
 ## Driver PCB pin map
 

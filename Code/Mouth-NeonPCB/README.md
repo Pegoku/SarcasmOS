@@ -1,16 +1,20 @@
 # ESP32-S3 64x32 HUB75 matrix test
 
-This Arduino C++ firmware is a port of `code.py` for an Adafruit
-MatrixPortal S3 and one 64x32, 1/16-scan HUB75 RGB panel.
+This Arduino C++ firmware tests an Adafruit MatrixPortal S3 with one 64x32,
+1/16-scan HUB75 RGB panel.
 
-At boot it shows:
+It continuously repeats:
 
 1. Red, green, blue, and white screens.
-2. Eight color bars.
-3. A border, grid, diagonals, and four uniquely colored corners.
-4. The Conway tribute and then continuously randomized Game of Life boards.
+2. A short black screen.
+3. Eight vertical color bars.
+4. Red, green, and blue horizontal rows.
+5. An RGBW checkerboard.
+6. A border, grid, diagonals, and four uniquely colored corners.
 
-The test uses a conservative brightness of 96/255. Change `kBrightness` in
+The onboard red LED toggles at every test step so firmware activity remains
+visible even if the panel is disconnected. The test uses a conservative
+brightness of 64/255. Change `kBrightness` in
 `main.cpp` if needed.
 
 ## Build and upload

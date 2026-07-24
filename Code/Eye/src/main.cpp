@@ -36,6 +36,37 @@ static uint8_t last_sequence;
 static uint8_t last_error;
 static uint32_t sync_phase_ms;
 
+#ifdef ANIMATION_AUTOPLAY
+struct AutoplayStep {
+    uint8_t animation;
+    uint32_t duration_ms;
+};
+
+static constexpr AutoplayStep kAutoplaySteps[] = {
+    {kAnimIdle, 5000},
+    {kAnimThinking, 4000},
+    {kAnimSpeaking, 4000},
+    {kAnimHappy, 3000},
+    {kAnimAngry, 3000},
+    {kAnimError, 2000},
+    {kAnimSleep, 2000},
+};
+
+static void update_animation_autoplay(uint32_t now_ms) {
+    uint32_t cycle_ms = 0;
+    for (const auto &step : kAutoplaySteps) cycle_ms += step.duration_ms;
+
+    uint32_t phase_ms = now_ms % cycle_ms;
+    for (const auto &step : kAutoplaySteps) {
+        if (phase_ms < step.duration_ms) {
+            current_animation = step.animation;
+            return;
+        }
+        phase_ms -= step.duration_ms;
+    }
+}
+#endif
+
 static void prepare_status_response() {
     tx_buf[0] = kProtocolVersion;
     tx_buf[1] = static_cast<uint8_t>(DEVICE_ROLE);
@@ -193,6 +224,9 @@ int main() {
         watchdog_update();
         if (command_ready) parse_command();
         uint32_t now = to_ms_since_boot(get_absolute_time());
+#ifdef ANIMATION_AUTOPLAY
+        update_animation_autoplay(now);
+#endif
         gpio_put(LED_PIN, (now / 500) & 1);
         if (now - last_draw > 80) {
             last_draw = now;

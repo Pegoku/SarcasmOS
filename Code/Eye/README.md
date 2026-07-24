@@ -29,6 +29,21 @@ The display test cycles every three seconds through black, white, red, green,
 blue, vertical and horizontal color bars, a checkerboard, an alignment screen,
 a grayscale gradient, and a two-axis RGB gradient.
 
+Animation autoplay test:
+
+```sh
+cmake -S . -B build-animation-test \
+  -DANIMATION_AUTOPLAY=ON \
+  -DDEVICE_ROLE=0 \
+  -DI2C_ADDRESS=0x30
+cmake --build build-animation-test --target sarcasmos_eye
+```
+
+This is the real eye firmware with automatic animation selection enabled. It
+cycles through idle, thinking, speaking, happy, angry, error, and sleep in
+23 seconds. Normal builds leave autoplay disabled and continue to select
+animations through I2C.
+
 ## Upload with J-LinkOB
 
 The old J-LinkOB firmware cannot configure the RP2040 through J-Link Commander,
@@ -49,8 +64,10 @@ EYE_IMAGE=build-test/sarcasmos_eye_display_test.elf
 
 Use `EYE_IMAGE=build-left/sarcasmos_eye.elf` or
 `EYE_IMAGE=build-right/sarcasmos_eye.elf` to upload the normal left- or
-right-eye firmware. OpenOCD verifies the flash and resets the RP2040; the RUN
-and BOOT buttons are not required.
+right-eye firmware. Use
+`EYE_IMAGE=build-animation-test/sarcasmos_eye.elf` for the animation autoplay
+test. OpenOCD verifies the flash and resets the RP2040; the RUN and BOOT buttons
+are not required.
 
 ## Notes
 

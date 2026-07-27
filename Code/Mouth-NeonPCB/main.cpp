@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 
 #include <Arduino.h>
-#include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
 
+#include "mouth_display.hpp"
 #include "protocol.hpp"
 
 #ifndef ESPNOW_CHANNEL
@@ -16,31 +16,8 @@ namespace {
 
 using namespace mouth_protocol;
 
-constexpr int kPanelWidth = 64;
-constexpr int kPanelHeight = 32;
-constexpr int kPanelChain = 1;
-
-// Custom driver PCB pin mapping, traced through U5/U1 to HUB75.
-constexpr int kR1Pin = 1;
-constexpr int kG1Pin = 2;
-constexpr int kB1Pin = 3;
-constexpr int kR2Pin = 5;
-constexpr int kG2Pin = 4;
-constexpr int kB2Pin = 6;
-constexpr int kAPin = 8;
-constexpr int kBPin = 7;
-constexpr int kCPin = 10;
-constexpr int kDPin = 9;
-constexpr int kEPin = -1;
-constexpr int kLatchPin = 11;
-constexpr int kOePin = 13;
-constexpr int kClockPin = 12;
-
 constexpr uint8_t kFirmwareMajor = 2;
 constexpr uint8_t kFirmwareMinor = 0;
-constexpr uint8_t kDefaultBrightness = 64;
-constexpr uint8_t kDefaultMouthIntensity = 120;
-constexpr uint32_t kFrameIntervalMs = 40;
 
 struct PendingPacket {
     uint8_t source[6];
@@ -48,76 +25,14 @@ struct PendingPacket {
     size_t length;
 };
 
-MatrixPanel_I2S_DMA *matrix = nullptr;
 portMUX_TYPE receiveMux = portMUX_INITIALIZER_UNLOCKED;
 PendingPacket pendingPacket = {};
 volatile bool packetReady = false;
 
-uint8_t currentAnimation = kAnimIdle;
-uint8_t brightness = kDefaultBrightness;
-uint8_t mouthIntensity = kDefaultMouthIntensity;
 uint8_t lastSequence = 0;
 uint8_t lastError = kErrorNone;
-uint32_t syncPhaseMs = 0;
-uint32_t lastFrameMs = 0;
 uint8_t lastSender[6] = {};
 bool haveLastSender = false;
-
-uint16_t rgb(uint8_t red, uint8_t green, uint8_t blue) {
-    return matrix->color565(red, green, blue);
-}
-
-void present() {
-    matrix->flipDMABuffer();
-}
-
-void drawMouth(uint32_t tick) {
-    matrix->clearScreen();
-    if (currentAnimation == kAnimSleep) {
-        present();
-        return;
-    }
-
-    uint16_t color = rgb(255, 110, 24);
-    if (currentAnimation == kAnimHappy) color = rgb(40, 255, 70);
-    if (currentAnimation == kAnimAngry || currentAnimation == kAnimError) {
-        color = rgb(255, 0, 0);
-    }
-    if (currentAnimation == kAnimListening) color = rgb(0, 120, 255);
-    if (currentAnimation == kAnimThinking ||
-        currentAnimation == kAnimThinkingAudio ||
-        currentAnimation == kAnimThinkingLong) {
-        color = rgb(150, 0, 255);
-    }
-
-    if (currentAnimation == kAnimSpeaking) {
-        int open = 4 + ((tick / 3) % 10);
-        if ((tick / 23) & 1) open = 15 - open;
-        open = constrain((open * mouthIntensity) / 160, 2, 15);
-        matrix->fillRect(8, 16 - open / 2, 48, open, color);
-        matrix->fillRect(10, 14 - open / 2, 44, open + 4, color);
-    } else if (currentAnimation == kAnimError) {
-        for (int i = 0; i < 9; ++i) {
-            const int y = (tick + i * 7) % kPanelHeight;
-            matrix->fillRect(i * 8, y, 5, 3, color);
-        }
-    } else if (currentAnimation == kAnimHappy) {
-        for (int x = 9; x < 55; ++x) {
-            const int dx = x - 32;
-            const int y = 13 + (dx * dx) / 85;
-            matrix->fillRect(x, y, 2, 2, color);
-        }
-    } else {
-        int y = 16;
-        if (currentAnimation == kAnimThinking ||
-            currentAnimation == kAnimThinkingAudio ||
-            currentAnimation == kAnimThinkingLong) {
-            y += ((tick / 8) % 7) - 3;
-        }
-        matrix->fillRect(9, y - 2, 46, 4, color);
-    }
-    present();
-}
 
 bool sameMac(const uint8_t *left, const uint8_t *right) {
     return memcmp(left, right, 6) == 0;
@@ -152,11 +67,11 @@ void sendStatus(const uint8_t *destination, uint8_t command) {
         kRoleMouth,
         kFirmwareMajor,
         kFirmwareMinor,
-        currentAnimation,
+        mouth_display::animation(),
         lastSequence,
         lastError,
-        brightness,
-        mouthIntensity,
+        mouth_display::brightness(),
+        mouth_display::mouthIntensity(),
         ESPNOW_CHANNEL,
     };
     uint8_t response[kMaxPacketSize];
@@ -210,8 +125,7 @@ bool processCommand(const PacketView &packet) {
         return true;
     case kCmdSetBrightness:
         if (!requirePayload(packet, 1)) return false;
-        brightness = packet.payload[0];
-        matrix->setBrightness8(brightness);
+        mouth_display::setBrightness(packet.payload[0]);
         return true;
     case kCmdSetAnimation:
     case kCmdSetExpression:
@@ -220,17 +134,18 @@ bool processCommand(const PacketView &packet) {
             lastError = kErrorInvalidPayload;
             return false;
         }
-        currentAnimation = packet.payload[0];
+        mouth_display::setAnimation(packet.payload[0]);
         return true;
     case kCmdSync:
         if (!requirePayload(packet, 4)) return false;
-        syncPhaseMs = static_cast<uint32_t>(packet.payload[0]) |
-                      (static_cast<uint32_t>(packet.payload[1]) << 8) |
-                      (static_cast<uint32_t>(packet.payload[2]) << 16) |
-                      (static_cast<uint32_t>(packet.payload[3]) << 24);
+        mouth_display::setSyncPhase(
+            static_cast<uint32_t>(packet.payload[0]) |
+            (static_cast<uint32_t>(packet.payload[1]) << 8) |
+            (static_cast<uint32_t>(packet.payload[2]) << 16) |
+            (static_cast<uint32_t>(packet.payload[3]) << 24));
         return true;
     case kCmdStop:
-        currentAnimation = kAnimSleep;
+        mouth_display::setAnimation(kAnimSleep);
         return true;
     case kCmdSetParam:
         if (!requirePayload(packet, 2)) return false;
@@ -238,7 +153,7 @@ bool processCommand(const PacketView &packet) {
             lastError = kErrorInvalidPayload;
             return false;
         }
-        mouthIntensity = packet.payload[1];
+        mouth_display::setMouthIntensity(packet.payload[1]);
         return true;
     case kCmdReset:
         return true;
@@ -283,22 +198,6 @@ void handlePacket(const PendingPacket &received) {
     }
 }
 
-bool initializeMatrix() {
-    HUB75_I2S_CFG::i2s_pins pins = {
-        kR1Pin, kG1Pin, kB1Pin, kR2Pin, kG2Pin, kB2Pin, kAPin,
-        kBPin,  kCPin,  kDPin,  kEPin,  kLatchPin, kOePin, kClockPin,
-    };
-    HUB75_I2S_CFG config(kPanelWidth, kPanelHeight, kPanelChain, pins);
-    config.double_buff = true;
-
-    matrix = new MatrixPanel_I2S_DMA(config);
-    if (matrix == nullptr || !matrix->begin()) return false;
-    matrix->setBrightness8(brightness);
-    matrix->clearScreen();
-    present();
-    return true;
-}
-
 bool initializeEspNow() {
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
@@ -317,19 +216,19 @@ void setup() {
     delay(250);
     Serial.println("\nSarcasmOS ESP-NOW mouth starting");
 
-    if (!initializeMatrix()) {
+    if (!mouth_display::begin()) {
         Serial.println("ERROR: matrix DMA initialization failed");
         while (true) delay(1000);
     }
     if (!initializeEspNow()) {
         Serial.println("ERROR: ESP-NOW initialization failed");
-        currentAnimation = kAnimError;
+        mouth_display::setAnimation(kAnimError);
     } else {
         Serial.print("ESP-NOW mouth MAC ");
         Serial.print(WiFi.macAddress());
         Serial.printf(", channel %d\n", ESPNOW_CHANNEL);
     }
-    drawMouth(0);
+    mouth_display::showNow();
 }
 
 void loop() {
@@ -338,10 +237,6 @@ void loop() {
         handlePacket(received);
     }
 
-    const uint32_t now = millis();
-    if (now - lastFrameMs >= kFrameIntervalMs) {
-        lastFrameMs = now;
-        drawMouth((now + syncPhaseMs) / 16);
-    }
+    mouth_display::update();
     delay(1);
 }

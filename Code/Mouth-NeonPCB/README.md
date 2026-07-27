@@ -8,12 +8,20 @@ Supported commands are ping, device info, brightness, animation/expression,
 animation phase sync, stop, speaking intensity, and reset. Every valid command
 gets a status response carrying its sequence number and result.
 
-## Build, upload, and identify the board
+## Firmware variants
+
+The project produces two separate firmware images that share the same panel
+driver, pin map, and animation renderer:
+
+- `custom_esp32s3_mini_n8`: regular firmware with ESP-NOW control.
+- `local_animation_test`: standalone tester with no brain or wireless link
+  required.
+
+### Regular ESP-NOW firmware
 
 ```sh
-pio run
-pio run --target upload
-pio device monitor
+pio run -e custom_esp32s3_mini_n8
+pio run -e custom_esp32s3_mini_n8 --target upload
 ```
 
 At boot the serial monitor prints the mouth's Wi-Fi station MAC address and
@@ -22,6 +30,30 @@ ESP-NOW channel. Record that MAC for the brain configuration.
 The channel defaults to `1`. Change `-DESPNOW_CHANNEL=1` in `platformio.ini`
 if the brain uses another 2.4 GHz channel. Both devices must use the same
 channel.
+
+### Local animation-test firmware
+
+```sh
+pio run -e local_animation_test
+pio run -e local_animation_test --target upload
+pio device monitor -e local_animation_test
+```
+
+The local tester automatically cycles through every animation. Its serial
+controls are:
+
+| Key | Action |
+| --- | --- |
+| `0`..`9` | select one animation |
+| `a` | toggle automatic animation cycling |
+| `n` | advance to the next animation |
+| `p` | cycle red, green, blue, white, color bars, RGB rows, and geometry tests |
+| `+` / `-` | adjust brightness |
+| `]` / `[` | adjust speaking intensity |
+| `h` | print help |
+
+Uploading one variant replaces the other in flash. Re-upload the regular
+environment when local testing is complete.
 
 ## Display behavior
 

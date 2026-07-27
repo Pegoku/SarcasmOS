@@ -68,6 +68,11 @@ current frame** buttons:
 changes invalidate any older GIMP edit session for that animation; reopen it
 with `o` if continued multi-frame editing is needed.
 
+Use **Set frame time** (`T`) to change the current animation's delay between
+frames. The dialog accepts `1..65535` milliseconds and updates the
+animation's `frame_ms` value, emulator timing, and generated firmware header
+without changing any frame artwork.
+
 **Copy frame** (`c`) copies a 64x32 PNG for sharing or attaching to a request.
 
 ## Command-line editing

@@ -171,8 +171,10 @@ class AssetPack:
 class EmulatorWindow:
     def __init__(self, args: argparse.Namespace) -> None:
         import tkinter as tk
+        from tkinter import simpledialog
 
         self.tk = tk
+        self.simpledialog = simpledialog
         self.assets = AssetPack()
         self.state_id = self.assets.state_ids[args.state]
         self.scale = args.scale
@@ -248,12 +250,16 @@ class EmulatorWindow:
             frame_buttons, text="Remove current frame (Delete)",
             command=self.remove_frame,
         ).pack(side="left", padx=(0, 5))
+        tk.Button(
+            frame_buttons, text="Set frame time (T)",
+            command=self.change_frame_time,
+        ).pack(side="left", padx=(0, 5))
 
         tk.Label(
             self.root,
             text=(
                 "←/→ state   ↑/↓ frame   Space/A play/pause   "
-                "Insert/Delete frame\n"
+                "Insert/Delete frame   T frame time\n"
                 "+/- brightness   [/] intensity   "
                 ",/. temperature   Q quit"
             ),
@@ -585,6 +591,34 @@ class EmulatorWindow:
         except (OSError, ValueError, KeyError) as error:
             self.show_notice(f"Could not remove frame: {error}")
 
+    def change_frame_time(self) -> None:
+        state = self.state_name
+        animation = self.assets.animations[self.state_id]
+        frame_ms = self.simpledialog.askinteger(
+            "Set animation frame time",
+            f"Delay between {state} frames in milliseconds:",
+            parent=self.root,
+            initialvalue=animation["frame_ms"],
+            minvalue=1,
+            maxvalue=65535,
+        )
+        if frame_ms is None:
+            return
+        try:
+            asset_tool.set_animation_frame_ms(state, frame_ms)
+            self.assets.reload()
+            self.state_id = self.assets.state_ids[state]
+            self.animation_elapsed_ms = self.current_local_frame * frame_ms
+            now_ms = time.monotonic_ns() // 1_000_000
+            self.last_step_ms = now_ms
+            self.last_update_ms = now_ms
+            self.last_pixels[:] = [None] * len(self.last_pixels)
+            self.show_notice(
+                f"{state} frame time: {frame_ms} ms"
+            )
+        except (OSError, ValueError, KeyError) as error:
+            self.show_notice(f"Could not set frame time: {error}")
+
     def on_key(self, event: Any) -> None:
         key = event.keysym
         if key == "Left":
@@ -624,6 +658,8 @@ class EmulatorWindow:
             self.add_frame()
         elif key == "Delete":
             self.remove_frame()
+        elif key in ("t", "T"):
+            self.change_frame_time()
         elif key in ("e", "E"):
             self.open_in_gimp()
         elif key in ("o", "O"):
@@ -676,6 +712,7 @@ class EmulatorWindow:
         status = (
             f"0x{self.state_id:02x}  {self.state_name:<16} "
             f"frame {self.current_local_frame + 1}/{len(animation['frames'])} "
+            f"delay {animation['frame_ms']} ms   "
             f"{mode}   brightness {self.brightness:3}/255   "
             f"intensity {self.intensity:3}/255"
         )

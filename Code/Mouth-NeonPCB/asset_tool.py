@@ -112,8 +112,8 @@ def validate_assets(data: dict[str, Any]) -> None:
             raise ValueError(f"{animation['name']}: ID must be {state_id}")
         if animation.get("playback") not in PLAYBACK_IDS:
             raise ValueError(f"{animation['name']}: invalid playback mode")
-        if not isinstance(animation.get("frame_ms"), int) or \
-                animation["frame_ms"] <= 0:
+        if (not isinstance(animation.get("frame_ms"), int) or
+                not 1 <= animation["frame_ms"] <= 65535):
             raise ValueError(f"{animation['name']}: invalid frame_ms")
         if not animation.get("frames"):
             raise ValueError(f"{animation['name']}: animation has no frames")
@@ -442,6 +442,30 @@ def import_sprite(
     print(f"Imported {source} -> {state} frame {frame_index} ({sprite})")
 
 
+def write_asset_pack(
+    data: dict[str, Any],
+    assets_path: pathlib.Path = DEFAULT_ASSETS,
+    header_path: pathlib.Path = DEFAULT_HEADER,
+) -> None:
+    """Validate and atomically write an asset pack and generated header."""
+    validate_assets(data)
+    token = time.monotonic_ns()
+    temporary_assets = assets_path.with_name(
+        f".{assets_path.name}.{token}.tmp"
+    )
+    temporary_header = header_path.with_name(
+        f".{header_path.name}.{token}.tmp"
+    )
+    try:
+        temporary_assets.write_text(json.dumps(data, indent=2) + "\n")
+        compile_assets(temporary_assets, temporary_header)
+        temporary_assets.replace(assets_path)
+        temporary_header.replace(header_path)
+    finally:
+        temporary_assets.unlink(missing_ok=True)
+        temporary_header.unlink(missing_ok=True)
+
+
 def replace_animation_rows(
     state: str, rows: list[list[str]],
     assets_path: pathlib.Path = DEFAULT_ASSETS,
@@ -476,22 +500,7 @@ def replace_animation_rows(
     for sprite, sprite_rows in zip(new_names, rows):
         data["sprites"][sprite] = {"rows": list(sprite_rows)}
 
-    validate_assets(data)
-    token = time.monotonic_ns()
-    temporary_assets = assets_path.with_name(
-        f".{assets_path.name}.{token}.tmp"
-    )
-    temporary_header = header_path.with_name(
-        f".{header_path.name}.{token}.tmp"
-    )
-    try:
-        temporary_assets.write_text(json.dumps(data, indent=2) + "\n")
-        compile_assets(temporary_assets, temporary_header)
-        temporary_assets.replace(assets_path)
-        temporary_header.replace(header_path)
-    finally:
-        temporary_assets.unlink(missing_ok=True)
-        temporary_header.unlink(missing_ok=True)
+    write_asset_pack(data, assets_path, header_path)
     return len(rows)
 
 
@@ -541,6 +550,21 @@ def remove_animation_frame(
     selected_index = min(frame_index, len(rows) - 1)
     print(f"Removed {state} frame {frame_index + 1}")
     return selected_index
+
+
+def set_animation_frame_ms(
+    state: str, frame_ms: int,
+    assets_path: pathlib.Path = DEFAULT_ASSETS,
+    header_path: pathlib.Path = DEFAULT_HEADER,
+) -> None:
+    """Set the delay between frames for one animation."""
+    if not 1 <= frame_ms <= 65535:
+        raise ValueError("frame time must be in the range 1..65535 ms")
+    data = load_assets(assets_path)
+    animation = animation_for(data, state)
+    animation["frame_ms"] = frame_ms
+    write_asset_pack(data, assets_path, header_path)
+    print(f"Set {state} frame time to {frame_ms} ms")
 
 
 def sync_animation_frames(

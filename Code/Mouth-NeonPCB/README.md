@@ -103,6 +103,9 @@ The editor controls operate on the exact animation frame currently displayed:
   shift forward by one position.
 - **Remove current frame** or `Delete` deletes the displayed frame and shifts
   later frames backward. An animation cannot be reduced below one frame.
+- **Set frame time** or `T` changes the delay between frames for the current
+  animation. Enter the delay in milliseconds; it is shared by the emulator
+  and generated firmware.
 
 Start paused on a particular state with:
 

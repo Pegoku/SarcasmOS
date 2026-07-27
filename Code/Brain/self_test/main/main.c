@@ -10,6 +10,8 @@
 #include "driver/i2c_master.h"
 #include "driver/i2s_std.h"
 #include "driver/spi_master.h"
+#include "driver/usb_serial_jtag.h"
+#include "driver/usb_serial_jtag_vfs.h"
 #include "esp_chip_info.h"
 #include "esp_err.h"
 #include "esp_event.h"
@@ -86,6 +88,7 @@ static esp_netif_t *g_wifi_netif;
 static EventGroupHandle_t g_wifi_events;
 static bool g_wifi_initialized;
 static bool g_wifi_connected;
+static bool g_usb_driver_ready;
 static uint8_t g_wifi_disconnect_reason;
 static esp_err_t g_service_status = ESP_OK;
 
@@ -760,11 +763,20 @@ static bool read_line(const char *prompt, char *buffer, size_t buffer_size)
     fflush(stdout);
 
     while (true) {
-        int character = fgetc(stdin);
-        if (character == EOF) {
-            clearerr(stdin);
-            vTaskDelay(pdMS_TO_TICKS(20));
-            continue;
+        uint8_t input;
+        int character;
+        if (g_usb_driver_ready) {
+            if (usb_serial_jtag_read_bytes(&input, 1, pdMS_TO_TICKS(20)) != 1) {
+                continue;
+            }
+            character = input;
+        } else {
+            character = fgetc(stdin);
+            if (character == EOF) {
+                clearerr(stdin);
+                vTaskDelay(pdMS_TO_TICKS(20));
+                continue;
+            }
         }
 
         if (discard_line_feed) {
@@ -1096,6 +1108,15 @@ static void run_tui(void)
 void app_main(void)
 {
     vTaskDelay(pdMS_TO_TICKS(600));
+
+    usb_serial_jtag_driver_config_t usb_config =
+        USB_SERIAL_JTAG_DRIVER_CONFIG_DEFAULT();
+    esp_err_t usb_err = usb_serial_jtag_driver_install(&usb_config);
+    if (usb_err == ESP_OK) {
+        usb_serial_jtag_vfs_use_driver();
+        g_usb_driver_ready = true;
+    }
+
     setvbuf(stdin, NULL, _IONBF, 0);
     setvbuf(stdout, NULL, _IONBF, 0);
 
@@ -1106,6 +1127,10 @@ void app_main(void)
     printf("============================================================\n");
     printf("WARN means firmware exercised the control path but the PCB has\n");
     printf("no electrical feedback for an automatic end-to-end check.\n");
+    if (usb_err != ESP_OK) {
+        printf("[WARN] USB byte driver unavailable (%s); input echo may be delayed.\n",
+               esp_err_to_name(usb_err));
+    }
 
     g_service_status = initialize_system_services();
 

@@ -25,7 +25,10 @@ on the same USB serial connection. It can:
 - scan for Wi-Fi networks, select one, enter its password, and connect
 - report the connected SSID, channel, RSSI, IP address, and disconnect reason
 - disconnect Wi-Fi
-- repeat the I2C, W5500, audio, and GPIO tests independently
+- run separate one-second speaker-tone and microphone-capture tests
+- address the left eye, right eye, or mouth individually and visually cycle it
+  through happy, error, and idle animations while checking its protocol status
+- repeat the I2C, W5500, combined audio, and GPIO tests independently
 - rerun the complete automatic test sequence
 
 Wi-Fi credentials entered in the menu are kept in RAM only and are not saved to
@@ -68,9 +71,12 @@ When the initial report finishes, enter `h` to display the controls:
 brain-test> h
 ```
 
-Commands are single letters or numbers. For example, enter `2` to disable the
-normal 5 V buck, `1` to enable it again, `c` to select and connect to a Wi-Fi
-network, and `s` to show its connection status and IP address.
+Input is echoed character by character as you type. Commands are single letters
+or numbers. For example, enter `2` to disable the normal 5 V buck, `1` to enable
+it again, `c` to select and connect to a Wi-Fi network, and `s` to show its
+connection status and IP address. Use `p` for the speaker, `m` for the
+microphone, `l`/`r`/`o` for an individual left-eye/right-eye/mouth test, and `v`
+to test all three displays. The complete automatic sequence is `x`.
 
 Enabling a buck only verifies the enable GPIO state. Measure the corresponding
 rail before treating it as electrically validated.

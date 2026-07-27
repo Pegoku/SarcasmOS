@@ -61,9 +61,18 @@
 #define W5500_VERSIONR 0x0039
 #define W5500_EXPECTED_VERSION 0x04
 
+#define DISPLAY_PROTOCOL_VERSION 0x01
+#define DISPLAY_CMD_PING 0x01
+#define DISPLAY_CMD_SET_BRIGHTNESS 0x10
+#define DISPLAY_CMD_SET_ANIMATION 0x20
+#define DISPLAY_ANIM_IDLE 0x00
+#define DISPLAY_ANIM_HAPPY 0x06
+#define DISPLAY_ANIM_ERROR 0x08
+
 #define AUDIO_SAMPLE_RATE 16000
 #define AUDIO_BLOCK_FRAMES 64
-#define AUDIO_TEST_BLOCKS 50
+#define AUDIO_AUTO_BLOCKS 50
+#define AUDIO_MANUAL_BLOCKS 250
 #define WIFI_SCAN_RECORDS 20
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAILED_BIT BIT1
@@ -90,6 +99,7 @@ static bool g_wifi_initialized;
 static bool g_wifi_connected;
 static bool g_usb_driver_ready;
 static uint8_t g_wifi_disconnect_reason;
+static uint8_t g_display_sequence = 1;
 static esp_err_t g_service_status = ESP_OK;
 
 static void print_result(result_t result, const char *test, const char *detail)
@@ -279,6 +289,114 @@ static esp_err_t i2c_read_registers(uint8_t address, uint8_t reg, uint8_t *data,
         i2c_master_bus_rm_device(device);
     }
     return err;
+}
+
+static uint8_t crc8(const uint8_t *data, size_t length)
+{
+    uint8_t crc = 0;
+    for (size_t i = 0; i < length; ++i) {
+        crc ^= data[i];
+        for (int bit = 0; bit < 8; ++bit) {
+            crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x07)
+                               : (uint8_t)(crc << 1);
+        }
+    }
+    return crc;
+}
+
+static esp_err_t display_command(uint8_t address, uint8_t expected_role,
+                                 uint8_t command, const uint8_t *payload,
+                                 uint8_t payload_length)
+{
+    if (payload_length > 64) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    i2c_device_config_t config = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = address,
+        .scl_speed_hz = CONFIG_BRAIN_SELF_TEST_I2C_FREQ_HZ,
+    };
+    i2c_master_dev_handle_t device = NULL;
+    esp_err_t err = i2c_master_bus_add_device(g_i2c_bus, &config, &device);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    uint8_t sequence = g_display_sequence++;
+    uint8_t frame[69] = {
+        DISPLAY_PROTOCOL_VERSION, command, sequence, payload_length
+    };
+    if (payload_length > 0 && payload != NULL) {
+        memcpy(&frame[4], payload, payload_length);
+    }
+    frame[4 + payload_length] = crc8(frame, 4 + payload_length);
+    err = i2c_master_transmit(device, frame, 5 + payload_length, 80);
+
+    uint8_t status[8] = { 0 };
+    if (err == ESP_OK) {
+        vTaskDelay(pdMS_TO_TICKS(80));
+        err = i2c_master_receive(device, status, sizeof(status), 80);
+    }
+    i2c_master_bus_rm_device(device);
+
+    if (err == ESP_OK &&
+        (status[0] != DISPLAY_PROTOCOL_VERSION || status[1] != expected_role ||
+         status[5] != sequence || status[6] != 0)) {
+        return ESP_ERR_INVALID_RESPONSE;
+    }
+    return err;
+}
+
+static void test_display_controller(uint8_t address, uint8_t role, const char *name)
+{
+    esp_err_t err = init_i2c();
+    if (err == ESP_OK && !i2c_present(address)) {
+        err = ESP_ERR_NOT_FOUND;
+    }
+    if (err == ESP_OK) {
+        err = display_command(address, role, DISPLAY_CMD_PING, NULL, 0);
+    }
+
+    uint8_t brightness = 200;
+    if (err == ESP_OK) {
+        err = display_command(address, role, DISPLAY_CMD_SET_BRIGHTNESS,
+                              &brightness, 1);
+    }
+
+    const uint8_t animations[] = {
+        DISPLAY_ANIM_HAPPY, DISPLAY_ANIM_ERROR, DISPLAY_ANIM_IDLE
+    };
+    if (err == ESP_OK) {
+        printf("\nTesting %s at 0x%02X: green/happy, red/error, then idle...\n",
+               name, address);
+        for (size_t i = 0; i < sizeof(animations); ++i) {
+            err = display_command(address, role, DISPLAY_CMD_SET_ANIMATION,
+                                  &animations[i], 1);
+            if (err != ESP_OK) {
+                break;
+            }
+            vTaskDelay(pdMS_TO_TICKS(700));
+        }
+    }
+
+    char detail[120];
+    if (err == ESP_OK) {
+        snprintf(detail, sizeof(detail),
+                 "protocol/status verified at 0x%02X; confirm visual sequence", address);
+        print_result(RESULT_WARN, name, detail);
+    } else {
+        snprintf(detail, sizeof(detail), "test failed at 0x%02X: %s",
+                 address, esp_err_to_name(err));
+        print_result(RESULT_FAIL, name, detail);
+    }
+}
+
+static void test_all_displays(void)
+{
+    test_display_controller(I2C_ADDR_LEFT_EYE, 0, "left eye");
+    test_display_controller(I2C_ADDR_RIGHT_EYE, 1, "right eye");
+    test_display_controller(I2C_ADDR_MOUTH, 2, "mouth display");
 }
 
 static void test_max17049(void)
@@ -571,14 +689,16 @@ static void fill_tone(int32_t *samples, size_t frames, uint32_t *phase)
     }
 }
 
-static void test_audio(void)
+static void test_audio_paths(bool play_tone, bool measure_microphone,
+                             unsigned block_count)
 {
 #if CONFIG_BRAIN_SELF_TEST_AUDIO
     i2s_chan_handle_t tx_channel = NULL;
     i2s_chan_handle_t rx_channel = NULL;
     i2s_chan_config_t channel_config =
         I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
-    esp_err_t err = i2s_new_channel(&channel_config, &tx_channel, &rx_channel);
+    esp_err_t err = i2s_new_channel(
+        &channel_config, &tx_channel, measure_microphone ? &rx_channel : NULL);
     if (err != ESP_OK) {
         char detail[96];
         snprintf(detail, sizeof(detail), "channel allocation failed: %s", esp_err_to_name(err));
@@ -600,10 +720,10 @@ static void test_audio(void)
         },
     };
     err = i2s_channel_init_std_mode(tx_channel, &standard_config);
-    if (err == ESP_OK) {
+    if (err == ESP_OK && rx_channel != NULL) {
         err = i2s_channel_init_std_mode(rx_channel, &standard_config);
     }
-    if (err == ESP_OK) {
+    if (err == ESP_OK && rx_channel != NULL) {
         err = i2s_channel_enable(rx_channel);
     }
     if (err == ESP_OK) {
@@ -625,57 +745,65 @@ static void test_audio(void)
     int32_t previous = 0;
     size_t total_input_bytes = 0;
 
-    for (unsigned block = 0; block < AUDIO_TEST_BLOCKS; ++block) {
-#if CONFIG_BRAIN_SELF_TEST_SPEAKER_TONE
-        fill_tone(output, AUDIO_BLOCK_FRAMES, &phase);
-#else
-        memset(output, 0, sizeof(output));
-#endif
+    for (unsigned block = 0; block < block_count; ++block) {
+        if (play_tone) {
+            fill_tone(output, AUDIO_BLOCK_FRAMES, &phase);
+        } else {
+            memset(output, 0, sizeof(output));
+        }
         size_t bytes_written = 0;
         size_t bytes_read = 0;
         esp_err_t write_err = i2s_channel_write(
             tx_channel, output, sizeof(output), &bytes_written, pdMS_TO_TICKS(100));
-        esp_err_t read_err = i2s_channel_read(
-            rx_channel, input, sizeof(input), &bytes_read, pdMS_TO_TICKS(100));
+        esp_err_t read_err = ESP_OK;
+        if (measure_microphone) {
+            read_err = i2s_channel_read(
+                rx_channel, input, sizeof(input), &bytes_read, pdMS_TO_TICKS(100));
+        }
         if (write_err != ESP_OK || read_err != ESP_OK) {
             err = write_err != ESP_OK ? write_err : read_err;
             break;
         }
 
-        total_input_bytes += bytes_read;
-        size_t sample_count = bytes_read / sizeof(input[0]);
-        for (size_t i = 0; i < sample_count; ++i) {
-            int32_t sample = input[i] >> 8;
-            uint32_t magnitude = sample < 0 ? (uint32_t)(-sample) : (uint32_t)sample;
-            if (magnitude > peak) {
-                peak = magnitude;
+        if (measure_microphone) {
+            total_input_bytes += bytes_read;
+            size_t sample_count = bytes_read / sizeof(input[0]);
+            for (size_t i = 0; i < sample_count; ++i) {
+                int32_t sample = input[i] >> 8;
+                uint32_t magnitude =
+                    sample < 0 ? (uint32_t)(-sample) : (uint32_t)sample;
+                if (magnitude > peak) {
+                    peak = magnitude;
+                }
+                energy += (uint64_t)magnitude * magnitude;
+                if (sample != previous) {
+                    ++changing_samples;
+                }
+                previous = sample;
             }
-            energy += (uint64_t)magnitude * magnitude;
-            if (sample != previous) {
-                ++changing_samples;
-            }
-            previous = sample;
         }
     }
 
-    if (err != ESP_OK || total_input_bytes == 0) {
+    if (err != ESP_OK || (measure_microphone && total_input_bytes == 0)) {
         char detail[96];
         snprintf(detail, sizeof(detail), "stream failed: %s", esp_err_to_name(err));
         print_result(RESULT_FAIL, "I2S audio", detail);
     } else {
-        const size_t sample_count = total_input_bytes / sizeof(int32_t);
-        double rms = sample_count > 0 ? sqrt((double)energy / sample_count) : 0.0;
-        char detail[128];
-        snprintf(detail, sizeof(detail), "captured %u samples, peak %" PRIu32 ", RMS %.0f",
-                 (unsigned)sample_count, peak, rms);
-        print_result(changing_samples > 16 && peak > 0 ? RESULT_PASS : RESULT_FAIL,
-                     "I2S microphone", detail);
-#if CONFIG_BRAIN_SELF_TEST_SPEAKER_TONE
-        print_result(RESULT_WARN, "I2S speaker",
-                     "440 Hz waveform sent; amplifier/speaker require an audible confirmation");
-#else
-        print_result(RESULT_PASS, "I2S speaker", "silent samples transmitted");
-#endif
+        if (measure_microphone) {
+            const size_t sample_count = total_input_bytes / sizeof(int32_t);
+            double rms = sample_count > 0 ? sqrt((double)energy / sample_count) : 0.0;
+            char detail[128];
+            snprintf(detail, sizeof(detail),
+                     "captured %u samples, peak %" PRIu32 ", RMS %.0f",
+                     (unsigned)sample_count, peak, rms);
+            print_result(changing_samples > 16 && peak > 0 ? RESULT_PASS : RESULT_FAIL,
+                         "I2S microphone", detail);
+        }
+        if (play_tone) {
+            print_result(
+                RESULT_WARN, "I2S speaker",
+                "440 Hz waveform sent; confirm that the tone was audible");
+        }
     }
 
 cleanup:
@@ -690,6 +818,27 @@ cleanup:
 #else
     print_result(RESULT_SKIP, "I2S audio", "disabled in menuconfig");
 #endif
+}
+
+static void test_audio(void)
+{
+#if CONFIG_BRAIN_SELF_TEST_SPEAKER_TONE
+    test_audio_paths(true, true, AUDIO_AUTO_BLOCKS);
+#else
+    test_audio_paths(false, true, AUDIO_AUTO_BLOCKS);
+#endif
+}
+
+static void manual_test_speaker(void)
+{
+    printf("\nPlaying a 440 Hz speaker tone for one second...\n");
+    test_audio_paths(true, false, AUDIO_MANUAL_BLOCKS);
+}
+
+static void manual_test_microphone(void)
+{
+    printf("\nRecording the microphone for one second. Speak or clap now...\n");
+    test_audio_paths(false, true, AUDIO_MANUAL_BLOCKS);
 }
 
 static esp_err_t initialize_system_services(void)
@@ -1019,9 +1168,13 @@ static void print_tui_menu(void)
     printf("  4  5VHP buck OFF                   d  Wi-Fi disconnect\n");
     printf("  5  charger enable                  i  I2C scan/read\n");
     printf("  6  charger disable                 e  W5500 test\n");
-    printf("                                      a  I2S audio test\n");
+    printf("                                      p  speaker tone\n");
+    printf("                                      m  microphone capture\n");
+    printf(" Displays                            a  combined I2S audio\n");
+    printf("  l  left eye test                   v  all displays\n");
+    printf("  r  right eye test                  o  mouth test\n");
     printf(" Other\n");
-    printf("  g  GPIO status     r  rerun all     h  show menu\n");
+    printf("  g  GPIO status     x  rerun all     h  show menu\n");
     printf("==================================================\n");
 }
 
@@ -1083,12 +1236,36 @@ static void run_tui(void)
         case 'A':
             test_audio();
             break;
+        case 'p':
+        case 'P':
+            manual_test_speaker();
+            break;
+        case 'm':
+        case 'M':
+            manual_test_microphone();
+            break;
+        case 'l':
+        case 'L':
+            test_display_controller(I2C_ADDR_LEFT_EYE, 0, "left eye");
+            break;
+        case 'r':
+        case 'R':
+            test_display_controller(I2C_ADDR_RIGHT_EYE, 1, "right eye");
+            break;
+        case 'o':
+        case 'O':
+            test_display_controller(I2C_ADDR_MOUTH, 2, "mouth display");
+            break;
+        case 'v':
+        case 'V':
+            test_all_displays();
+            break;
         case 'g':
         case 'G':
             manual_gpio_status();
             break;
-        case 'r':
-        case 'R':
+        case 'x':
+        case 'X':
             run_self_test();
             break;
         case 'h':

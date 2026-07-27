@@ -12,6 +12,7 @@ idf_component_register(
         esp_netif
         esp_system
         esp_wifi
+        mouth_espnow
         nvs_flash
         spi_flash
 )

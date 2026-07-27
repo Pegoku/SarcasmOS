@@ -12,6 +12,7 @@
 #include "driver/spi_master.h"
 #include "driver/usb_serial_jtag.h"
 #include "driver/usb_serial_jtag_vfs.h"
+#include "display_protocol.h"
 #include "esp_chip_info.h"
 #include "esp_err.h"
 #include "esp_event.h"
@@ -23,6 +24,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
+#include "mouth_espnow.h"
 #include "nvs_flash.h"
 
 #define PIN_5V_EN GPIO_NUM_1
@@ -52,7 +54,6 @@
 #define I2C_ADDR_BQ25792 0x6B
 #define I2C_ADDR_LEFT_EYE 0x30
 #define I2C_ADDR_RIGHT_EYE 0x31
-#define I2C_ADDR_MOUTH 0x32
 
 #define MAX17049_REG_VCELL 0x02
 #define MAX17049_REG_SOC 0x04
@@ -61,13 +62,7 @@
 #define W5500_VERSIONR 0x0039
 #define W5500_EXPECTED_VERSION 0x04
 
-#define DISPLAY_PROTOCOL_VERSION 0x01
-#define DISPLAY_CMD_PING 0x01
-#define DISPLAY_CMD_SET_BRIGHTNESS 0x10
-#define DISPLAY_CMD_SET_ANIMATION 0x20
-#define DISPLAY_ANIM_IDLE 0x00
-#define DISPLAY_ANIM_HAPPY 0x06
-#define DISPLAY_ANIM_ERROR 0x08
+#define EYE_PROTOCOL_VERSION 0x01
 
 #define AUDIO_SAMPLE_RATE 16000
 #define AUDIO_BLOCK_FRAMES 64
@@ -98,6 +93,7 @@ static EventGroupHandle_t g_wifi_events;
 static bool g_wifi_initialized;
 static bool g_wifi_connected;
 static bool g_usb_driver_ready;
+static bool g_mouth_initialized;
 static uint8_t g_wifi_disconnect_reason;
 static uint8_t g_display_sequence = 1;
 static esp_err_t g_service_status = ESP_OK;
@@ -136,8 +132,6 @@ static const char *known_i2c_device(uint8_t address)
         return "left eye (expected)";
     case I2C_ADDR_RIGHT_EYE:
         return "right eye (expected)";
-    case I2C_ADDR_MOUTH:
-        return "mouth (expected)";
     case I2C_ADDR_MAX17049:
         return "MAX17049 fuel gauge";
     case I2C_ADDR_BQ25792:
@@ -325,7 +319,7 @@ static esp_err_t display_command(uint8_t address, uint8_t expected_role,
 
     uint8_t sequence = g_display_sequence++;
     uint8_t frame[69] = {
-        DISPLAY_PROTOCOL_VERSION, command, sequence, payload_length
+        EYE_PROTOCOL_VERSION, command, sequence, payload_length
     };
     if (payload_length > 0 && payload != NULL) {
         memcpy(&frame[4], payload, payload_length);
@@ -341,7 +335,7 @@ static esp_err_t display_command(uint8_t address, uint8_t expected_role,
     i2c_master_bus_rm_device(device);
 
     if (err == ESP_OK &&
-        (status[0] != DISPLAY_PROTOCOL_VERSION || status[1] != expected_role ||
+        (status[0] != EYE_PROTOCOL_VERSION || status[1] != expected_role ||
          status[5] != sequence || status[6] != 0)) {
         return ESP_ERR_INVALID_RESPONSE;
     }
@@ -396,7 +390,6 @@ static void test_all_displays(void)
 {
     test_display_controller(I2C_ADDR_LEFT_EYE, 0, "left eye");
     test_display_controller(I2C_ADDR_RIGHT_EYE, 1, "right eye");
-    test_display_controller(I2C_ADDR_MOUTH, 2, "mouth display");
 }
 
 static void test_max17049(void)
@@ -463,14 +456,14 @@ static void test_i2c(void)
     test_max17049();
 
     const uint8_t displays[] = {
-        I2C_ADDR_LEFT_EYE, I2C_ADDR_RIGHT_EYE, I2C_ADDR_MOUTH
+        I2C_ADDR_LEFT_EYE, I2C_ADDR_RIGHT_EYE
     };
     unsigned displays_found = 0;
     for (size_t i = 0; i < sizeof(displays); ++i) {
         displays_found += i2c_present(displays[i]) ? 1 : 0;
     }
-    snprintf(detail, sizeof(detail), "%u/3 expected display controllers present", displays_found);
-    print_result(displays_found == 3 ? RESULT_PASS : RESULT_WARN, "display I2C", detail);
+    snprintf(detail, sizeof(detail), "%u/2 expected eye controllers present", displays_found);
+    print_result(displays_found == 2 ? RESULT_PASS : RESULT_WARN, "display I2C", detail);
 }
 
 static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t event_id,
@@ -491,7 +484,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t event_i
 
 static esp_err_t wifi_ensure_started(void)
 {
-#if CONFIG_BRAIN_SELF_TEST_WIFI
     if (g_wifi_initialized) {
         return ESP_OK;
     }
@@ -524,8 +516,118 @@ static esp_err_t wifi_ensure_started(void)
         g_wifi_initialized = true;
     }
     return err;
+}
+
+static esp_err_t mouth_espnow_ensure_started(void)
+{
+#if CONFIG_BRAIN_SELF_TEST_MOUTH_ESPNOW
+    if (g_mouth_initialized) {
+        return ESP_OK;
+    }
+
+    uint8_t mac[6];
+    if (!mouth_espnow_parse_mac(CONFIG_BRAIN_SELF_TEST_MOUTH_MAC, mac)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    esp_err_t err = wifi_ensure_started();
+    if (err != ESP_OK) {
+        return err;
+    }
+    if (!g_wifi_connected) {
+        err = esp_wifi_set_channel(CONFIG_BRAIN_SELF_TEST_ESPNOW_CHANNEL,
+                                   WIFI_SECOND_CHAN_NONE);
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+
+    mouth_espnow_config_t config = {
+        .peer_channel = 0,
+        .ack_timeout_ms = CONFIG_BRAIN_SELF_TEST_ESPNOW_ACK_TIMEOUT_MS,
+        .retries = CONFIG_BRAIN_SELF_TEST_ESPNOW_RETRIES,
+    };
+    memcpy(config.mac, mac, sizeof(config.mac));
+    err = mouth_espnow_init(&config);
+    if (err == ESP_OK) {
+        g_mouth_initialized = true;
+    }
+    return err;
 #else
     return ESP_ERR_NOT_SUPPORTED;
+#endif
+}
+
+static void test_mouth_espnow(void)
+{
+#if CONFIG_BRAIN_SELF_TEST_MOUTH_ESPNOW
+    esp_err_t err = mouth_espnow_ensure_started();
+    if (err == ESP_ERR_INVALID_ARG) {
+        print_result(
+            RESULT_SKIP, "mouth ESP-NOW",
+            "set the mouth MAC under SarcasmOS Brain self-test in menuconfig");
+        return;
+    }
+    if (err != ESP_OK) {
+        char detail[112];
+        snprintf(detail, sizeof(detail), "radio initialization failed: %s",
+                 esp_err_to_name(err));
+        print_result(RESULT_FAIL, "mouth ESP-NOW", detail);
+        return;
+    }
+
+    err = mouth_espnow_send(DISPLAY_CMD_PING, NULL, 0, true);
+    mouth_espnow_status_t status;
+    mouth_espnow_get_status(&status);
+    uint8_t radio_channel = 0;
+    wifi_second_chan_t secondary_channel;
+    if (err == ESP_OK) {
+        err = esp_wifi_get_channel(&radio_channel, &secondary_channel);
+    }
+    if (err == ESP_OK && status.channel != radio_channel) {
+        err = ESP_ERR_INVALID_RESPONSE;
+    }
+
+    uint8_t brightness = 200;
+    if (err == ESP_OK) {
+        err = mouth_espnow_send(
+            DISPLAY_CMD_SET_BRIGHTNESS, &brightness, 1, true);
+    }
+
+    const uint8_t animations[] = {
+        DISPLAY_ANIM_HAPPY, DISPLAY_ANIM_ERROR, DISPLAY_ANIM_IDLE
+    };
+    if (err == ESP_OK) {
+        printf("\nTesting wireless mouth: green/happy, red/error, then idle...\n");
+        for (size_t i = 0; i < sizeof(animations); ++i) {
+            err = mouth_espnow_send(
+                DISPLAY_CMD_SET_ANIMATION, &animations[i], 1, true);
+            if (err != ESP_OK) {
+                break;
+            }
+            vTaskDelay(pdMS_TO_TICKS(700));
+        }
+    }
+
+    mouth_espnow_get_status(&status);
+    char detail[160];
+    if (err == ESP_OK) {
+        snprintf(
+            detail, sizeof(detail),
+            "MAC %02X:%02X:%02X:%02X:%02X:%02X, firmware %u.%u, channel %u; confirm visuals",
+            status.mac[0], status.mac[1], status.mac[2],
+            status.mac[3], status.mac[4], status.mac[5],
+            status.firmware_major, status.firmware_minor, status.channel);
+        print_result(RESULT_WARN, "mouth ESP-NOW", detail);
+    } else {
+        snprintf(detail, sizeof(detail),
+                 "no valid acknowledged status: %s, retries %" PRIu32
+                 ", timeouts %" PRIu32,
+                 esp_err_to_name(err), status.retry_count,
+                 status.timeout_count);
+        print_result(RESULT_FAIL, "mouth ESP-NOW", detail);
+    }
+#else
+    print_result(RESULT_SKIP, "mouth ESP-NOW", "disabled in menuconfig");
 #endif
 }
 
@@ -893,6 +995,7 @@ static void run_self_test(void)
     test_i2c();
     test_w5500();
     test_wifi();
+    test_mouth_espnow();
     test_audio();
     printf("\n");
     print_summary();
@@ -1171,8 +1274,8 @@ static void print_tui_menu(void)
     printf("                                      p  speaker tone\n");
     printf("                                      m  microphone capture\n");
     printf(" Displays                            a  combined I2S audio\n");
-    printf("  l  left eye test                   v  all displays\n");
-    printf("  r  right eye test                  o  mouth test\n");
+    printf("  l  left eye (I2C)                  v  all displays\n");
+    printf("  r  right eye (I2C)                 o  mouth (ESP-NOW)\n");
     printf(" Other\n");
     printf("  g  GPIO status     x  rerun all     h  show menu\n");
     printf("==================================================\n");
@@ -1254,11 +1357,12 @@ static void run_tui(void)
             break;
         case 'o':
         case 'O':
-            test_display_controller(I2C_ADDR_MOUTH, 2, "mouth display");
+            test_mouth_espnow();
             break;
         case 'v':
         case 'V':
             test_all_displays();
+            test_mouth_espnow();
             break;
         case 'g':
         case 'G':

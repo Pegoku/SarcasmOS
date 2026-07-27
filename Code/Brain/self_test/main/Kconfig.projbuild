@@ -10,6 +10,33 @@ config BRAIN_SELF_TEST_WIFI_TIMEOUT_MS
     range 1000 60000
     default 15000
 
+config BRAIN_SELF_TEST_MOUTH_ESPNOW
+    bool "Test ESP-NOW mouth controller"
+    default y
+
+config BRAIN_SELF_TEST_MOUTH_MAC
+    string "ESP-NOW mouth station MAC"
+    depends on BRAIN_SELF_TEST_MOUTH_ESPNOW
+    default ""
+
+config BRAIN_SELF_TEST_ESPNOW_CHANNEL
+    int "ESP-NOW channel when not connected to Wi-Fi"
+    depends on BRAIN_SELF_TEST_MOUTH_ESPNOW
+    range 1 14
+    default 1
+
+config BRAIN_SELF_TEST_ESPNOW_ACK_TIMEOUT_MS
+    int "ESP-NOW mouth acknowledgement timeout (ms)"
+    depends on BRAIN_SELF_TEST_MOUTH_ESPNOW
+    range 10 2000
+    default 100
+
+config BRAIN_SELF_TEST_ESPNOW_RETRIES
+    int "ESP-NOW mouth command attempts"
+    depends on BRAIN_SELF_TEST_MOUTH_ESPNOW
+    range 1 10
+    default 3
+
 config BRAIN_SELF_TEST_W5500
     bool "Read the W5500 version register"
     default y

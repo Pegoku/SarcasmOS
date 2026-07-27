@@ -12,7 +12,8 @@ tests:
 - `+5V` and `5VHP` regulator enable controls
 - an I2C bus scan, including BQ25792 and MAX17049 detection
 - MAX17049 version, cell voltage, and state-of-charge reads
-- expected eye and mouth controller addresses (`0x30` through `0x32`)
+- expected wired eye controller addresses (`0x30` and `0x31`)
+- acknowledged ESP-NOW communication with the configured wireless mouth
 - W5500 SPI communication through its version register
 - an active Wi-Fi network scan (no credentials are required)
 - I2S microphone samples and an optional short 440 Hz speaker tone
@@ -26,7 +27,7 @@ on the same USB serial connection. It can:
 - report the connected SSID, channel, RSSI, IP address, and disconnect reason
 - disconnect Wi-Fi
 - run separate one-second speaker-tone and microphone-capture tests
-- address the left eye, right eye, or mouth individually and visually cycle it
+- address the I2C left eye, I2C right eye, or ESP-NOW mouth and visually cycle it
   through happy, error, and idle animations while checking its protocol status
 - repeat the I2C, W5500, combined audio, and GPIO tests independently
 - rerun the complete automatic test sequence
@@ -63,6 +64,12 @@ idf.py -C self_test menuconfig
 
 Look under `SarcasmOS Brain self-test`.
 
+Enter the station MAC printed by the mouth firmware in
+`ESP-NOW mouth station MAC`. When the tester is not connected to an access
+point, its configured ESP-NOW channel must match the mouth firmware's
+`ESPNOW_CHANNEL`. An empty MAC safely makes the automatic wireless mouth result
+`SKIP`.
+
 ## Manual terminal interface
 
 When the initial report finishes, enter `h` to display the controls:
@@ -75,8 +82,8 @@ Input is echoed character by character as you type. Commands are single letters
 or numbers. For example, enter `2` to disable the normal 5 V buck, `1` to enable
 it again, `c` to select and connect to a Wi-Fi network, and `s` to show its
 connection status and IP address. Use `p` for the speaker, `m` for the
-microphone, `l`/`r`/`o` for an individual left-eye/right-eye/mouth test, and `v`
-to test all three displays. The complete automatic sequence is `x`.
+microphone, `l`/`r` for the wired eyes, `o` for the wireless mouth, and `v` to
+test all three displays. The complete automatic sequence is `x`.
 
 Enabling a buck only verifies the enable GPIO state. Measure the corresponding
 rail before treating it as electrically validated.

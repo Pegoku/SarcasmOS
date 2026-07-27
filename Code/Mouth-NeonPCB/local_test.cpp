@@ -31,10 +31,13 @@ bool showingDiagnostic = false;
 uint8_t autoAnimation = kAnimIdle;
 uint8_t diagnostic = 0;
 uint32_t lastAutoStepMs = 0;
+uint8_t escapeSequenceState = 0;
 
 void printHelp() {
     Serial.println("\nLocal mouth animation test");
     Serial.println("  0..9  select a legacy state");
+    Serial.println("  Left  previous state and pause autoplay");
+    Serial.println("  Right next state and pause autoplay");
     Serial.println("  a     toggle automatic all-state cycle");
     Serial.println("  n     advance to the next state");
     Serial.println("  p     next RGB/panel diagnostic");
@@ -55,6 +58,11 @@ void selectAnimation(uint8_t animation) {
 
 void nextAnimation() {
     selectAnimation(static_cast<uint8_t>((autoAnimation + 1) % kAnimCount));
+}
+
+void previousAnimation() {
+    selectAnimation(static_cast<uint8_t>(
+        autoAnimation == kAnimIdle ? kAnimCount - 1 : autoAnimation - 1));
 }
 
 void adjustBrightness(int change) {
@@ -109,6 +117,29 @@ void nextDiagnostic() {
 }
 
 void handleSerial(char command) {
+    // Terminal arrow keys arrive as ANSI escape sequences:
+    // Left = ESC [ D, Right = ESC [ C.
+    if (escapeSequenceState == 1) {
+        escapeSequenceState = (command == '[' || command == 'O') ? 2 : 0;
+        return;
+    }
+    if (escapeSequenceState == 2) {
+        escapeSequenceState = 0;
+        if (command == 'C' || command == 'D') {
+            autoPlay = false;
+            if (command == 'C') {
+                nextAnimation();
+            } else {
+                previousAnimation();
+            }
+        }
+        return;
+    }
+    if (command == '\x1b') {
+        escapeSequenceState = 1;
+        return;
+    }
+
     if (command >= '0' && command <= '9') {
         autoPlay = false;
         selectAnimation(command - '0');

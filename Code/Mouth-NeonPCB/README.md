@@ -48,6 +48,8 @@ be checked without the Brain. Its serial controls are:
 | Key | Action |
 | --- | --- |
 | `0`..`9` | select one animation |
+| Left arrow | select the previous state and pause autoplay |
+| Right arrow | select the next state and pause autoplay |
 | `a` | toggle automatic all-state cycling |
 | `n` | advance to the next state |
 | `p` | cycle red, green, blue, white, color bars, RGB rows, and geometry tests |

@@ -54,6 +54,20 @@ and temporary PPM filenames update together after the files remain stable for
 250 ms. Sequence editing is available in the folder opened by **Open
 animation**, not the separate single-frame edit folder.
 
+The emulator also provides direct **Add frame after current** and **Remove
+current frame** buttons:
+
+- adding while viewing frame 2 creates a separate copy as frame 3;
+- the old frame 3 becomes frame 4, and every later frame shifts likewise;
+- the new copy is selected immediately and can be edited independently;
+- removing a frame shifts every later frame backward and selects the frame
+  that moved into its position, or the new last frame;
+- the final remaining frame cannot be removed.
+
+`Insert` and `Delete` are keyboard shortcuts for these buttons. Structural
+changes invalidate any older GIMP edit session for that animation; reopen it
+with `o` if continued multi-frame editing is needed.
+
 **Copy frame** (`c`) copies a 64x32 PNG for sharing or attaching to a request.
 
 ## Command-line editing

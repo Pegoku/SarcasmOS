@@ -238,11 +238,24 @@ class EmulatorWindow:
                 side="left", padx=(0, 5),
             )
 
+        frame_buttons = tk.Frame(self.root, background="#111111")
+        frame_buttons.pack(fill="x", padx=8, pady=(0, 5))
+        tk.Button(
+            frame_buttons, text="Add frame after current (Insert)",
+            command=self.add_frame,
+        ).pack(side="left", padx=(0, 5))
+        tk.Button(
+            frame_buttons, text="Remove current frame (Delete)",
+            command=self.remove_frame,
+        ).pack(side="left", padx=(0, 5))
+
         tk.Label(
             self.root,
             text=(
                 "←/→ state   ↑/↓ frame   Space/A play/pause   "
-                "+/- brightness   [/] intensity   ,/. temperature   Q quit"
+                "Insert/Delete frame\n"
+                "+/- brightness   [/] intensity   "
+                ",/. temperature   Q quit"
             ),
             background="#111111", foreground="#aaaaaa",
             font=("monospace", 9),
@@ -514,6 +527,64 @@ class EmulatorWindow:
         except (OSError, ValueError, KeyError) as error:
             self.show_notice(f"Reload failed: {error}")
 
+    def invalidate_edits_for_state(self, state: str) -> None:
+        self.animation_edit_sessions.pop(state, None)
+        if self.current_animation_edit == state:
+            self.current_animation_edit = None
+        stale_paths = [
+            path for path, target in self.edit_targets.items()
+            if target.state == state
+        ]
+        for path in stale_paths:
+            self.edit_targets.pop(path, None)
+            if self.current_edit_path == path:
+                self.current_edit_path = None
+
+    def reload_after_frame_change(
+        self, state: str, selected_frame: int,
+    ) -> None:
+        self.invalidate_edits_for_state(state)
+        self.assets.reload()
+        self.state_id = self.assets.state_ids[state]
+        self.auto_play = False
+        self.current_local_frame = selected_frame
+        animation = self.assets.animations[self.state_id]
+        self.animation_elapsed_ms = (
+            selected_frame * animation["frame_ms"]
+        )
+        self.last_step_ms = time.monotonic_ns() // 1_000_000
+        self.last_pixels[:] = [None] * len(self.last_pixels)
+
+    def add_frame(self) -> None:
+        state = self.state_name
+        source_frame = self.current_local_frame
+        try:
+            inserted_frame = asset_tool.insert_animation_frame(
+                state, source_frame,
+            )
+            self.reload_after_frame_change(state, inserted_frame)
+            self.show_notice(
+                f"Added {state} frame {inserted_frame + 1} "
+                f"after frame {source_frame + 1}"
+            )
+        except (OSError, ValueError, KeyError) as error:
+            self.show_notice(f"Could not add frame: {error}")
+
+    def remove_frame(self) -> None:
+        state = self.state_name
+        removed_frame = self.current_local_frame
+        try:
+            selected_frame = asset_tool.remove_animation_frame(
+                state, removed_frame,
+            )
+            self.reload_after_frame_change(state, selected_frame)
+            self.show_notice(
+                f"Removed {state} frame {removed_frame + 1}; "
+                f"{len(self.assets.animations[self.state_id]['frames'])} remain"
+            )
+        except (OSError, ValueError, KeyError) as error:
+            self.show_notice(f"Could not remove frame: {error}")
+
     def on_key(self, event: Any) -> None:
         key = event.keysym
         if key == "Left":
@@ -549,6 +620,10 @@ class EmulatorWindow:
             self.temperature = max(
                 TEMPERATURE_MIN, self.temperature - 1,
             )
+        elif key == "Insert":
+            self.add_frame()
+        elif key == "Delete":
+            self.remove_frame()
         elif key in ("e", "E"):
             self.open_in_gimp()
         elif key in ("o", "O"):

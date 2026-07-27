@@ -98,6 +98,11 @@ The editor controls operate on the exact animation frame currently displayed:
   frame if an explicit refresh is needed.
 - `c` or **Copy frame** puts a native-resolution PNG on the Wayland clipboard.
 - `r` or **Reload assets** reloads changes made outside the emulator.
+- **Add frame after current** or `Insert` creates an independent copy of the
+  displayed frame immediately after it and selects the new frame. Later frames
+  shift forward by one position.
+- **Remove current frame** or `Delete` deletes the displayed frame and shifts
+  later frames backward. An animation cannot be reduced below one frame.
 
 Start paused on a particular state with:
 

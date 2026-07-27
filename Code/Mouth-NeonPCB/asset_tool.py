@@ -442,31 +442,21 @@ def import_sprite(
     print(f"Imported {source} -> {state} frame {frame_index} ({sprite})")
 
 
-def sync_animation_frames(
-    state: str,
-    sources: list[pathlib.Path],
+def replace_animation_rows(
+    state: str, rows: list[list[str]],
     assets_path: pathlib.Path = DEFAULT_ASSETS,
     header_path: pathlib.Path = DEFAULT_HEADER,
 ) -> int:
-    """Replace one animation's ordered frames with the supplied PPM files."""
-    if not sources:
+    """Atomically replace an animation with independent sprite rows."""
+    if not rows:
         raise ValueError(f"{state} must keep at least one frame")
-    if len(sources) > 255:
+    if len(rows) > 255:
         raise ValueError(f"{state} cannot contain more than 255 frames")
 
     data = load_assets(assets_path)
     animation = animation_for(data, state)
-    rows: list[list[str]] = []
-    for source in sources:
-        width, height, pixels = read_ppm(source)
-        if (width, height) != (data["width"], data["height"]):
-            raise ValueError(
-                f"{source.name} must be 64x32, got {width}x{height}"
-            )
-        rows.append(pixels_to_rows(data, pixels))
-
     old_names = set(animation["frames"])
-    new_names = [f"{state}_{index:02d}" for index in range(len(sources))]
+    new_names = [f"{state}_{index:02d}" for index in range(len(rows))]
     animation["frames"] = new_names
 
     referenced_elsewhere = {
@@ -484,7 +474,7 @@ def sync_animation_frames(
     for sprite in old_names - referenced_elsewhere:
         data["sprites"].pop(sprite, None)
     for sprite, sprite_rows in zip(new_names, rows):
-        data["sprites"][sprite] = {"rows": sprite_rows}
+        data["sprites"][sprite] = {"rows": list(sprite_rows)}
 
     validate_assets(data)
     token = time.monotonic_ns()
@@ -502,6 +492,82 @@ def sync_animation_frames(
     finally:
         temporary_assets.unlink(missing_ok=True)
         temporary_header.unlink(missing_ok=True)
+    return len(rows)
+
+
+def insert_animation_frame(
+    state: str, after_index: int,
+    assets_path: pathlib.Path = DEFAULT_ASSETS,
+    header_path: pathlib.Path = DEFAULT_HEADER,
+) -> int:
+    """Insert an independent copy after a zero-based animation frame."""
+    data = load_assets(assets_path)
+    animation = animation_for(data, state)
+    if not 0 <= after_index < len(animation["frames"]):
+        raise ValueError(
+            f"{state} has no frame {after_index + 1}"
+        )
+    if len(animation["frames"]) >= 255:
+        raise ValueError(f"{state} cannot contain more than 255 frames")
+    rows = [
+        list(data["sprites"][sprite]["rows"])
+        for sprite in animation["frames"]
+    ]
+    inserted_index = after_index + 1
+    rows.insert(inserted_index, list(rows[after_index]))
+    replace_animation_rows(state, rows, assets_path, header_path)
+    print(f"Inserted {state} frame {inserted_index + 1}")
+    return inserted_index
+
+
+def remove_animation_frame(
+    state: str, frame_index: int,
+    assets_path: pathlib.Path = DEFAULT_ASSETS,
+    header_path: pathlib.Path = DEFAULT_HEADER,
+) -> int:
+    """Remove a zero-based frame and return the next selected index."""
+    data = load_assets(assets_path)
+    animation = animation_for(data, state)
+    if len(animation["frames"]) <= 1:
+        raise ValueError(f"{state} must keep at least one frame")
+    if not 0 <= frame_index < len(animation["frames"]):
+        raise ValueError(f"{state} has no frame {frame_index + 1}")
+    rows = [
+        list(data["sprites"][sprite]["rows"])
+        for sprite in animation["frames"]
+    ]
+    del rows[frame_index]
+    replace_animation_rows(state, rows, assets_path, header_path)
+    selected_index = min(frame_index, len(rows) - 1)
+    print(f"Removed {state} frame {frame_index + 1}")
+    return selected_index
+
+
+def sync_animation_frames(
+    state: str,
+    sources: list[pathlib.Path],
+    assets_path: pathlib.Path = DEFAULT_ASSETS,
+    header_path: pathlib.Path = DEFAULT_HEADER,
+) -> int:
+    """Replace one animation's ordered frames with the supplied PPM files."""
+    if not sources:
+        raise ValueError(f"{state} must keep at least one frame")
+    if len(sources) > 255:
+        raise ValueError(f"{state} cannot contain more than 255 frames")
+
+    data = load_assets(assets_path)
+    rows: list[list[str]] = []
+    for source in sources:
+        width, height, pixels = read_ppm(source)
+        if (width, height) != (data["width"], data["height"]):
+            raise ValueError(
+                f"{source.name} must be 64x32, got {width}x{height}"
+            )
+        rows.append(pixels_to_rows(data, pixels))
+
+    replace_animation_rows(
+        state, rows, assets_path, header_path,
+    )
     print(f"Synchronized {state}: {len(sources)} frame(s)")
     return len(sources)
 

@@ -1,0 +1,25 @@
+menu "SarcasmOS Brain self-test"
+
+config BRAIN_SELF_TEST_WIFI
+    bool "Scan for Wi-Fi networks"
+    default y
+
+config BRAIN_SELF_TEST_W5500
+    bool "Read the W5500 version register"
+    default y
+
+config BRAIN_SELF_TEST_AUDIO
+    bool "Test I2S microphone and speaker data path"
+    default y
+
+config BRAIN_SELF_TEST_SPEAKER_TONE
+    bool "Play a short speaker test tone"
+    depends on BRAIN_SELF_TEST_AUDIO
+    default y
+
+config BRAIN_SELF_TEST_I2C_FREQ_HZ
+    int "I2C scan frequency"
+    range 10000 400000
+    default 100000
+
+endmenu

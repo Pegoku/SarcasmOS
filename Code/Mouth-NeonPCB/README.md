@@ -106,6 +106,9 @@ The editor controls operate on the exact animation frame currently displayed:
 - **Set frame time** or `T` changes the delay between frames for the current
   animation. Enter the delay in milliseconds; it is shared by the emulator
   and generated firmware.
+- **Sync folder** or `S` imports the current animation's existing numbered PPM
+  files from `/tmp/sarcasmos-mouth-edit/animations/<state>`, reloads the
+  preview, and attaches that folder to the running auto-import watcher.
 
 Start paused on a particular state with:
 

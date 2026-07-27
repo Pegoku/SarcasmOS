@@ -73,6 +73,14 @@ frames. The dialog accepts `1..65535` milliseconds and updates the
 animation's `frame_ms` value, emulator timing, and generated firmware header
 without changing any frame artwork.
 
+Use **Sync folder** (`S`) after restarting the emulator, or whenever an
+existing `/tmp/sarcasmos-mouth-edit/animations/<state>` folder is not attached
+to the current session. It imports all correctly numbered PPMs without first
+exporting over them, reloads the preview, and resumes automatic watching of
+that folder. By contrast, **Open animation in GIMP** exports the current asset
+frames before opening them, so it should not be used to recover newer
+unimported files.
+
 **Copy frame** (`c`) copies a 64x32 PNG for sharing or attaching to a request.
 
 ## Command-line editing

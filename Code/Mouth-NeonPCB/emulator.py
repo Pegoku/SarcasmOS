@@ -254,12 +254,16 @@ class EmulatorWindow:
             frame_buttons, text="Set frame time (T)",
             command=self.change_frame_time,
         ).pack(side="left", padx=(0, 5))
+        tk.Button(
+            frame_buttons, text="Sync folder (S)",
+            command=self.sync_current_animation_folder,
+        ).pack(side="left", padx=(0, 5))
 
         tk.Label(
             self.root,
             text=(
                 "←/→ state   ↑/↓ frame   Space/A play/pause   "
-                "Insert/Delete frame   T frame time\n"
+                "Insert/Delete frame   T frame time   S sync folder\n"
                 "+/- brightness   [/] intensity   "
                 ",/. temperature   Q quit"
             ),
@@ -619,6 +623,35 @@ class EmulatorWindow:
         except (OSError, ValueError, KeyError) as error:
             self.show_notice(f"Could not set frame time: {error}")
 
+    def sync_current_animation_folder(self) -> None:
+        state = self.state_name
+        directory = self.edit_root() / "animations" / state
+        if not directory.is_dir():
+            self.show_notice(
+                f"No edit folder for {state}; open its animation first"
+            )
+            return
+        try:
+            paths = numbered_animation_files(directory, state)
+        except OSError as error:
+            self.show_notice(f"Could not read animation folder: {error}")
+            return
+        if not paths:
+            self.show_notice(
+                f"No numbered {state}-frame-*.ppm files found"
+            )
+            return
+
+        session = AnimationEditSession(
+            directory=directory,
+            state=state,
+            observed_signatures={},
+        )
+        self.animation_edit_sessions[state] = session
+        self.current_edit_path = None
+        self.current_animation_edit = state
+        self.sync_animation_session(session, automatic=False)
+
     def on_key(self, event: Any) -> None:
         key = event.keysym
         if key == "Left":
@@ -660,6 +693,8 @@ class EmulatorWindow:
             self.remove_frame()
         elif key in ("t", "T"):
             self.change_frame_time()
+        elif key in ("s", "S"):
+            self.sync_current_animation_folder()
         elif key in ("e", "E"):
             self.open_in_gimp()
         elif key in ("o", "O"):

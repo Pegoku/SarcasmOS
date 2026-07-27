@@ -87,6 +87,9 @@ The editor controls operate on the exact animation frame currently displayed:
   and displays the edit.
 - `o` or **Open animation in GIMP** exports and opens every frame of the
   selected animation. Each overwritten frame is imported automatically.
+  In its animation folder, add a numbered PPM to append a frame or delete a
+  PPM to remove that frame. The sequence and filenames are compacted
+  automatically (`watch-frame-01.ppm`, `watch-frame-02.ppm`, and so on).
 - `i` or **Import saved edit** manually reimports the most recently opened
   frame if an explicit refresh is needed.
 - `c` or **Copy frame** puts a native-resolution PNG on the Wayland clipboard.

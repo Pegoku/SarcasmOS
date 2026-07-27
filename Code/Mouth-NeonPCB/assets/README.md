@@ -31,6 +31,23 @@ Run `../emulator.py`, pause on a state with Left or Right, and use:
    header, and reloads the preview automatically. **Import saved edit** (`i`)
    remains available as a manual refresh.
 
+When an animation is opened with `o`, its files form an editable, one-based
+sequence:
+
+- `watch-frame-01.ppm` is the first frame and `watch-frame-09.ppm` is the
+  ninth.
+- Saving a new `watch-frame-10.ppm` adds a tenth frame.
+- A number beyond the next position is accepted and compacted. For example,
+  adding `watch-frame-12.ppm` to a nine-frame sequence renames it to
+  `watch-frame-10.ppm`.
+- Deleting frame 7 removes it; old frames 8 and 9 are renamed to 7 and 8.
+- At least one frame must remain. An empty animation is rejected.
+
+The animation JSON, sprite records, generated header, displayed frame count,
+and temporary PPM filenames update together after the files remain stable for
+250 ms. Sequence editing is available in the folder opened by **Open
+animation**, not the separate single-frame edit folder.
+
 **Copy frame** (`c`) copies a 64x32 PNG for sharing or attaching to a request.
 
 ## Command-line editing

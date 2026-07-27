@@ -9,6 +9,7 @@ import math
 import pathlib
 import re
 import sys
+import time
 from typing import Any
 
 ROOT = pathlib.Path(__file__).resolve().parent
@@ -64,6 +65,8 @@ def validate_assets(data: dict[str, Any]) -> None:
     names = tuple(animation.get("name") for animation in animations)
     if names != EXPECTED_STATES:
         raise ValueError("animation order/names do not match protocol.hpp")
+    if len(data.get("sprites", {})) > 256:
+        raise ValueError("firmware supports at most 256 sprites")
     for state_id, animation in enumerate(animations):
         if animation.get("id") != state_id:
             raise ValueError(f"{animation['name']}: ID must be {state_id}")
@@ -74,6 +77,10 @@ def validate_assets(data: dict[str, Any]) -> None:
             raise ValueError(f"{animation['name']}: invalid frame_ms")
         if not animation.get("frames"):
             raise ValueError(f"{animation['name']}: animation has no frames")
+        if len(animation["frames"]) > 255:
+            raise ValueError(
+                f"{animation['name']}: firmware supports at most 255 frames"
+            )
         for sprite in animation["frames"]:
             if sprite not in data.get("sprites", {}):
                 raise ValueError(
@@ -315,6 +322,26 @@ def nearest_palette_index(
     )[0]
 
 
+def pixels_to_rows(
+    data: dict[str, Any], pixels: list[tuple[int, int, int]],
+) -> list[str]:
+    width = data["width"]
+    height = data["height"]
+    if len(pixels) != width * height:
+        raise ValueError(
+            f"expected {width * height} pixels, got {len(pixels)}"
+        )
+    colors = palette(data)
+    indices = [nearest_palette_index(pixel, colors) for pixel in pixels]
+    return [
+        "".join(
+            format(index, "X")
+            for index in indices[y * width:(y + 1) * width]
+        )
+        for y in range(height)
+    ]
+
+
 def import_sprite(
     state: str, frame_index: int, source: pathlib.Path,
 ) -> None:
@@ -329,18 +356,74 @@ def import_sprite(
         raise ValueError(
             f"{state} has {len(animation['frames'])} frame(s)"
         ) from error
-    colors = palette(data)
-    indices = [nearest_palette_index(pixel, colors) for pixel in pixels]
-    rows = []
-    for y in range(height):
-        rows.append("".join(
-            format(index, "X")
-            for index in indices[y * width:(y + 1) * width]
-        ))
-    data["sprites"][sprite]["rows"] = rows
+    data["sprites"][sprite]["rows"] = pixels_to_rows(data, pixels)
     DEFAULT_ASSETS.write_text(json.dumps(data, indent=2) + "\n")
     compile_assets()
     print(f"Imported {source} -> {state} frame {frame_index} ({sprite})")
+
+
+def sync_animation_frames(
+    state: str,
+    sources: list[pathlib.Path],
+    assets_path: pathlib.Path = DEFAULT_ASSETS,
+    header_path: pathlib.Path = DEFAULT_HEADER,
+) -> int:
+    """Replace one animation's ordered frames with the supplied PPM files."""
+    if not sources:
+        raise ValueError(f"{state} must keep at least one frame")
+    if len(sources) > 255:
+        raise ValueError(f"{state} cannot contain more than 255 frames")
+
+    data = load_assets(assets_path)
+    animation = animation_for(data, state)
+    rows: list[list[str]] = []
+    for source in sources:
+        width, height, pixels = read_ppm(source)
+        if (width, height) != (data["width"], data["height"]):
+            raise ValueError(
+                f"{source.name} must be 64x32, got {width}x{height}"
+            )
+        rows.append(pixels_to_rows(data, pixels))
+
+    old_names = set(animation["frames"])
+    new_names = [f"{state}_{index:02d}" for index in range(len(sources))]
+    animation["frames"] = new_names
+
+    referenced_elsewhere = {
+        sprite
+        for other in data["animations"]
+        if other is not animation
+        for sprite in other["frames"]
+    }
+    collisions = set(new_names) & referenced_elsewhere
+    if collisions:
+        names = ", ".join(sorted(collisions))
+        raise ValueError(
+            f"{state} frame names are shared by another animation: {names}"
+        )
+    for sprite in old_names - referenced_elsewhere:
+        data["sprites"].pop(sprite, None)
+    for sprite, sprite_rows in zip(new_names, rows):
+        data["sprites"][sprite] = {"rows": sprite_rows}
+
+    validate_assets(data)
+    token = time.monotonic_ns()
+    temporary_assets = assets_path.with_name(
+        f".{assets_path.name}.{token}.tmp"
+    )
+    temporary_header = header_path.with_name(
+        f".{header_path.name}.{token}.tmp"
+    )
+    try:
+        temporary_assets.write_text(json.dumps(data, indent=2) + "\n")
+        compile_assets(temporary_assets, temporary_header)
+        temporary_assets.replace(assets_path)
+        temporary_header.replace(header_path)
+    finally:
+        temporary_assets.unlink(missing_ok=True)
+        temporary_header.unlink(missing_ok=True)
+    print(f"Synchronized {state}: {len(sources)} frame(s)")
+    return len(sources)
 
 
 def parse_args() -> argparse.Namespace:

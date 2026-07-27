@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import hashlib
 import math
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -29,6 +30,47 @@ class EditTarget:
     frame: int
     observed_signature: tuple[int, int]
     changed_at_ms: int | None = None
+
+
+@dataclass
+class AnimationEditSession:
+    directory: pathlib.Path
+    state: str
+    observed_signatures: dict[pathlib.Path, tuple[int, int]]
+    changed_at_ms: int | None = None
+
+
+def numbered_animation_files(
+    directory: pathlib.Path, state: str,
+) -> list[pathlib.Path]:
+    pattern = re.compile(rf"^{re.escape(state)}-frame-(\d+)\.ppm$")
+    numbered = []
+    for path in directory.iterdir():
+        match = pattern.fullmatch(path.name)
+        if path.is_file() and match and int(match.group(1)) > 0:
+            numbered.append((int(match.group(1)), path.name, path))
+    return [entry[2] for entry in sorted(numbered)]
+
+
+def compact_animation_files(
+    files: list[pathlib.Path], state: str,
+) -> list[pathlib.Path]:
+    """Rename an ordered PPM sequence to contiguous one-based filenames."""
+    if not files:
+        return []
+    directory = files[0].parent
+    token = time.monotonic_ns()
+    temporary = []
+    for index, source in enumerate(files, 1):
+        target = directory / f".{state}-renumber-{token}-{index:03d}.ppm"
+        source.replace(target)
+        temporary.append(target)
+    compacted = []
+    for index, source in enumerate(temporary, 1):
+        target = directory / f"{state}-frame-{index:02d}.ppm"
+        source.replace(target)
+        compacted.append(target)
+    return compacted
 
 
 class AssetPack:
@@ -109,6 +151,8 @@ class EmulatorWindow:
         self.current_local_frame = 0
         self.edit_targets: dict[pathlib.Path, EditTarget] = {}
         self.current_edit_path: pathlib.Path | None = None
+        self.animation_edit_sessions: dict[str, AnimationEditSession] = {}
+        self.current_animation_edit: str | None = None
         self.notice = ""
         self.notice_until_ms = 0
 
@@ -210,13 +254,17 @@ class EmulatorWindow:
         stat = path.stat()
         return stat.st_mtime_ns, stat.st_size
 
+    @staticmethod
+    def edit_root() -> pathlib.Path:
+        return pathlib.Path(tempfile.gettempdir()) / "sarcasmos-mouth-edit"
+
     def export_edit_target(
         self, state_id: int, local_frame: int,
     ) -> pathlib.Path:
-        edit_dir = pathlib.Path(tempfile.gettempdir()) / "sarcasmos-mouth-edit"
+        edit_dir = self.edit_root() / "frames"
         edit_dir.mkdir(parents=True, exist_ok=True)
         state = self.assets.animations[state_id]["name"]
-        path = edit_dir / f"{state}-frame-{local_frame:02d}.ppm"
+        path = edit_dir / f"{state}-frame-{local_frame + 1:02d}.ppm"
         path.write_bytes(self.native_ppm(state_id, local_frame))
         self.edit_targets[path] = EditTarget(
             path=path,
@@ -225,6 +273,7 @@ class EmulatorWindow:
             observed_signature=self.file_signature(path),
         )
         self.current_edit_path = path
+        self.current_animation_edit = None
         return path
 
     def launch_gimp(self, paths: list[pathlib.Path]) -> bool:
@@ -250,15 +299,31 @@ class EmulatorWindow:
 
     def open_animation_in_gimp(self) -> None:
         animation = self.assets.animations[self.state_id]
-        paths = [
-            self.export_edit_target(self.state_id, local_frame)
-            for local_frame in range(len(animation["frames"]))
-        ]
+        state = self.state_name
+        edit_dir = self.edit_root() / "animations" / state
+        edit_dir.mkdir(parents=True, exist_ok=True)
+        for old_path in edit_dir.glob(f"{state}-frame-*.ppm"):
+            if old_path.is_file():
+                old_path.unlink()
+        paths = []
+        for local_frame in range(len(animation["frames"])):
+            path = edit_dir / f"{state}-frame-{local_frame + 1:02d}.ppm"
+            path.write_bytes(self.native_ppm(self.state_id, local_frame))
+            paths.append(path)
+        self.animation_edit_sessions[state] = AnimationEditSession(
+            directory=edit_dir,
+            state=state,
+            observed_signatures={
+                path: self.file_signature(path) for path in paths
+            },
+        )
+        self.current_edit_path = None
+        self.current_animation_edit = state
         if not self.launch_gimp(paths):
             return
         self.show_notice(
-            f"Opened all {len(paths)} {self.state_name} frames; "
-            "overwrites import automatically"
+            f"Opened {len(paths)} {self.state_name} frames; "
+            "add/delete numbered PPMs to change the sequence"
         )
 
     def copy_frame(self) -> None:
@@ -289,6 +354,15 @@ class EmulatorWindow:
             self.show_notice("wl-copy could not access the image clipboard")
 
     def import_edit(self) -> None:
+        if self.current_animation_edit is not None:
+            session = self.animation_edit_sessions.get(
+                self.current_animation_edit,
+            )
+            if session is None:
+                self.show_notice("The current animation edit is not tracked")
+                return
+            self.sync_animation_session(session, automatic=False)
+            return
         if self.current_edit_path is None:
             self.show_notice("Open a frame in GIMP before importing")
             return
@@ -318,6 +392,63 @@ class EmulatorWindow:
             self.show_notice(f"Import failed: {error}")
             return False
 
+    def sync_animation_session(
+        self, session: AnimationEditSession, automatic: bool,
+    ) -> bool:
+        try:
+            paths = numbered_animation_files(
+                session.directory, session.state,
+            )
+            count = asset_tool.sync_animation_frames(
+                session.state, paths,
+            )
+            compacted = compact_animation_files(paths, session.state)
+            session.observed_signatures = {
+                path: self.file_signature(path) for path in compacted
+            }
+            session.changed_at_ms = None
+
+            current_name = self.state_name
+            self.assets.reload()
+            self.state_id = self.assets.state_ids[current_name]
+            frame_count = len(
+                self.assets.animations[self.state_id]["frames"]
+            )
+            self.current_local_frame = min(
+                self.current_local_frame, frame_count - 1,
+            )
+            self.last_pixels[:] = [None] * len(self.last_pixels)
+            prefix = "Auto-synchronized" if automatic else "Synchronized"
+            self.show_notice(
+                f"{prefix} {session.state}: {count} frame(s)"
+            )
+            return True
+        except (OSError, ValueError, KeyError) as error:
+            session.changed_at_ms = (
+                time.monotonic_ns() // 1_000_000
+            )
+            self.show_notice(f"Animation sync failed: {error}")
+            return False
+
+    def watch_animation_sessions(self, now_ms: int) -> None:
+        for session in self.animation_edit_sessions.values():
+            try:
+                paths = numbered_animation_files(
+                    session.directory, session.state,
+                )
+                signatures = {
+                    path: self.file_signature(path) for path in paths
+                }
+            except OSError:
+                continue
+            if signatures != session.observed_signatures:
+                session.observed_signatures = signatures
+                session.changed_at_ms = now_ms
+                continue
+            if (session.changed_at_ms is not None and
+                    now_ms - session.changed_at_ms >= EDIT_SETTLE_MS):
+                self.sync_animation_session(session, automatic=True)
+
     def watch_gimp_edits(self, now_ms: int) -> None:
         for target in self.edit_targets.values():
             try:
@@ -331,6 +462,7 @@ class EmulatorWindow:
             if (target.changed_at_ms is not None and
                     now_ms - target.changed_at_ms >= EDIT_SETTLE_MS):
                 self.import_target(target, automatic=True)
+        self.watch_animation_sessions(now_ms)
 
     def reload_assets(self) -> None:
         current_name = self.state_name

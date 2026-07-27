@@ -274,6 +274,8 @@ Run the desktop emulator from this directory:
 - `O` opens every frame of the current animation in GIMP.
 - Overwriting an opened PPM automatically updates the shared asset pack and
   firmware header.
+- In an animation edit folder, adding or deleting a one-based numbered PPM
+  adds or removes that frame. Gaps are compacted automatically.
 
 The authoritative artwork and timing live in
 `assets/mouth_assets.json`. Both emulator and firmware use that file. Do not

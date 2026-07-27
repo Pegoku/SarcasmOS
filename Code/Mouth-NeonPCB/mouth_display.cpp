@@ -61,13 +61,13 @@ uint8_t animationFrame(const mouth_assets::Animation &animation,
     const uint32_t step = elapsedMs / animation.frameMs;
     if (animation.playback == mouth_assets::kPlaybackPingPong) {
         const uint8_t finalFrame = animation.frameCount - 1;
-        const uint8_t phase = step % (finalFrame * 2);
+        const uint16_t phase = step % (finalFrame * 2);
         return phase <= finalFrame ? phase : finalFrame * 2 - phase;
     }
     if (animation.playback == mouth_assets::kPlaybackIntensity) {
         const uint8_t finalFrame = animation.frameCount - 1;
-        const uint8_t phase = step % (finalFrame * 2);
-        const uint8_t level =
+        const uint16_t phase = step % (finalFrame * 2);
+        const uint16_t level =
             phase <= finalFrame ? phase : finalFrame * 2 - phase;
         return min(static_cast<int>(finalFrame),
                    static_cast<int>(level) * currentMouthIntensity / 120);

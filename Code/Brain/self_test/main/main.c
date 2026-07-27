@@ -748,17 +748,57 @@ static void run_self_test(void)
 
 static bool read_line(const char *prompt, char *buffer, size_t buffer_size)
 {
-    printf("%s", prompt);
-    fflush(stdout);
-    if (fgets(buffer, buffer_size, stdin) == NULL) {
-        clearerr(stdin);
-        vTaskDelay(pdMS_TO_TICKS(50));
+    static bool discard_line_feed;
+    size_t length = 0;
+
+    if (buffer_size == 0) {
         return false;
     }
 
-    size_t length = strcspn(buffer, "\r\n");
-    buffer[length] = '\0';
-    return true;
+    buffer[0] = '\0';
+    printf("%s", prompt);
+    fflush(stdout);
+
+    while (true) {
+        int character = fgetc(stdin);
+        if (character == EOF) {
+            clearerr(stdin);
+            vTaskDelay(pdMS_TO_TICKS(20));
+            continue;
+        }
+
+        if (discard_line_feed) {
+            discard_line_feed = false;
+            if (character == '\n') {
+                continue;
+            }
+        }
+
+        if (character == '\r' || character == '\n') {
+            discard_line_feed = character == '\r';
+            buffer[length] = '\0';
+            printf("\n");
+            fflush(stdout);
+            return true;
+        }
+
+        if (character == '\b' || character == 0x7F) {
+            if (length > 0) {
+                --length;
+                buffer[length] = '\0';
+                printf("\b \b");
+                fflush(stdout);
+            }
+            continue;
+        }
+
+        if (character >= 0x20 && length + 1 < buffer_size) {
+            buffer[length++] = (char)character;
+            buffer[length] = '\0';
+            putchar(character);
+            fflush(stdout);
+        }
+    }
 }
 
 static void manual_set_output(gpio_num_t pin, int level, const char *name,

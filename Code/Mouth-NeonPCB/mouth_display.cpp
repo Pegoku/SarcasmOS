@@ -48,9 +48,73 @@ void present() {
     matrix->flipDMABuffer();
 }
 
+void drawThickLine(int x0, int y0, int x1, int y1, uint16_t color) {
+    matrix->drawLine(x0, y0, x1, y1, color);
+    matrix->drawLine(x0, y0 + 1, x1, y1 + 1, color);
+}
+
+void drawBenderTeeth(bool speaking, uint32_t tick) {
+    const uint16_t teeth = rgb(255, 246, 166);
+    const uint16_t seam = rgb(0, 0, 0);
+
+    // Bender's mouth is a rounded, pale tooth panel with a heavy dark edge.
+    matrix->fillRoundRect(1, 1, 62, 30, 14, seam);
+    matrix->fillRoundRect(3, 3, 58, 26, 12, teeth);
+
+    // Five columns, matching the grille in the reference mouth.
+    constexpr int kColumnSeams[] = {15, 27, 39, 51};
+    for (const int x : kColumnSeams) {
+        matrix->drawFastVLine(x, 3, 26, seam);
+        matrix->drawFastVLine(x + 1, 3, 26, seam);
+    }
+
+    if (!speaking) {
+        // Three rows for the resting tooth grille.
+        matrix->drawFastHLine(3, 11, 58, seam);
+        matrix->drawFastHLine(3, 12, 58, seam);
+        matrix->drawFastHLine(3, 20, 58, seam);
+        matrix->drawFastHLine(3, 21, 58, seam);
+        return;
+    }
+
+    // Talking replaces the horizontal grille seams with two lines that split
+    // into a changing waveform and close again at the right edge.
+    const int phase = tick % 24;
+    const int triangle = phase <= 12 ? phase : 24 - phase;
+    int amplitude = 2 + (triangle * 6) / 12;
+    amplitude = constrain(
+        (amplitude * static_cast<int>(currentMouthIntensity)) / 120, 1, 9);
+
+    constexpr int kCenterY = 16;
+    drawThickLine(3, kCenterY - 1, 27, kCenterY - 1, seam);
+    drawThickLine(3, kCenterY + 1, 27, kCenterY + 1, seam);
+
+    drawThickLine(27, kCenterY - 1, 43, kCenterY - amplitude, seam);
+    drawThickLine(43, kCenterY - amplitude, 52, kCenterY - amplitude / 2,
+                  seam);
+    drawThickLine(52, kCenterY - amplitude / 2, 60, kCenterY - 1, seam);
+
+    drawThickLine(27, kCenterY + 1, 43, kCenterY + amplitude, seam);
+    drawThickLine(43, kCenterY + amplitude, 52, kCenterY + amplitude / 2,
+                  seam);
+    drawThickLine(52, kCenterY + amplitude / 2, 60, kCenterY + 1, seam);
+}
+
 void drawMouth(uint32_t tick) {
     matrix->clearScreen();
     if (currentAnimation == kAnimSleep) {
+        present();
+        return;
+    }
+
+    if (currentAnimation == kAnimIdle) {
+        drawBenderTeeth(false, tick);
+        present();
+        return;
+    }
+
+    if (currentAnimation == kAnimSpeaking) {
+        drawBenderTeeth(true, tick);
         present();
         return;
     }
@@ -67,13 +131,7 @@ void drawMouth(uint32_t tick) {
         color = rgb(150, 0, 255);
     }
 
-    if (currentAnimation == kAnimSpeaking) {
-        int open = 4 + ((tick / 3) % 10);
-        if ((tick / 23) & 1) open = 15 - open;
-        open = constrain((open * currentMouthIntensity) / 160, 2, 15);
-        matrix->fillRect(8, 16 - open / 2, 48, open, color);
-        matrix->fillRect(10, 14 - open / 2, 44, open + 4, color);
-    } else if (currentAnimation == kAnimError) {
+    if (currentAnimation == kAnimError) {
         for (int i = 0; i < 9; ++i) {
             const int y = (tick + i * 7) % kPanelHeight;
             matrix->fillRect(i * 8, y, 5, 3, color);

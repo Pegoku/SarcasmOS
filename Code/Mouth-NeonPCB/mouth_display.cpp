@@ -72,7 +72,10 @@ void drawShell(uint16_t fill, int x = 1, int y = 1, int width = 62,
 void drawColumnSeams(int y = 3, int height = 26) {
     const uint16_t seam = rgb(0, 0, 0);
     // Five columns, matching the grille in the reference mouth.
-    constexpr int kColumnSeams[] = {15, 27, 39, 51};
+    // The 58-pixel interior contains five 10-pixel teeth and four 2-pixel
+    // seams. Starting at x=3, these positions keep every column equal and
+    // center the grille on the 64-pixel panel.
+    constexpr int kColumnSeams[] = {13, 25, 37, 49};
     for (const int x : kColumnSeams) {
         matrix->drawFastVLine(x, y, height, seam);
         matrix->drawFastVLine(x + 1, y, height, seam);

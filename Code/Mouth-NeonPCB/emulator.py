@@ -174,7 +174,8 @@ class MouthRenderer:
         )
 
     def column_seams(self, y: int = 3, height: int = 26) -> None:
-        for x in (15, 27, 39, 51):
+        # 58 interior pixels = five 10-pixel teeth + four 2-pixel seams.
+        for x in (13, 25, 37, 49):
             self.frame.vline(x, y, height, BLACK)
             self.frame.vline(x + 1, y, height, BLACK)
 

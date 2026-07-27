@@ -68,6 +68,7 @@
 #define AUDIO_BLOCK_FRAMES 64
 #define AUDIO_AUTO_BLOCKS 50
 #define AUDIO_MANUAL_BLOCKS 250
+#define AUDIO_IO_TIMEOUT_MS 100
 #define WIFI_SCAN_RECORDS 20
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAILED_BIT BIT1
@@ -856,14 +857,19 @@ static void test_audio_paths(bool play_tone, bool measure_microphone,
         size_t bytes_written = 0;
         size_t bytes_read = 0;
         esp_err_t write_err = i2s_channel_write(
-            tx_channel, output, sizeof(output), &bytes_written, pdMS_TO_TICKS(100));
+            tx_channel, output, sizeof(output), &bytes_written, AUDIO_IO_TIMEOUT_MS);
         esp_err_t read_err = ESP_OK;
         if (measure_microphone) {
             read_err = i2s_channel_read(
-                rx_channel, input, sizeof(input), &bytes_read, pdMS_TO_TICKS(100));
+                rx_channel, input, sizeof(input), &bytes_read, AUDIO_IO_TIMEOUT_MS);
         }
         if (write_err != ESP_OK || read_err != ESP_OK) {
             err = write_err != ESP_OK ? write_err : read_err;
+            char detail[128];
+            snprintf(detail, sizeof(detail), "%s stream failed: %s",
+                     write_err != ESP_OK ? "speaker TX" : "microphone RX",
+                     esp_err_to_name(err));
+            print_result(RESULT_FAIL, "I2S audio", detail);
             break;
         }
 
@@ -886,9 +892,11 @@ static void test_audio_paths(bool play_tone, bool measure_microphone,
         }
     }
 
-    if (err != ESP_OK || (measure_microphone && total_input_bytes == 0)) {
+    if (err != ESP_OK) {
+        /* The direction-specific failure was printed at the point of failure. */
+    } else if (measure_microphone && total_input_bytes == 0) {
         char detail[96];
-        snprintf(detail, sizeof(detail), "stream failed: %s", esp_err_to_name(err));
+        snprintf(detail, sizeof(detail), "microphone RX returned no samples");
         print_result(RESULT_FAIL, "I2S audio", detail);
     } else {
         if (measure_microphone) {

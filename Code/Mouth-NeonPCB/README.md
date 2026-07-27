@@ -69,10 +69,24 @@ physical 64x32 panel:
 ./emulator.py
 ```
 
-It uses the same state ID order, dimensions, colors, geometry, animation
-timing, brightness, and speaking intensity as the firmware. Left and Right
-select states and pause autoplay. Space or `a` resumes it; `+`/`-` changes
-brightness, `[`/`]` changes speaking intensity, and `q` exits.
+The emulator and firmware consume the same source-of-truth asset pack:
+[`assets/mouth_assets.json`](assets/mouth_assets.json). It contains every
+native 64x32 sprite, frame sequence, playback mode, and frame duration.
+PlatformIO regenerates `generated/mouth_assets.hpp` from that file before
+building the firmware.
+
+Left and Right select states and pause autoplay. Space or `a` resumes it;
+`+`/`-` changes brightness, `[`/`]` changes speaking intensity, and `q` exits.
+
+The editor controls operate on the exact animation frame currently displayed:
+
+- `e` or **Open frame in GIMP** exports the native 64x32 sprite and opens it.
+  Save/overwrite the PPM in GIMP, then return to the emulator.
+- `i` or **Import saved edit** quantizes the saved image to the shared palette,
+  updates `mouth_assets.json`, regenerates the firmware header, and reloads
+  the window.
+- `c` or **Copy frame** puts a native-resolution PNG on the Wayland clipboard.
+- `r` or **Reload assets** reloads changes made outside the emulator.
 
 Start paused on a particular state with:
 
@@ -86,6 +100,18 @@ The renderer can also be validated on a machine without a graphical session:
 ./emulator.py --self-test
 ./emulator.py --state speaking --dump speaking.ppm
 ```
+
+Sprites can also be managed without opening the GUI:
+
+```sh
+./asset_tool.py export angry angry.ppm
+./asset_tool.py import angry angry.ppm
+./asset_tool.py validate
+./asset_tool.py compile
+```
+
+See [`assets/README.md`](assets/README.md) for the asset format and editing
+workflow. Do not edit `generated/mouth_assets.hpp` manually.
 
 ESP-IDF QEMU has an optional virtual RGB framebuffer, but the Arduino HUB75
 DMA driver used here does not target that virtual peripheral. The desktop

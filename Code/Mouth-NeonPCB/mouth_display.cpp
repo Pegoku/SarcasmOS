@@ -5,6 +5,7 @@
 #include <Arduino.h>
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 
+#include "generated/mouth_assets.hpp"
 #include "protocol.hpp"
 
 namespace mouth_display {
@@ -33,6 +34,11 @@ constexpr int kLatchPin = 11;
 constexpr int kOePin = 13;
 constexpr int kClockPin = 12;
 
+static_assert(mouth_assets::kWidth == kPanelWidth, "asset width mismatch");
+static_assert(mouth_assets::kHeight == kPanelHeight, "asset height mismatch");
+static_assert(mouth_assets::kAnimationCount == kAnimCount,
+              "asset animation count mismatch");
+
 MatrixPanel_I2S_DMA *matrix = nullptr;
 uint8_t currentAnimation = kAnimIdle;
 uint8_t currentBrightness = kDefaultBrightness;
@@ -48,352 +54,58 @@ void present() {
     matrix->flipDMABuffer();
 }
 
-void drawThickLine(int x0, int y0, int x1, int y1, uint16_t color) {
-    matrix->drawLine(x0, y0, x1, y1, color);
-    matrix->drawLine(x0, y0 + 1, x1, y1 + 1, color);
+uint8_t animationFrame(const mouth_assets::Animation &animation,
+                       uint32_t elapsedMs) {
+    if (animation.frameCount <= 1) return 0;
+
+    const uint32_t step = elapsedMs / animation.frameMs;
+    if (animation.playback == mouth_assets::kPlaybackPingPong) {
+        const uint8_t finalFrame = animation.frameCount - 1;
+        const uint8_t phase = step % (finalFrame * 2);
+        return phase <= finalFrame ? phase : finalFrame * 2 - phase;
+    }
+    if (animation.playback == mouth_assets::kPlaybackIntensity) {
+        const uint8_t finalFrame = animation.frameCount - 1;
+        const uint8_t phase = step % (finalFrame * 2);
+        const uint8_t level =
+            phase <= finalFrame ? phase : finalFrame * 2 - phase;
+        return min(static_cast<int>(finalFrame),
+                   static_cast<int>(level) * currentMouthIntensity / 120);
+    }
+    return step % animation.frameCount;
 }
 
-uint16_t teethColor() {
-    return rgb(255, 246, 166);
-}
-
-uint16_t dimTeethColor() {
-    return rgb(116, 112, 76);
-}
-
-void drawShell(uint16_t fill, int x = 1, int y = 1, int width = 62,
-               int height = 30, int radius = 14) {
-    const uint16_t seam = rgb(0, 0, 0);
-    matrix->fillRoundRect(x, y, width, height, radius, seam);
-    matrix->fillRoundRect(x + 2, y + 2, width - 4, height - 4,
-                          max(radius - 2, 1), fill);
-}
-
-void drawColumnSeams(int y = 3, int height = 26) {
-    const uint16_t seam = rgb(0, 0, 0);
-    // Five columns, matching the grille in the reference mouth.
-    // The 58-pixel interior contains five 10-pixel teeth and four 2-pixel
-    // seams. Starting at x=3, these positions keep every column equal and
-    // center the grille on the 64-pixel panel.
-    constexpr int kColumnSeams[] = {13, 25, 37, 49};
-    for (const int x : kColumnSeams) {
-        matrix->drawFastVLine(x, y, height, seam);
-        matrix->drawFastVLine(x + 1, y, height, seam);
+void drawAssetFrame(uint8_t spriteId) {
+    const mouth_assets::Frame &frame = mouth_assets::kFrames[spriteId];
+    uint32_t pixel = 0;
+    for (uint32_t offset = frame.offset;
+         offset < frame.offset + frame.length; offset += 2) {
+        uint16_t run = mouth_assets::kRleData[offset];
+        const uint8_t paletteIndex = mouth_assets::kRleData[offset + 1];
+        const uint8_t *color = mouth_assets::kPalette[paletteIndex];
+        const uint16_t packed = rgb(color[0], color[1], color[2]);
+        while (run > 0 && pixel < kPanelWidth * kPanelHeight) {
+            const uint8_t x = pixel % kPanelWidth;
+            const uint8_t y = pixel / kPanelWidth;
+            const uint8_t chunk =
+                min(static_cast<int>(run), kPanelWidth - x);
+            matrix->drawFastHLine(x, y, chunk, packed);
+            pixel += chunk;
+            run -= chunk;
+        }
     }
 }
 
-void drawResting(uint16_t fill = 0) {
-    const uint16_t seam = rgb(0, 0, 0);
-    if (fill == 0) fill = teethColor();
-    drawShell(fill);
-    drawColumnSeams();
-    matrix->drawFastHLine(3, 11, 58, seam);
-    matrix->drawFastHLine(3, 12, 58, seam);
-    matrix->drawFastHLine(3, 20, 58, seam);
-    matrix->drawFastHLine(3, 21, 58, seam);
-}
-
-void drawSpeaking(uint32_t tick) {
-    const uint16_t seam = rgb(0, 0, 0);
-    drawShell(teethColor());
-    drawColumnSeams();
-
-    const int phase = tick % 24;
-    const int triangle = phase <= 12 ? phase : 24 - phase;
-    int amplitude = 2 + (triangle * 6) / 12;
-    amplitude = constrain(
-        (amplitude * static_cast<int>(currentMouthIntensity)) / 120, 1, 9);
-
-    constexpr int kCenterY = 16;
-    // Keep the waveform centered: it opens at 1/4 of the panel, reaches its
-    // peak near the middle, and closes at roughly 3/4.
-    drawThickLine(3, kCenterY - 1, 15, kCenterY - 1, seam);
-    drawThickLine(3, kCenterY + 1, 15, kCenterY + 1, seam);
-
-    drawThickLine(15, kCenterY - 1, 32, kCenterY - amplitude, seam);
-    drawThickLine(32, kCenterY - amplitude, 49, kCenterY - 1, seam);
-    drawThickLine(49, kCenterY - 1, 60, kCenterY - 1, seam);
-
-    drawThickLine(15, kCenterY + 1, 32, kCenterY + amplitude, seam);
-    drawThickLine(32, kCenterY + amplitude, 49, kCenterY + 1, seam);
-    drawThickLine(49, kCenterY + 1, 60, kCenterY + 1, seam);
-}
-
-void drawThinking(uint32_t tick, uint8_t variant) {
-    const uint16_t seam = rgb(0, 0, 0);
-    drawShell(teethColor());
-    drawColumnSeams();
-    matrix->drawFastHLine(3, 10, 58, seam);
-    matrix->drawFastHLine(3, 22, 58, seam);
-
-    const int cadence = variant == 2 ? 28 : (variant == 1 ? 12 : 18);
-    const int step = (tick / cadence) % 3;
-    constexpr int kDots[] = {24, 32, 40};
-    for (int i = 0; i < 3; ++i) {
-        const int radius = i == step ? (variant == 1 ? 3 : 2) : 1;
-        matrix->fillCircle(kDots[i], 16, radius, seam);
-    }
-}
-
-void drawTool(uint32_t tick) {
-    const uint16_t seam = rgb(0, 0, 0);
-    drawShell(teethColor());
-    drawColumnSeams();
-    drawThickLine(5, 13, 59, 13, seam);
-    drawThickLine(5, 18, 59, 18, seam);
-    const int x = 8 + ((tick / 2) % 48);
-    matrix->fillRect(x, 15, 3, 2, seam);
-}
-
-void drawListening(uint32_t tick) {
-    drawResting();
-    const uint16_t accent = rgb(110, 88, 25);
-    const int x = 8 + ((tick / 2) % 48);
-    matrix->fillCircle(x, 16, 1, accent);
-}
-
-void drawHappy(uint32_t tick, bool party) {
-    const uint16_t seam = rgb(0, 0, 0);
-    drawShell(teethColor());
-    drawColumnSeams();
-    drawThickLine(4, 11, 16, 14, seam);
-    drawThickLine(16, 14, 32, 18, seam);
-    drawThickLine(32, 18, 48, 14, seam);
-    drawThickLine(48, 14, 60, 11, seam);
-    if (party) {
-        constexpr uint16_t kPeriod = 18;
-        const int phase = (tick / 3) % kPeriod;
-        matrix->fillRect(9 + phase, 6, 2, 2, rgb(255, 45, 90));
-        matrix->fillRect(53 - phase, 23, 2, 2, rgb(30, 170, 255));
-    }
-}
-
-void drawAngry() {
-    const uint16_t seam = rgb(0, 0, 0);
-    drawShell(teethColor());
-    drawColumnSeams();
-    drawThickLine(3, 8, 32, 14, seam);
-    drawThickLine(32, 14, 60, 8, seam);
-    drawThickLine(3, 23, 32, 18, seam);
-    drawThickLine(32, 18, 60, 23, seam);
-}
-
-void drawSarcastic() {
-    const uint16_t seam = rgb(0, 0, 0);
-    drawShell(teethColor());
-    drawColumnSeams();
-    drawThickLine(3, 19, 19, 18, seam);
-    drawThickLine(19, 18, 35, 15, seam);
-    drawThickLine(35, 15, 60, 11, seam);
-}
-
-void drawSuspicious() {
-    const uint16_t seam = rgb(0, 0, 0);
-    drawShell(teethColor());
-    drawColumnSeams();
-    drawThickLine(3, 14, 25, 14, seam);
-    drawThickLine(25, 14, 32, 18, seam);
-    drawThickLine(32, 18, 39, 14, seam);
-    drawThickLine(39, 14, 60, 14, seam);
-}
-
-void drawTired(uint32_t tick) {
-    const uint16_t seam = rgb(0, 0, 0);
-    drawShell(dimTeethColor(), 3, 7, 58, 20, 9);
-    const int droop = 2 + ((tick / 40) % 2);
-    drawThickLine(8, 15, 24, 15 + droop, seam);
-    drawThickLine(24, 15 + droop, 40, 15 + droop, seam);
-    drawThickLine(40, 15 + droop, 56, 15, seam);
-}
-
-void drawSurprised(uint32_t tick, bool dramatic) {
-    const uint16_t fill = teethColor();
-    const uint16_t seam = rgb(0, 0, 0);
-    const int pulse = dramatic ? 2 + ((tick / 12) % 3) : 0;
-    const int width = (dramatic ? 24 : 18) + pulse;
-    const int height = (dramatic ? 30 : 22) + pulse / 2;
-    const int x = (kPanelWidth - width) / 2;
-    const int y = (kPanelHeight - height) / 2;
-    drawShell(fill, x, y, width, height, min(width, height) / 2);
-    matrix->fillRoundRect(x + 6, y + 6, width - 12, height - 12,
-                          max((width - 12) / 2, 1), seam);
-}
-
-void drawBored() {
-    const uint16_t seam = rgb(0, 0, 0);
-    drawShell(dimTeethColor(), 4, 10, 56, 13, 6);
-    matrix->drawFastHLine(6, 16, 52, seam);
-    matrix->drawFastHLine(6, 17, 52, seam);
-    constexpr int kShortSeams[] = {16, 27, 38, 49};
-    for (const int x : kShortSeams) {
-        matrix->drawFastVLine(x, 12, 9, seam);
-    }
-}
-
-void drawWatch(uint32_t tick) {
-    drawResting();
-    const uint16_t accent = rgb(245, 178, 25);
-    const int x = 5 + ((tick / 2) % 54);
-    matrix->drawFastVLine(x, 5, 5, accent);
-    matrix->drawFastVLine(x, 23, 4, accent);
-}
-
-void drawError(uint32_t tick) {
-    const uint16_t seam = rgb(0, 0, 0);
-    const uint16_t fill = ((tick / 64) % 2) ? rgb(255, 90, 60)
-                                            : rgb(170, 25, 20);
-    drawShell(fill);
-    drawColumnSeams();
-    constexpr int kX[] = {3, 10, 17, 24, 31, 38, 45, 52, 60};
-    for (int i = 0; i < 8; ++i) {
-        drawThickLine(kX[i], (i % 2) ? 22 : 9, kX[i + 1],
-                      (i % 2) ? 9 : 22, seam);
-    }
-}
-
-void drawBatteryLow(uint32_t tick) {
-    const uint16_t seam = rgb(0, 0, 0);
-    const bool visible = (tick % 128) < 112;
-    if (!visible) return;
-    drawShell(dimTeethColor(), 5, 8, 54, 18, 8);
-    drawThickLine(10, 15, 24, 15, seam);
-    drawThickLine(24, 15, 32, 19, seam);
-    drawThickLine(32, 19, 40, 15, seam);
-    drawThickLine(40, 15, 54, 15, seam);
-    matrix->fillRect(57, 13, 3, 7, dimTeethColor());
-}
-
-void drawRainy(uint32_t tick) {
-    const uint16_t seam = rgb(0, 0, 0);
-    drawShell(rgb(185, 198, 172));
-    drawColumnSeams();
-    const int offset = (tick / 8) % 8;
-    for (int x = -5 + offset; x < 64; x += 8) {
-        drawThickLine(x, 14, x + 4, 18, seam);
-        drawThickLine(x + 4, 18, x + 8, 14, seam);
-    }
-}
-
-void drawCloudy(uint32_t tick) {
-    const uint16_t seam = rgb(0, 0, 0);
-    drawShell(rgb(205, 205, 160), 5, 6, 54, 22, 10);
-    const int drift = (tick / 30) % 3;
-    drawThickLine(10, 15 + drift, 22, 13 + drift, seam);
-    drawThickLine(22, 13 + drift, 34, 16 + drift, seam);
-    drawThickLine(34, 16 + drift, 46, 13 + drift, seam);
-    drawThickLine(46, 13 + drift, 54, 15 + drift, seam);
-}
-
-void drawStormy(uint32_t tick) {
-    const uint16_t seam = rgb(0, 0, 0);
-    drawShell(rgb(235, 215, 110));
-    drawColumnSeams();
-    const int shift = (tick / 10) % 6;
-    for (int x = -8 + shift; x < 64; x += 12) {
-        drawThickLine(x, 9, x + 6, 16, seam);
-        drawThickLine(x + 6, 16, x, 23, seam);
-    }
-}
-
-void drawSnowy(uint32_t tick) {
-    const uint16_t seam = rgb(0, 0, 0);
-    drawShell(rgb(230, 232, 200));
-    drawColumnSeams();
-    constexpr int kDots[][2] = {
-        {10, 9}, {20, 18}, {31, 12}, {42, 21}, {53, 8}, {57, 18},
-    };
-    const int phase = (tick / 18) % 6;
-    for (int i = 0; i < 6; ++i) {
-        const int y = 5 + ((kDots[i][1] + phase + i) % 21);
-        matrix->fillCircle(kDots[i][0], y, i == phase ? 2 : 1, seam);
-    }
-}
-
-void drawMouth(uint32_t tick) {
+void drawMouth(uint32_t elapsedMs) {
     matrix->clearScreen();
-    switch (currentAnimation) {
-    case kAnimListening:
-        drawListening(tick);
-        break;
-    case kAnimThinking:
-        drawThinking(tick, 0);
-        break;
-    case kAnimThinkingAudio:
-        drawThinking(tick, 1);
-        break;
-    case kAnimThinkingLong:
-        drawThinking(tick, 2);
-        break;
-    case kAnimSpeaking:
-        drawSpeaking(tick);
-        break;
-    case kAnimHappy:
-    case kAnimSunny:
-        drawHappy(tick, false);
-        break;
-    case kAnimAngry:
-        drawAngry();
-        break;
-    case kAnimError:
-        drawError(tick);
-        break;
-    case kAnimSleep:
-        break;
-    case kAnimTool:
-        drawTool(tick);
-        break;
-    case kAnimLeft:
-    case kAnimRight:
-    case kAnimUp:
-    case kAnimDown:
-    case kAnimCenter:
-    case kAnimNeutral:
-    case kAnimIdle:
-        drawResting();
-        break;
-    case kAnimSarcastic:
-        drawSarcastic();
-        break;
-    case kAnimSuspicious:
-        drawSuspicious();
-        break;
-    case kAnimTired:
-        drawTired(tick);
-        break;
-    case kAnimSurprised:
-        drawSurprised(tick, false);
-        break;
-    case kAnimBored:
-        drawBored();
-        break;
-    case kAnimDramatic:
-        drawSurprised(tick, true);
-        break;
-    case kAnimWatch:
-        drawWatch(tick);
-        break;
-    case kAnimParty:
-        drawHappy(tick, true);
-        break;
-    case kAnimBatteryLow:
-        drawBatteryLow(tick);
-        break;
-    case kAnimRainy:
-        drawRainy(tick);
-        break;
-    case kAnimCloudy:
-        drawCloudy(tick);
-        break;
-    case kAnimStormy:
-        drawStormy(tick);
-        break;
-    case kAnimSnowy:
-        drawSnowy(tick);
-        break;
-    default:
-        drawResting();
-        break;
-    }
+    const uint8_t animationId =
+        isValidAnimation(currentAnimation) ? currentAnimation : kAnimNeutral;
+    const mouth_assets::Animation &animation =
+        mouth_assets::kAnimations[animationId];
+    const uint8_t localFrame = animationFrame(animation, elapsedMs);
+    const uint8_t spriteId = mouth_assets::kFrameReferences[
+        animation.firstFrameReference + localFrame];
+    drawAssetFrame(spriteId);
     present();
 }
 
@@ -423,12 +135,12 @@ void update() {
     const uint32_t now = millis();
     if (now - lastFrameMs >= kFrameIntervalMs) {
         lastFrameMs = now;
-        drawMouth((now + syncPhaseMs) / 16);
+        drawMouth(now + syncPhaseMs);
     }
 }
 
 void showNow() {
-    if (matrix != nullptr) drawMouth((millis() + syncPhaseMs) / 16);
+    if (matrix != nullptr) drawMouth(millis() + syncPhaseMs);
 }
 
 void setAnimation(uint8_t animationValue) {

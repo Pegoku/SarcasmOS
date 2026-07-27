@@ -1,0 +1,391 @@
+#!/usr/bin/env python3
+"""Validate, compile, export, and import SarcasmOS mouth assets."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import pathlib
+import re
+import sys
+from typing import Any
+
+ROOT = pathlib.Path(__file__).resolve().parent
+DEFAULT_ASSETS = ROOT / "assets" / "mouth_assets.json"
+DEFAULT_HEADER = ROOT / "generated" / "mouth_assets.hpp"
+
+EXPECTED_STATES = (
+    "idle", "listening", "thinking", "thinking_audio", "thinking_long",
+    "speaking", "happy_fake", "angry", "error", "asleep", "tool", "left",
+    "right", "up", "down", "center", "neutral", "sarcastic", "suspicious",
+    "tired", "surprised", "bored", "dramatic", "watch", "party",
+    "battery_low", "sunny", "rainy", "cloudy", "stormy", "snowy",
+)
+PLAYBACK_IDS = {"loop": 0, "ping_pong": 1, "intensity": 2}
+
+
+def load_assets(path: pathlib.Path = DEFAULT_ASSETS) -> dict[str, Any]:
+    data = json.loads(path.read_text())
+    validate_assets(data)
+    return data
+
+
+def palette(data: dict[str, Any]) -> list[tuple[int, int, int]]:
+    return [tuple(entry["rgb"]) for entry in data["palette"]]
+
+
+def decode_sprite(data: dict[str, Any], name: str) -> list[int]:
+    rows = data["sprites"][name]["rows"]
+    return [int(character, 16) for row in rows for character in row]
+
+
+def validate_assets(data: dict[str, Any]) -> None:
+    if data.get("format") != "sarcasmos-mouth-assets":
+        raise ValueError("unsupported mouth asset format")
+    if data.get("version") != 1:
+        raise ValueError("unsupported mouth asset version")
+    width = data.get("width")
+    height = data.get("height")
+    if (width, height) != (64, 32):
+        raise ValueError(f"expected 64x32 assets, got {width}x{height}")
+
+    colors = data.get("palette", [])
+    if not 1 <= len(colors) <= 16:
+        raise ValueError("the palette must contain 1..16 colors")
+    for entry in colors:
+        if (not isinstance(entry.get("name"), str) or
+                len(entry.get("rgb", [])) != 3 or
+                any(not isinstance(value, int) or not 0 <= value <= 255
+                    for value in entry["rgb"])):
+            raise ValueError(f"invalid palette entry: {entry!r}")
+
+    animations = data.get("animations", [])
+    names = tuple(animation.get("name") for animation in animations)
+    if names != EXPECTED_STATES:
+        raise ValueError("animation order/names do not match protocol.hpp")
+    for state_id, animation in enumerate(animations):
+        if animation.get("id") != state_id:
+            raise ValueError(f"{animation['name']}: ID must be {state_id}")
+        if animation.get("playback") not in PLAYBACK_IDS:
+            raise ValueError(f"{animation['name']}: invalid playback mode")
+        if not isinstance(animation.get("frame_ms"), int) or \
+                animation["frame_ms"] <= 0:
+            raise ValueError(f"{animation['name']}: invalid frame_ms")
+        if not animation.get("frames"):
+            raise ValueError(f"{animation['name']}: animation has no frames")
+        for sprite in animation["frames"]:
+            if sprite not in data.get("sprites", {}):
+                raise ValueError(
+                    f"{animation['name']}: missing sprite {sprite!r}"
+                )
+
+    valid_characters = set("0123456789ABCDEF"[:len(colors)])
+    for name, sprite in data.get("sprites", {}).items():
+        rows = sprite.get("rows", [])
+        if len(rows) != height or any(len(row) != width for row in rows):
+            raise ValueError(f"{name}: sprite must contain 32 rows of 64 pixels")
+        used = set("".join(rows))
+        if not used <= valid_characters:
+            raise ValueError(f"{name}: sprite uses invalid palette indices")
+
+    header = (ROOT / "protocol.hpp").read_text()
+    if "kAnimCount = 0x1f;" not in header:
+        raise ValueError("protocol.hpp animation count does not match assets")
+
+
+def encode_rle(indices: list[int]) -> list[int]:
+    encoded: list[int] = []
+    index = 0
+    while index < len(indices):
+        color = indices[index]
+        run = 1
+        while (index + run < len(indices) and
+               indices[index + run] == color and run < 255):
+            run += 1
+        encoded.extend((run, color))
+        index += run
+    return encoded
+
+
+def format_bytes(values: list[int], indent: str = "    ") -> str:
+    lines = []
+    for start in range(0, len(values), 16):
+        chunk = ", ".join(f"0x{value:02x}" for value in values[start:start + 16])
+        lines.append(f"{indent}{chunk},")
+    return "\n".join(lines)
+
+
+def compile_assets(
+    source: pathlib.Path = DEFAULT_ASSETS,
+    target: pathlib.Path = DEFAULT_HEADER,
+) -> None:
+    data = load_assets(source)
+    sprite_names = sorted(data["sprites"])
+    sprite_ids = {name: index for index, name in enumerate(sprite_names)}
+    rle_data: list[int] = []
+    frame_records = []
+    for name in sprite_names:
+        encoded = encode_rle(decode_sprite(data, name))
+        frame_records.append((len(rle_data), len(encoded)))
+        rle_data.extend(encoded)
+
+    frame_references: list[int] = []
+    animation_records = []
+    for animation in data["animations"]:
+        first_reference = len(frame_references)
+        frame_references.extend(
+            sprite_ids[name] for name in animation["frames"]
+        )
+        animation_records.append((
+            first_reference,
+            len(animation["frames"]),
+            animation["frame_ms"],
+            PLAYBACK_IDS[animation["playback"]],
+        ))
+
+    palette_rows = "\n".join(
+        f"    {{{red}, {green}, {blue}}},"
+        for red, green, blue in palette(data)
+    )
+    frames = "\n".join(
+        f"    {{{offset}u, {length}u}},"
+        for offset, length in frame_records
+    )
+    animations = "\n".join(
+        f"    {{{first}u, {count}u, {frame_ms}u, {playback}u}},"
+        for first, count, frame_ms, playback in animation_records
+    )
+    header = f"""// Generated by asset_tool.py from assets/mouth_assets.json.
+// Do not edit this file; edit/import the native 64x32 sprites instead.
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+
+namespace mouth_assets {{
+
+constexpr uint8_t kWidth = {data["width"]};
+constexpr uint8_t kHeight = {data["height"]};
+constexpr uint8_t kAnimationCount = {len(animation_records)};
+
+constexpr uint8_t kPlaybackLoop = 0;
+constexpr uint8_t kPlaybackPingPong = 1;
+constexpr uint8_t kPlaybackIntensity = 2;
+
+struct Frame {{
+    uint32_t offset;
+    uint16_t length;
+}};
+
+struct Animation {{
+    uint16_t firstFrameReference;
+    uint8_t frameCount;
+    uint16_t frameMs;
+    uint8_t playback;
+}};
+
+constexpr uint8_t kPalette[][3] = {{
+{palette_rows}
+}};
+
+constexpr Frame kFrames[] = {{
+{frames}
+}};
+
+constexpr uint8_t kFrameReferences[] = {{
+{format_bytes(frame_references)}
+}};
+
+constexpr Animation kAnimations[] = {{
+{animations}
+}};
+
+constexpr uint8_t kRleData[] = {{
+{format_bytes(rle_data)}
+}};
+
+}}  // namespace mouth_assets
+"""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(header)
+    print(
+        f"Compiled {len(animation_records)} animations, "
+        f"{len(frame_records)} sprites, {len(rle_data)} RLE bytes -> {target}"
+    )
+
+
+def write_ppm(
+    path: pathlib.Path, width: int, height: int,
+    pixels: list[tuple[int, int, int]],
+) -> None:
+    body = bytearray(channel for pixel in pixels for channel in pixel)
+    path.write_bytes(f"P6\n{width} {height}\n255\n".encode() + body)
+
+
+def read_ppm(path: pathlib.Path) -> tuple[int, int, list[tuple[int, int, int]]]:
+    raw = path.read_bytes()
+    tokens: list[bytes] = []
+    position = 0
+    while len(tokens) < 4:
+        while position < len(raw) and raw[position] in b" \t\r\n":
+            position += 1
+        if position < len(raw) and raw[position] == ord("#"):
+            position = raw.find(b"\n", position)
+            if position < 0:
+                raise ValueError("truncated PPM comment")
+            continue
+        match = re.match(rb"\S+", raw[position:])
+        if match is None:
+            raise ValueError("truncated PPM header")
+        token = match.group()
+        tokens.append(token)
+        position += len(token)
+    magic, width_token, height_token, maximum_token = tokens
+    if magic != b"P6" or maximum_token != b"255":
+        raise ValueError("only binary 8-bit P6 PPM files are supported")
+    width, height = int(width_token), int(height_token)
+    while position < len(raw) and raw[position] in b" \t\r\n":
+        position += 1
+    body = raw[position:]
+    if len(body) != width * height * 3:
+        raise ValueError("incorrect PPM pixel-data length")
+    pixels = [tuple(body[index:index + 3])
+              for index in range(0, len(body), 3)]
+    return width, height, pixels
+
+
+def animation_for(data: dict[str, Any], state: str) -> dict[str, Any]:
+    return next(
+        animation for animation in data["animations"]
+        if animation["name"] == state
+    )
+
+
+def sprite_pixels(
+    data: dict[str, Any], state: str, frame_index: int,
+    brightness: int = 255,
+) -> list[tuple[int, int, int]]:
+    animation = animation_for(data, state)
+    try:
+        sprite = animation["frames"][frame_index]
+    except IndexError as error:
+        raise ValueError(
+            f"{state} has {len(animation['frames'])} frame(s)"
+        ) from error
+    colors = palette(data)
+    factor = math.sqrt(brightness / 255)
+    return [
+        tuple(round(channel * factor) for channel in colors[index])
+        for index in decode_sprite(data, sprite)
+    ]
+
+
+def export_sprite(
+    state: str, frame_index: int, output: pathlib.Path,
+    brightness: int = 255,
+) -> None:
+    data = load_assets()
+    write_ppm(
+        output, data["width"], data["height"],
+        sprite_pixels(data, state, frame_index, brightness),
+    )
+    print(f"Exported {state} frame {frame_index} -> {output}")
+
+
+def nearest_palette_index(
+    pixel: tuple[int, int, int],
+    colors: list[tuple[int, int, int]],
+) -> int:
+    # Accept both full asset colors and the emulator's default 64/255 display
+    # brightness so screenshots/exports quantize back to the same palette.
+    candidates = []
+    for index, color in enumerate(colors):
+        candidates.append((index, color))
+        factor = math.sqrt(64 / 255)
+        candidates.append((
+            index, tuple(round(channel * factor) for channel in color)
+        ))
+    return min(
+        candidates,
+        key=lambda candidate: sum(
+            (pixel[channel] - candidate[1][channel]) ** 2
+            for channel in range(3)
+        ),
+    )[0]
+
+
+def import_sprite(
+    state: str, frame_index: int, source: pathlib.Path,
+) -> None:
+    data = load_assets()
+    width, height, pixels = read_ppm(source)
+    if (width, height) != (data["width"], data["height"]):
+        raise ValueError(f"edited sprite must be 64x32, got {width}x{height}")
+    animation = animation_for(data, state)
+    try:
+        sprite = animation["frames"][frame_index]
+    except IndexError as error:
+        raise ValueError(
+            f"{state} has {len(animation['frames'])} frame(s)"
+        ) from error
+    colors = palette(data)
+    indices = [nearest_palette_index(pixel, colors) for pixel in pixels]
+    rows = []
+    for y in range(height):
+        rows.append("".join(
+            format(index, "X")
+            for index in indices[y * width:(y + 1) * width]
+        ))
+    data["sprites"][sprite]["rows"] = rows
+    DEFAULT_ASSETS.write_text(json.dumps(data, indent=2) + "\n")
+    compile_assets()
+    print(f"Imported {source} -> {state} frame {frame_index} ({sprite})")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("validate")
+    commands.add_parser("compile")
+
+    export = commands.add_parser("export")
+    export.add_argument("state", choices=EXPECTED_STATES)
+    export.add_argument("output", type=pathlib.Path)
+    export.add_argument("--frame", type=int, default=0)
+    export.add_argument("--brightness", type=int, default=255)
+
+    import_command = commands.add_parser("import")
+    import_command.add_argument("state", choices=EXPECTED_STATES)
+    import_command.add_argument("source", type=pathlib.Path)
+    import_command.add_argument("--frame", type=int, default=0)
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    try:
+        if args.command == "validate":
+            data = load_assets()
+            print(
+                f"OK: {len(data['animations'])} animations, "
+                f"{len(data['sprites'])} sprites, 64x32"
+            )
+        elif args.command == "compile":
+            compile_assets()
+        elif args.command == "export":
+            if not 0 <= args.brightness <= 255:
+                raise ValueError("brightness must be in the range 0..255")
+            export_sprite(
+                args.state, args.frame, args.output, args.brightness,
+            )
+        elif args.command == "import":
+            import_sprite(args.state, args.frame, args.source)
+    except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
+        print(f"asset error: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

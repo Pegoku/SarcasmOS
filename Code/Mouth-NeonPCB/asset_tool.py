@@ -412,7 +412,44 @@ def pixels_to_rows(
             f"expected {width * height} pixels, got {len(pixels)}"
         )
     colors = palette(data)
-    indices = [nearest_palette_index(pixel, colors) for pixel in pixels]
+    exact_colors = {
+        color: index for index, color in enumerate(colors)
+    }
+    default_factor = math.sqrt(64 / 255)
+    scaled_colors: dict[tuple[int, int, int], int] = {}
+    for index, color in enumerate(colors):
+        scaled = tuple(round(channel * default_factor) for channel in color)
+        scaled_colors.setdefault(scaled, index)
+
+    existing_names = {
+        entry["name"] for entry in data["palette"]
+    }
+    indices = []
+    for pixel in pixels:
+        index = exact_colors.get(pixel)
+        if index is None:
+            index = scaled_colors.get(pixel)
+        if index is None and len(colors) < 16:
+            index = len(colors)
+            name = f"imported_{index:02X}"
+            suffix = 2
+            while name in existing_names:
+                name = f"imported_{index:02X}_{suffix}"
+                suffix += 1
+            data["palette"].append({
+                "name": name,
+                "rgb": list(pixel),
+            })
+            existing_names.add(name)
+            colors.append(pixel)
+            exact_colors[pixel] = index
+            scaled = tuple(
+                round(channel * default_factor) for channel in pixel
+            )
+            scaled_colors.setdefault(scaled, index)
+        if index is None:
+            index = nearest_palette_index(pixel, colors)
+        indices.append(index)
     return [
         "".join(
             format(index, "X")
@@ -470,6 +507,7 @@ def replace_animation_rows(
     state: str, rows: list[list[str]],
     assets_path: pathlib.Path = DEFAULT_ASSETS,
     header_path: pathlib.Path = DEFAULT_HEADER,
+    data: dict[str, Any] | None = None,
 ) -> int:
     """Atomically replace an animation with independent sprite rows."""
     if not rows:
@@ -477,7 +515,8 @@ def replace_animation_rows(
     if len(rows) > 255:
         raise ValueError(f"{state} cannot contain more than 255 frames")
 
-    data = load_assets(assets_path)
+    if data is None:
+        data = load_assets(assets_path)
     animation = animation_for(data, state)
     old_names = set(animation["frames"])
     new_names = [f"{state}_{index:02d}" for index in range(len(rows))]
@@ -524,7 +563,9 @@ def insert_animation_frame(
     ]
     inserted_index = after_index + 1
     rows.insert(inserted_index, list(rows[after_index]))
-    replace_animation_rows(state, rows, assets_path, header_path)
+    replace_animation_rows(
+        state, rows, assets_path, header_path, data,
+    )
     print(f"Inserted {state} frame {inserted_index + 1}")
     return inserted_index
 
@@ -546,7 +587,9 @@ def remove_animation_frame(
         for sprite in animation["frames"]
     ]
     del rows[frame_index]
-    replace_animation_rows(state, rows, assets_path, header_path)
+    replace_animation_rows(
+        state, rows, assets_path, header_path, data,
+    )
     selected_index = min(frame_index, len(rows) - 1)
     print(f"Removed {state} frame {frame_index + 1}")
     return selected_index
@@ -590,7 +633,7 @@ def sync_animation_frames(
         rows.append(pixels_to_rows(data, pixels))
 
     replace_animation_rows(
-        state, rows, assets_path, header_path,
+        state, rows, assets_path, header_path, data,
     )
     print(f"Synchronized {state}: {len(sources)} frame(s)")
     return len(sources)

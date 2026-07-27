@@ -33,9 +33,9 @@ Run `../emulator.py`, pause on a state with Left or Right, and use:
 3. Edit without resizing the 64x32 canvas. Disable interpolation when scaling
    the view; individual pixels are intentional.
 4. Overwrite the opened PPM from GIMP. The emulator detects the overwrite,
-   quantizes it to the palette, updates this pack, regenerates the firmware
-   header, and reloads the preview automatically. **Import saved edit** (`i`)
-   remains available as a manual refresh.
+   preserves new colors in available palette slots, updates this pack,
+   regenerates the firmware header, and reloads the preview automatically.
+   **Import saved edit** (`i`) remains available as a manual refresh.
 
 When an animation is opened with `o`, its files form an editable, one-based
 sequence:
@@ -92,9 +92,11 @@ unimported files.
 ../asset_tool.py compile
 ```
 
-Import accepts binary P6 PPM images at exactly 64x32. Colors are mapped to the
-nearest shared palette entry. Both full asset colors and the emulator's
-default `64/255` brightness colors map back to the same palette.
+Import accepts binary P6 PPM images at exactly 64x32. Existing full-brightness
+and emulator `64/255` colors map back to their original palette entries. A new
+exact RGB color is added to the shared palette while one of its 16 slots is
+free; only additional colors after the palette is full are mapped to the
+nearest entry.
 
 `generated/mouth_assets.hpp` and `generated/temperature_font.hpp` are
 deterministic build artifacts. PlatformIO regenerates them when their source

@@ -1,5 +1,9 @@
 # Mouth state contract
 
+For a non-technical explanation of what every state means, what causes it,
+how long it lasts, and how it is animated, see
+[`MOUTH_STATE_GUIDE.md`](MOUTH_STATE_GUIDE.md).
+
 This document defines how the 64x32 HUB75 mouth participates in the
 SarcasmOS face. It is derived from:
 

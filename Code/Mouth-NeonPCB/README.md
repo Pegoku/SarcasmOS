@@ -166,6 +166,9 @@ Brightness defaults to `64/255`. `SET_PARAM` key `1` controls speaking mouth
 intensity. Gaze-only states deliberately retain the neutral resting mouth,
 because gaze affects the eyes rather than replacing the mouth expression.
 Detailed behavior is described in `MOUTH_STATES.md`.
+For a beginner-friendly explanation of every state's meaning, cause, lifetime,
+animation timing, aliases, and current integration status, see
+[`MOUTH_STATE_GUIDE.md`](MOUTH_STATE_GUIDE.md).
 
 ## ESP-NOW packet format
 

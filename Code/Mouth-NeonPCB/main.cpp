@@ -16,7 +16,7 @@ namespace {
 
 using namespace mouth_protocol;
 
-constexpr uint8_t kFirmwareMajor = 2;
+constexpr uint8_t kFirmwareMajor = 3;
 constexpr uint8_t kFirmwareMinor = 0;
 
 struct PendingPacket {
@@ -130,7 +130,7 @@ bool processCommand(const PacketView &packet) {
     case kCmdSetAnimation:
     case kCmdSetExpression:
         if (!requirePayload(packet, 1)) return false;
-        if (packet.payload[0] > kAnimSleep) {
+        if (!isValidAnimation(packet.payload[0])) {
             lastError = kErrorInvalidPayload;
             return false;
         }

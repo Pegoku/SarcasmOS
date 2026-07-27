@@ -8,7 +8,7 @@ namespace mouth_protocol {
 constexpr uint8_t kMagic0 = 'S';
 constexpr uint8_t kMagic1 = 'M';
 constexpr uint8_t kTransportVersion = 0x01;
-constexpr uint8_t kApplicationVersion = 0x01;
+constexpr uint8_t kApplicationVersion = 0x02;
 constexpr uint8_t kRoleMouth = 0x02;
 constexpr uint8_t kRoleAny = 0xff;
 
@@ -36,6 +36,32 @@ constexpr uint8_t kAnimHappy = 0x06;
 constexpr uint8_t kAnimAngry = 0x07;
 constexpr uint8_t kAnimError = 0x08;
 constexpr uint8_t kAnimSleep = 0x09;
+constexpr uint8_t kAnimTool = 0x0a;
+constexpr uint8_t kAnimLeft = 0x0b;
+constexpr uint8_t kAnimRight = 0x0c;
+constexpr uint8_t kAnimUp = 0x0d;
+constexpr uint8_t kAnimDown = 0x0e;
+constexpr uint8_t kAnimCenter = 0x0f;
+constexpr uint8_t kAnimNeutral = 0x10;
+constexpr uint8_t kAnimSarcastic = 0x11;
+constexpr uint8_t kAnimSuspicious = 0x12;
+constexpr uint8_t kAnimTired = 0x13;
+constexpr uint8_t kAnimSurprised = 0x14;
+constexpr uint8_t kAnimBored = 0x15;
+constexpr uint8_t kAnimDramatic = 0x16;
+constexpr uint8_t kAnimWatch = 0x17;
+constexpr uint8_t kAnimParty = 0x18;
+constexpr uint8_t kAnimBatteryLow = 0x19;
+constexpr uint8_t kAnimSunny = 0x1a;
+constexpr uint8_t kAnimRainy = 0x1b;
+constexpr uint8_t kAnimCloudy = 0x1c;
+constexpr uint8_t kAnimStormy = 0x1d;
+constexpr uint8_t kAnimSnowy = 0x1e;
+constexpr uint8_t kAnimCount = 0x1f;
+
+inline bool isValidAnimation(uint8_t animation) {
+    return animation < kAnimCount;
+}
 
 constexpr uint8_t kParamMouthIntensity = 0x01;
 

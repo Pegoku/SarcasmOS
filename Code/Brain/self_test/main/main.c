@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "driver/gpio.h"
@@ -11,11 +12,14 @@
 #include "driver/spi_master.h"
 #include "esp_chip_info.h"
 #include "esp_err.h"
+#include "esp_event.h"
 #include "esp_flash.h"
 #include "esp_mac.h"
+#include "esp_netif.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/event_groups.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
 
@@ -58,6 +62,9 @@
 #define AUDIO_SAMPLE_RATE 16000
 #define AUDIO_BLOCK_FRAMES 64
 #define AUDIO_TEST_BLOCKS 50
+#define WIFI_SCAN_RECORDS 20
+#define WIFI_CONNECTED_BIT BIT0
+#define WIFI_FAILED_BIT BIT1
 
 typedef enum {
     RESULT_PASS,
@@ -75,6 +82,12 @@ typedef struct {
 
 static summary_t g_summary;
 static i2c_master_bus_handle_t g_i2c_bus;
+static esp_netif_t *g_wifi_netif;
+static EventGroupHandle_t g_wifi_events;
+static bool g_wifi_initialized;
+static bool g_wifi_connected;
+static uint8_t g_wifi_disconnect_reason;
+static esp_err_t g_service_status = ESP_OK;
 
 static void print_result(result_t result, const char *test, const char *detail)
 {
@@ -229,6 +242,10 @@ static void test_gpio_and_power(void)
 
 static esp_err_t init_i2c(void)
 {
+    if (g_i2c_bus != NULL) {
+        return ESP_OK;
+    }
+
     i2c_master_bus_config_t config = {
         .i2c_port = I2C_NUM_0,
         .sda_io_num = PIN_I2C_SDA,
@@ -335,63 +352,138 @@ static void test_i2c(void)
     print_result(displays_found == 3 ? RESULT_PASS : RESULT_WARN, "display I2C", detail);
 }
 
-static void test_wifi(void)
+static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t event_id,
+                               void *event_data)
+{
+    if (base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        g_wifi_connected = true;
+        xEventGroupClearBits(g_wifi_events, WIFI_FAILED_BIT);
+        xEventGroupSetBits(g_wifi_events, WIFI_CONNECTED_BIT);
+    } else if (base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        const wifi_event_sta_disconnected_t *disconnected = event_data;
+        g_wifi_connected = false;
+        g_wifi_disconnect_reason = disconnected != NULL ? disconnected->reason : 0;
+        xEventGroupClearBits(g_wifi_events, WIFI_CONNECTED_BIT);
+        xEventGroupSetBits(g_wifi_events, WIFI_FAILED_BIT);
+    }
+}
+
+static esp_err_t wifi_ensure_started(void)
 {
 #if CONFIG_BRAIN_SELF_TEST_WIFI
-    wifi_init_config_t init_config = WIFI_INIT_CONFIG_DEFAULT();
-    esp_err_t err = esp_wifi_init(&init_config);
-    if (err != ESP_OK) {
-        char detail[96];
-        snprintf(detail, sizeof(detail), "driver initialization failed: %s", esp_err_to_name(err));
-        print_result(RESULT_FAIL, "Wi-Fi radio", detail);
-        return;
+    if (g_wifi_initialized) {
+        return ESP_OK;
     }
 
-    err = esp_wifi_set_mode(WIFI_MODE_STA);
+    g_wifi_events = xEventGroupCreate();
+    if (g_wifi_events == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    wifi_init_config_t init_config = WIFI_INIT_CONFIG_DEFAULT();
+    esp_err_t err = esp_wifi_init(&init_config);
+    if (err == ESP_OK) {
+        err = esp_event_handler_register(
+            WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_event_handler, NULL);
+    }
+    if (err == ESP_OK) {
+        err = esp_event_handler_register(
+            IP_EVENT, IP_EVENT_STA_GOT_IP, wifi_event_handler, NULL);
+    }
+    if (err == ESP_OK) {
+        err = esp_wifi_set_storage(WIFI_STORAGE_RAM);
+    }
+    if (err == ESP_OK) {
+        err = esp_wifi_set_mode(WIFI_MODE_STA);
+    }
     if (err == ESP_OK) {
         err = esp_wifi_start();
     }
+    if (err == ESP_OK) {
+        g_wifi_initialized = true;
+    }
+    return err;
+#else
+    return ESP_ERR_NOT_SUPPORTED;
+#endif
+}
+
+static esp_err_t wifi_scan(wifi_ap_record_t *records, uint16_t capacity,
+                           uint16_t *total_count, uint16_t *record_count)
+{
+    esp_err_t err = wifi_ensure_started();
+    if (err != ESP_OK) {
+        return err;
+    }
+
     wifi_scan_config_t scan_config = {
         .show_hidden = true,
         .scan_type = WIFI_SCAN_TYPE_ACTIVE,
     };
-    if (err == ESP_OK) {
-        err = esp_wifi_scan_start(&scan_config, true);
+    err = esp_wifi_scan_start(&scan_config, true);
+    if (err != ESP_OK) {
+        return err;
     }
+
+    uint16_t total = 0;
+    err = esp_wifi_scan_get_ap_num(&total);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    uint16_t count = total < capacity ? total : capacity;
+    if (count > 0) {
+        err = esp_wifi_scan_get_ap_records(&count, records);
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+    *total_count = total;
+    *record_count = count;
+    return ESP_OK;
+}
+
+static void print_wifi_records(const wifi_ap_record_t *records, uint16_t count,
+                               bool numbered)
+{
+    for (uint16_t i = 0; i < count; ++i) {
+        if (numbered) {
+            printf("  [%2u] ch %-2u  %4d dBm  %-4s  %s\n",
+                   i + 1, records[i].primary, records[i].rssi,
+                   records[i].authmode == WIFI_AUTH_OPEN ? "open" : "auth",
+                   records[i].ssid);
+        } else {
+            printf("  - ch %-2u  %4d dBm  %-4s  %s\n",
+                   records[i].primary, records[i].rssi,
+                   records[i].authmode == WIFI_AUTH_OPEN ? "open" : "auth",
+                   records[i].ssid);
+        }
+    }
+    fflush(stdout);
+}
+
+static void test_wifi(void)
+{
+#if CONFIG_BRAIN_SELF_TEST_WIFI
+    wifi_ap_record_t records[8];
+    uint16_t total = 0;
+    uint16_t count = 0;
+    esp_err_t err = wifi_scan(records, 8, &total, &count);
     if (err != ESP_OK) {
         char detail[96];
         snprintf(detail, sizeof(detail), "scan failed: %s", esp_err_to_name(err));
         print_result(RESULT_FAIL, "Wi-Fi radio", detail);
-        esp_wifi_stop();
-        esp_wifi_deinit();
         return;
     }
 
-    uint16_t ap_count = 0;
-    err = esp_wifi_scan_get_ap_num(&ap_count);
-    if (err != ESP_OK) {
-        print_result(RESULT_FAIL, "Wi-Fi radio", "scan completed but result count failed");
-    } else {
-        char detail[96];
-        snprintf(detail, sizeof(detail), "active scan completed, %u access point%s found",
-                 ap_count, ap_count == 1 ? "" : "s");
-        print_result(RESULT_PASS, "Wi-Fi radio", detail);
-
-        uint16_t records_to_read = ap_count > 8 ? 8 : ap_count;
-        wifi_ap_record_t records[8];
-        if (records_to_read > 0 &&
-            esp_wifi_scan_get_ap_records(&records_to_read, records) == ESP_OK) {
-            printf("  strongest Wi-Fi networks:\n");
-            for (uint16_t i = 0; i < records_to_read; ++i) {
-                printf("  - ch %-2u  %4d dBm  %s\n",
-                       records[i].primary, records[i].rssi, records[i].ssid);
-            }
-            fflush(stdout);
-        }
+    char detail[96];
+    snprintf(detail, sizeof(detail), "active scan completed, %u access point%s found",
+             total, total == 1 ? "" : "s");
+    print_result(RESULT_PASS, "Wi-Fi radio", detail);
+    if (count > 0) {
+        printf("  strongest Wi-Fi networks:\n");
+        print_wifi_records(records, count, false);
     }
-
-    esp_wifi_stop();
-    esp_wifi_deinit();
 #else
     print_result(RESULT_SKIP, "Wi-Fi radio", "disabled in menuconfig");
 #endif
@@ -618,38 +710,13 @@ static esp_err_t initialize_system_services(void)
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
         return err;
     }
-    esp_netif_create_default_wifi_sta();
-    return ESP_OK;
+    g_wifi_netif = esp_netif_create_default_wifi_sta();
+    return g_wifi_netif != NULL ? ESP_OK : ESP_ERR_NO_MEM;
 }
 
-void app_main(void)
+static void print_summary(void)
 {
-    vTaskDelay(pdMS_TO_TICKS(600));
-    printf("\n\n");
     printf("============================================================\n");
-    printf(" SarcasmOS Brain PCB self-test\n");
-    printf(" ESP-IDF %s | results: PASS / WARN / FAIL / SKIP\n", esp_get_idf_version());
-    printf("============================================================\n");
-    printf("WARN means firmware exercised the control path but the PCB has\n");
-    printf("no electrical feedback for an automatic end-to-end check.\n\n");
-    fflush(stdout);
-
-    esp_err_t service_err = initialize_system_services();
-    if (service_err != ESP_OK) {
-        char detail[96];
-        snprintf(detail, sizeof(detail), "NVS/network setup failed: %s",
-                 esp_err_to_name(service_err));
-        print_result(RESULT_FAIL, "system services", detail);
-    }
-
-    test_mcu();
-    test_gpio_and_power();
-    test_i2c();
-    test_w5500();
-    test_wifi();
-    test_audio();
-
-    printf("\n============================================================\n");
     printf(" FINAL: %u PASS, %u WARN, %u FAIL, %u SKIP\n",
            g_summary.pass, g_summary.warn, g_summary.fail, g_summary.skip);
     printf(" RESULT: %s\n", g_summary.fail == 0 ? "BOARD SELF-TEST COMPLETED" : "CHECK FAILED ITEMS");
@@ -657,11 +724,352 @@ void app_main(void)
     printf(" The TMC2209 remains disabled; no motor motion is commanded.\n");
     printf("============================================================\n");
     fflush(stdout);
+}
 
-    bool led = false;
-    while (true) {
-        led = !led;
-        gpio_set_level(PIN_STATUS_LED, led);
-        vTaskDelay(pdMS_TO_TICKS(g_summary.fail == 0 ? 1000 : 200));
+static void run_self_test(void)
+{
+    memset(&g_summary, 0, sizeof(g_summary));
+    printf("\nRunning complete board self-test...\n\n");
+    if (g_service_status != ESP_OK) {
+        char detail[96];
+        snprintf(detail, sizeof(detail), "NVS/network setup failed: %s",
+                 esp_err_to_name(g_service_status));
+        print_result(RESULT_FAIL, "system services", detail);
     }
+    test_mcu();
+    test_gpio_and_power();
+    test_i2c();
+    test_w5500();
+    test_wifi();
+    test_audio();
+    printf("\n");
+    print_summary();
+}
+
+static bool read_line(const char *prompt, char *buffer, size_t buffer_size)
+{
+    printf("%s", prompt);
+    fflush(stdout);
+    if (fgets(buffer, buffer_size, stdin) == NULL) {
+        clearerr(stdin);
+        vTaskDelay(pdMS_TO_TICKS(50));
+        return false;
+    }
+
+    size_t length = strcspn(buffer, "\r\n");
+    buffer[length] = '\0';
+    return true;
+}
+
+static void manual_set_output(gpio_num_t pin, int level, const char *name,
+                              const char *measurement)
+{
+    esp_err_t err = gpio_set_level(pin, level);
+    if (err != ESP_OK) {
+        printf("\n[FAIL] %s: %s\n", name, esp_err_to_name(err));
+        return;
+    }
+
+    printf("\n[OK] %s is %s (GPIO%d=%d).\n", name, level ? "ON" : "OFF", pin, level);
+    if (level && measurement != NULL) {
+        printf("     %s\n", measurement);
+    }
+}
+
+static void manual_set_charger(bool enabled)
+{
+    esp_err_t err = gpio_set_level(PIN_CHARGER_CE, enabled ? 0 : 1);
+    if (err != ESP_OK) {
+        printf("\n[FAIL] charger control: %s\n", esp_err_to_name(err));
+        return;
+    }
+    printf("\n[OK] charger is %s (active-low CE GPIO6=%d).\n",
+           enabled ? "enabled" : "disabled", enabled ? 0 : 1);
+}
+
+static void manual_gpio_status(void)
+{
+    printf("\nGPIO state:\n");
+    printf("  +5V_EN=%d  5VHP_EN=%d  charger=%s  status LED=%d\n",
+           gpio_get_level(PIN_5V_EN), gpio_get_level(PIN_5VHP_EN),
+           gpio_get_level(PIN_CHARGER_CE) == 0 ? "enabled" : "disabled",
+           gpio_get_level(PIN_STATUS_LED));
+    printf("  BQINT=%d  fuel ALRT=%d  W5500 INT=%d  TMC DIAG=%d\n",
+           gpio_get_level(PIN_BQ_INT), gpio_get_level(PIN_FUEL_ALERT),
+           gpio_get_level(PIN_ETH_INT), gpio_get_level(PIN_TMC_DIAG));
+    printf("  TMC driver remains disabled (TmcEN=%d).\n", gpio_get_level(PIN_TMC_EN));
+}
+
+static void manual_wifi_scan(void)
+{
+#if CONFIG_BRAIN_SELF_TEST_WIFI
+    wifi_ap_record_t records[WIFI_SCAN_RECORDS];
+    uint16_t total = 0;
+    uint16_t count = 0;
+    printf("\nScanning Wi-Fi...\n");
+    esp_err_t err = wifi_scan(records, WIFI_SCAN_RECORDS, &total, &count);
+    if (err != ESP_OK) {
+        printf("[FAIL] Wi-Fi scan: %s\n", esp_err_to_name(err));
+        return;
+    }
+
+    printf("Found %u access point%s", total, total == 1 ? "" : "s");
+    if (total > count) {
+        printf(" (showing strongest %u)", count);
+    }
+    printf(":\n");
+    print_wifi_records(records, count, true);
+#else
+    printf("\nWi-Fi support is disabled in menuconfig.\n");
+#endif
+}
+
+static void manual_wifi_status(void)
+{
+#if CONFIG_BRAIN_SELF_TEST_WIFI
+    esp_err_t err = wifi_ensure_started();
+    if (err != ESP_OK) {
+        printf("\n[FAIL] Wi-Fi driver: %s\n", esp_err_to_name(err));
+        return;
+    }
+
+    wifi_ap_record_t ap;
+    if (!g_wifi_connected || esp_wifi_sta_get_ap_info(&ap) != ESP_OK) {
+        printf("\nWi-Fi is disconnected");
+        if (g_wifi_disconnect_reason != 0) {
+            printf(" (last reason %u)", g_wifi_disconnect_reason);
+        }
+        printf(".\n");
+        return;
+    }
+
+    esp_netif_ip_info_t ip_info;
+    err = esp_netif_get_ip_info(g_wifi_netif, &ip_info);
+    printf("\nWi-Fi connected to %s, channel %u, RSSI %d dBm",
+           ap.ssid, ap.primary, ap.rssi);
+    if (err == ESP_OK) {
+        printf(", IP " IPSTR, IP2STR(&ip_info.ip));
+    }
+    printf(".\n");
+#else
+    printf("\nWi-Fi support is disabled in menuconfig.\n");
+#endif
+}
+
+static void manual_wifi_connect(void)
+{
+#if CONFIG_BRAIN_SELF_TEST_WIFI
+    wifi_ap_record_t records[WIFI_SCAN_RECORDS];
+    uint16_t total = 0;
+    uint16_t count = 0;
+    char input[80];
+
+    printf("\nScanning before connection...\n");
+    esp_err_t err = wifi_scan(records, WIFI_SCAN_RECORDS, &total, &count);
+    if (err != ESP_OK) {
+        printf("[FAIL] Wi-Fi scan: %s\n", esp_err_to_name(err));
+        return;
+    }
+    if (count == 0) {
+        printf("No access points found.\n");
+        return;
+    }
+
+    print_wifi_records(records, count, true);
+    if (!read_line("Network number (blank cancels): ", input, sizeof(input)) ||
+        input[0] == '\0') {
+        printf("Connection cancelled.\n");
+        return;
+    }
+
+    char *end = NULL;
+    long selected = strtol(input, &end, 10);
+    if (*end != '\0' || selected < 1 || selected > count) {
+        printf("Invalid network number.\n");
+        return;
+    }
+
+    const wifi_ap_record_t *ap = &records[selected - 1];
+    char password[65] = { 0 };
+    if (ap->authmode != WIFI_AUTH_OPEN) {
+        printf("Note: password input may be visible in your serial terminal.\n");
+        if (!read_line("Password (blank cancels): ", password, sizeof(password)) ||
+            password[0] == '\0') {
+            printf("Connection cancelled.\n");
+            return;
+        }
+    }
+
+    if (g_wifi_connected) {
+        esp_wifi_disconnect();
+        vTaskDelay(pdMS_TO_TICKS(250));
+    }
+    xEventGroupClearBits(g_wifi_events, WIFI_CONNECTED_BIT | WIFI_FAILED_BIT);
+    g_wifi_disconnect_reason = 0;
+
+    wifi_config_t config = { 0 };
+    strlcpy((char *)config.sta.ssid, (const char *)ap->ssid, sizeof(config.sta.ssid));
+    strlcpy((char *)config.sta.password, password, sizeof(config.sta.password));
+    config.sta.threshold.authmode = WIFI_AUTH_OPEN;
+    err = esp_wifi_set_config(WIFI_IF_STA, &config);
+    if (err == ESP_OK) {
+        err = esp_wifi_connect();
+    }
+    if (err != ESP_OK) {
+        printf("[FAIL] Could not start connection: %s\n", esp_err_to_name(err));
+        return;
+    }
+
+    printf("Connecting to %s", ap->ssid);
+    fflush(stdout);
+    EventBits_t bits = xEventGroupWaitBits(
+        g_wifi_events, WIFI_CONNECTED_BIT | WIFI_FAILED_BIT,
+        pdFALSE, pdFALSE, pdMS_TO_TICKS(CONFIG_BRAIN_SELF_TEST_WIFI_TIMEOUT_MS));
+    printf("\n");
+    if (bits & WIFI_CONNECTED_BIT) {
+        manual_wifi_status();
+    } else if (bits & WIFI_FAILED_BIT) {
+        printf("[FAIL] Connection rejected (Wi-Fi reason %u).\n",
+               g_wifi_disconnect_reason);
+    } else {
+        printf("[FAIL] Connection timed out after %d ms.\n",
+               CONFIG_BRAIN_SELF_TEST_WIFI_TIMEOUT_MS);
+        esp_wifi_disconnect();
+    }
+#else
+    printf("\nWi-Fi support is disabled in menuconfig.\n");
+#endif
+}
+
+static void manual_wifi_disconnect(void)
+{
+#if CONFIG_BRAIN_SELF_TEST_WIFI
+    if (!g_wifi_initialized || !g_wifi_connected) {
+        printf("\nWi-Fi is already disconnected.\n");
+        return;
+    }
+    esp_err_t err = esp_wifi_disconnect();
+    printf("\n%s\n", err == ESP_OK ? "Wi-Fi disconnected."
+                                   : esp_err_to_name(err));
+#else
+    printf("\nWi-Fi support is disabled in menuconfig.\n");
+#endif
+}
+
+static void print_tui_menu(void)
+{
+    printf("\n");
+    printf("================ Manual test menu ================\n");
+    printf(" Power                              Interfaces\n");
+    printf("  1  +5V buck ON                     w  Wi-Fi scan\n");
+    printf("  2  +5V buck OFF                    c  Wi-Fi connect\n");
+    printf("  3  5VHP buck ON                    s  Wi-Fi status\n");
+    printf("  4  5VHP buck OFF                   d  Wi-Fi disconnect\n");
+    printf("  5  charger enable                  i  I2C scan/read\n");
+    printf("  6  charger disable                 e  W5500 test\n");
+    printf("                                      a  I2S audio test\n");
+    printf(" Other\n");
+    printf("  g  GPIO status     r  rerun all     h  show menu\n");
+    printf("==================================================\n");
+}
+
+static void run_tui(void)
+{
+    char command[32];
+    print_tui_menu();
+    while (true) {
+        if (!read_line("\nbrain-test> ", command, sizeof(command))) {
+            continue;
+        }
+
+        switch (command[0]) {
+        case '1':
+            manual_set_output(PIN_5V_EN, 1, "+5V buck",
+                              "Measure +5V at J2/J4/J5/J6 pin 1.");
+            break;
+        case '2':
+            manual_set_output(PIN_5V_EN, 0, "+5V buck", NULL);
+            break;
+        case '3':
+            manual_set_output(PIN_5VHP_EN, 1, "5VHP buck",
+                              "Measure 5VHP at J1 pin 1.");
+            break;
+        case '4':
+            manual_set_output(PIN_5VHP_EN, 0, "5VHP buck", NULL);
+            break;
+        case '5':
+            manual_set_charger(true);
+            break;
+        case '6':
+            manual_set_charger(false);
+            break;
+        case 'w':
+        case 'W':
+            manual_wifi_scan();
+            break;
+        case 'c':
+        case 'C':
+            manual_wifi_connect();
+            break;
+        case 's':
+        case 'S':
+            manual_wifi_status();
+            break;
+        case 'd':
+        case 'D':
+            manual_wifi_disconnect();
+            break;
+        case 'i':
+        case 'I':
+            test_i2c();
+            break;
+        case 'e':
+        case 'E':
+            test_w5500();
+            break;
+        case 'a':
+        case 'A':
+            test_audio();
+            break;
+        case 'g':
+        case 'G':
+            manual_gpio_status();
+            break;
+        case 'r':
+        case 'R':
+            run_self_test();
+            break;
+        case 'h':
+        case 'H':
+        case '?':
+            print_tui_menu();
+            break;
+        case '\0':
+            break;
+        default:
+            printf("Unknown command '%s'. Enter h for the menu.\n", command);
+            break;
+        }
+    }
+}
+
+void app_main(void)
+{
+    vTaskDelay(pdMS_TO_TICKS(600));
+    setvbuf(stdin, NULL, _IONBF, 0);
+    setvbuf(stdout, NULL, _IONBF, 0);
+
+    printf("\n\n");
+    printf("============================================================\n");
+    printf(" SarcasmOS Brain PCB self-test\n");
+    printf(" ESP-IDF %s | results: PASS / WARN / FAIL / SKIP\n", esp_get_idf_version());
+    printf("============================================================\n");
+    printf("WARN means firmware exercised the control path but the PCB has\n");
+    printf("no electrical feedback for an automatic end-to-end check.\n");
+
+    g_service_status = initialize_system_services();
+
+    run_self_test();
+    printf("\nInitial checks complete. USB serial manual controls are ready.\n");
+    run_tui();
 }

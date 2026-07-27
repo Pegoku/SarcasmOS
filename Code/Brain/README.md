@@ -33,5 +33,6 @@ curl -X POST http://DEVICE_IP/api/command -d '{"animation":"speaking"}'
 
 An independent bring-up firmware is available in [`self_test/`](self_test/).
 It reports Wi-Fi, buck-control, I2C power-management devices, display
-controllers, W5500, GPIO, and I2S audio checks through native USB serial. See
+controllers, W5500, GPIO, and I2S audio checks through native USB serial, then
+opens an interactive menu for manual power and peripheral tests. See
 [`self_test/README.md`](self_test/README.md) for build, flash, and test details.

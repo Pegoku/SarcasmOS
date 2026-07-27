@@ -17,6 +17,20 @@ tests:
 - an active Wi-Fi network scan (no credentials are required)
 - I2S microphone samples and an optional short 440 Hz speaker tone
 
+After the automatic checks, a menu-driven terminal interface remains available
+on the same USB serial connection. It can:
+
+- explicitly enable or disable the `+5V` and `5VHP` buck converters
+- enable or disable charging through the BQ25792 active-low `CE` input
+- scan for Wi-Fi networks, select one, enter its password, and connect
+- report the connected SSID, channel, RSSI, IP address, and disconnect reason
+- disconnect Wi-Fi
+- repeat the I2C, W5500, audio, and GPIO tests independently
+- rerun the complete automatic test sequence
+
+Wi-Fi credentials entered in the menu are kept in RAM only and are not saved to
+flash. Password entry may be visible in the serial terminal.
+
 The buck converters do not have voltage-sense or power-good signals connected
 to the ESP32-S3. Their automatic result is therefore `WARN`: the firmware can
 verify that the enable GPIO latched high, but a multimeter is required to verify
@@ -45,3 +59,18 @@ idf.py -C self_test menuconfig
 ```
 
 Look under `SarcasmOS Brain self-test`.
+
+## Manual terminal interface
+
+When the initial report finishes, enter `h` to display the controls:
+
+```text
+brain-test> h
+```
+
+Commands are single letters or numbers. For example, enter `2` to disable the
+normal 5 V buck, `1` to enable it again, `c` to select and connect to a Wi-Fi
+network, and `s` to show its connection status and IP address.
+
+Enabling a buck only verifies the enable GPIO state. Measure the corresponding
+rail before treating it as electrically validated.

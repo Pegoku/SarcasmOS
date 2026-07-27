@@ -1,8 +1,14 @@
 menu "SarcasmOS Brain self-test"
 
 config BRAIN_SELF_TEST_WIFI
-    bool "Scan for Wi-Fi networks"
+    bool "Enable Wi-Fi scan and connection tests"
     default y
+
+config BRAIN_SELF_TEST_WIFI_TIMEOUT_MS
+    int "Wi-Fi connection timeout (ms)"
+    depends on BRAIN_SELF_TEST_WIFI
+    range 1000 60000
+    default 15000
 
 config BRAIN_SELF_TEST_W5500
     bool "Read the W5500 version register"

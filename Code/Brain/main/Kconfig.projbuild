@@ -16,6 +16,33 @@ config SARCASMOS_ENABLE_ETHERNET
     bool "Enable W5500 Ethernet at boot"
     default n
 
+config SARCASMOS_MOUTH_ESPNOW
+    bool "Enable ESP-NOW mouth controller"
+    default y
+
+config SARCASMOS_MOUTH_MAC
+    string "ESP-NOW mouth station MAC"
+    depends on SARCASMOS_MOUTH_ESPNOW
+    default ""
+
+config SARCASMOS_ESPNOW_CHANNEL
+    int "ESP-NOW channel when not connected to Wi-Fi"
+    depends on SARCASMOS_MOUTH_ESPNOW
+    range 1 14
+    default 1
+
+config SARCASMOS_ESPNOW_ACK_TIMEOUT_MS
+    int "ESP-NOW mouth acknowledgement timeout (ms)"
+    depends on SARCASMOS_MOUTH_ESPNOW
+    range 10 2000
+    default 100
+
+config SARCASMOS_ESPNOW_RETRIES
+    int "ESP-NOW mouth command attempts"
+    depends on SARCASMOS_MOUTH_ESPNOW
+    range 1 10
+    default 3
+
 config SARCASMOS_W5500_SPI_FREQ_HZ
     int "W5500 SPI frequency"
     default 20000000

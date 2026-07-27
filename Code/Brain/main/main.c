@@ -8,6 +8,7 @@
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
 #include "driver/i2s_std.h"
+#include "display_protocol.h"
 #include "esp_check.h"
 #include "esp_event.h"
 #include "esp_eth.h"
@@ -21,7 +22,9 @@
 #include "esp_timer.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/event_groups.h"
 #include "freertos/task.h"
+#include "mouth_espnow.h"
 #include "nvs_flash.h"
 #include "driver/spi_master.h"
 
@@ -50,33 +53,33 @@
 #define PIN_STATUS_LED GPIO_NUM_48
 
 #define I2C_TIMEOUT_MS 80
+#define WIFI_CONNECTED_BIT BIT0
 
 #define ADDR_LEFT_EYE 0x30
 #define ADDR_RIGHT_EYE 0x31
-#define ADDR_MOUTH 0x32
 
 #define PROTO_VERSION 0x01
-#define CMD_PING 0x01
-#define CMD_GET_INFO 0x02
-#define CMD_SET_BRIGHTNESS 0x10
-#define CMD_SET_ANIMATION 0x20
-#define CMD_SET_EXPRESSION 0x21
-#define CMD_SYNC 0x22
-#define CMD_STOP 0x23
-#define CMD_SET_PARAM 0x30
-#define CMD_DEBUG_FRAME 0x7E
-#define CMD_RESET 0x7F
+#define CMD_PING DISPLAY_CMD_PING
+#define CMD_GET_INFO DISPLAY_CMD_GET_INFO
+#define CMD_SET_BRIGHTNESS DISPLAY_CMD_SET_BRIGHTNESS
+#define CMD_SET_ANIMATION DISPLAY_CMD_SET_ANIMATION
+#define CMD_SET_EXPRESSION DISPLAY_CMD_SET_EXPRESSION
+#define CMD_SYNC DISPLAY_CMD_SYNC
+#define CMD_STOP DISPLAY_CMD_STOP
+#define CMD_SET_PARAM DISPLAY_CMD_SET_PARAM
+#define CMD_DEBUG_FRAME DISPLAY_CMD_DEBUG_FRAME
+#define CMD_RESET DISPLAY_CMD_RESET
 
-#define ANIM_IDLE 0x00
-#define ANIM_LISTENING 0x01
-#define ANIM_THINKING 0x02
-#define ANIM_THINKING_AUDIO 0x03
-#define ANIM_THINKING_LONG 0x04
-#define ANIM_SPEAKING 0x05
-#define ANIM_HAPPY 0x06
-#define ANIM_ANGRY 0x07
-#define ANIM_ERROR 0x08
-#define ANIM_SLEEP 0x09
+#define ANIM_IDLE DISPLAY_ANIM_IDLE
+#define ANIM_LISTENING DISPLAY_ANIM_LISTENING
+#define ANIM_THINKING DISPLAY_ANIM_THINKING
+#define ANIM_THINKING_AUDIO DISPLAY_ANIM_THINKING_AUDIO
+#define ANIM_THINKING_LONG DISPLAY_ANIM_THINKING_LONG
+#define ANIM_SPEAKING DISPLAY_ANIM_SPEAKING
+#define ANIM_HAPPY DISPLAY_ANIM_HAPPY
+#define ANIM_ANGRY DISPLAY_ANIM_ANGRY
+#define ANIM_ERROR DISPLAY_ANIM_ERROR
+#define ANIM_SLEEP DISPLAY_ANIM_SLEEP
 
 typedef enum {
     STATE_BOOTING,
@@ -105,13 +108,15 @@ static const char *TAG = "sarcasmos-brain";
 static display_device_t g_displays[] = {
     { .name = "left_eye", .address = ADDR_LEFT_EYE },
     { .name = "right_eye", .address = ADDR_RIGHT_EYE },
-    { .name = "mouth", .address = ADDR_MOUTH },
 };
 static assistant_state_t g_state = STATE_BOOTING;
 static uint8_t g_sequence = 1;
 static uint8_t g_brightness = 160;
 static bool g_wifi_connected;
+static bool g_wifi_should_connect;
 static bool g_ethernet_connected;
+static bool g_mouth_initialized;
+static EventGroupHandle_t g_wifi_events;
 static i2c_master_bus_handle_t g_i2c_bus;
 
 static uint8_t crc8(const uint8_t *data, size_t len)
@@ -202,6 +207,14 @@ static esp_err_t display_command_all(uint8_t command, const uint8_t *payload, ui
             result = err;
         }
     }
+#if CONFIG_SARCASMOS_MOUTH_ESPNOW
+    if (g_mouth_initialized) {
+        esp_err_t err = mouth_espnow_send(command, payload, len, true);
+        if (err != ESP_OK) {
+            result = err;
+        }
+    }
+#endif
     return result;
 }
 
@@ -287,12 +300,18 @@ static void configure_audio(void)
 static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t event_id, void *event_data)
 {
     if (base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        esp_wifi_connect();
+        if (g_wifi_should_connect) {
+            esp_wifi_connect();
+        }
     } else if (base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         g_wifi_connected = false;
-        esp_wifi_connect();
+        xEventGroupClearBits(g_wifi_events, WIFI_CONNECTED_BIT);
+        if (g_wifi_should_connect) {
+            esp_wifi_connect();
+        }
     } else if (base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         g_wifi_connected = true;
+        xEventGroupSetBits(g_wifi_events, WIFI_CONNECTED_BIT);
     }
 }
 
@@ -304,26 +323,87 @@ static void ensure_netif_event_loop(void)
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) ESP_ERROR_CHECK(err);
 }
 
-static void start_wifi(void)
+static esp_err_t start_wifi(void)
 {
-#if CONFIG_SARCASMOS_ENABLE_WIFI
-    if (strlen(CONFIG_SARCASMOS_WIFI_SSID) == 0) {
-        ESP_LOGW(TAG, "Wi-Fi enabled but CONFIG_SARCASMOS_WIFI_SSID is empty");
-        return;
-    }
+#if CONFIG_SARCASMOS_ENABLE_WIFI || CONFIG_SARCASMOS_MOUTH_ESPNOW
     ensure_netif_event_loop();
     esp_netif_create_default_wifi_sta();
+    g_wifi_events = xEventGroupCreate();
+    if (g_wifi_events == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_event_handler, NULL));
-    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, wifi_event_handler, NULL));
-    wifi_config_t wifi_config = { 0 };
-    strlcpy((char *)wifi_config.sta.ssid, CONFIG_SARCASMOS_WIFI_SSID, sizeof(wifi_config.sta.ssid));
-    strlcpy((char *)wifi_config.sta.password, CONFIG_SARCASMOS_WIFI_PASSWORD, sizeof(wifi_config.sta.password));
-    wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-    ESP_ERROR_CHECK(esp_wifi_start());
+    ESP_RETURN_ON_ERROR(esp_wifi_init(&cfg), TAG, "Wi-Fi init failed");
+    ESP_RETURN_ON_ERROR(esp_event_handler_register(
+                            WIFI_EVENT, ESP_EVENT_ANY_ID,
+                            wifi_event_handler, NULL),
+                        TAG, "Wi-Fi event registration failed");
+    ESP_RETURN_ON_ERROR(esp_event_handler_register(
+                            IP_EVENT, IP_EVENT_STA_GOT_IP,
+                            wifi_event_handler, NULL),
+                        TAG, "IP event registration failed");
+    ESP_RETURN_ON_ERROR(esp_wifi_set_storage(WIFI_STORAGE_RAM),
+                        TAG, "Wi-Fi storage setup failed");
+    ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_STA),
+                        TAG, "Wi-Fi mode setup failed");
+
+#if CONFIG_SARCASMOS_ENABLE_WIFI
+    g_wifi_should_connect = strlen(CONFIG_SARCASMOS_WIFI_SSID) > 0;
+    if (g_wifi_should_connect) {
+        wifi_config_t wifi_config = { 0 };
+        strlcpy((char *)wifi_config.sta.ssid, CONFIG_SARCASMOS_WIFI_SSID,
+                sizeof(wifi_config.sta.ssid));
+        strlcpy((char *)wifi_config.sta.password, CONFIG_SARCASMOS_WIFI_PASSWORD,
+                sizeof(wifi_config.sta.password));
+        wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+        ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_STA, &wifi_config),
+                            TAG, "Wi-Fi config failed");
+    }
+#endif
+
+    ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "Wi-Fi start failed");
+    if (g_wifi_should_connect) {
+        EventBits_t bits = xEventGroupWaitBits(
+            g_wifi_events, WIFI_CONNECTED_BIT, pdFALSE, pdFALSE,
+            pdMS_TO_TICKS(15000));
+        if ((bits & WIFI_CONNECTED_BIT) == 0) {
+            ESP_LOGW(TAG, "Wi-Fi connection timed out; ESP-NOW may use the wrong channel");
+        }
+    } else {
+#if CONFIG_SARCASMOS_MOUTH_ESPNOW
+        ESP_RETURN_ON_ERROR(
+            esp_wifi_set_channel(CONFIG_SARCASMOS_ESPNOW_CHANNEL,
+                                 WIFI_SECOND_CHAN_NONE),
+            TAG, "ESP-NOW channel setup failed");
+#endif
+    }
+    return ESP_OK;
+#else
+    return ESP_ERR_NOT_SUPPORTED;
+#endif
+}
+
+static void start_mouth_espnow(void)
+{
+#if CONFIG_SARCASMOS_MOUTH_ESPNOW
+    uint8_t mac[6];
+    if (!mouth_espnow_parse_mac(CONFIG_SARCASMOS_MOUTH_MAC, mac)) {
+        ESP_LOGE(TAG, "invalid or empty ESP-NOW mouth MAC; mouth disabled");
+        return;
+    }
+    mouth_espnow_config_t config = {
+        .peer_channel = 0,
+        .ack_timeout_ms = CONFIG_SARCASMOS_ESPNOW_ACK_TIMEOUT_MS,
+        .retries = CONFIG_SARCASMOS_ESPNOW_RETRIES,
+    };
+    memcpy(config.mac, mac, sizeof(config.mac));
+    esp_err_t err = mouth_espnow_init(&config);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "ESP-NOW mouth init failed: %s", esp_err_to_name(err));
+        return;
+    }
+    g_mouth_initialized = true;
+    ESP_LOGI(TAG, "ESP-NOW mouth peer %s ready", CONFIG_SARCASMOS_MOUTH_MAC);
 #endif
 }
 
@@ -377,7 +457,7 @@ static void start_ethernet(void)
 #endif
 }
 
-static void i2c_scan_task(void *arg)
+static void display_health_task(void *arg)
 {
     while (true) {
         for (size_t i = 0; i < sizeof(g_displays) / sizeof(g_displays[0]); ++i) {
@@ -385,6 +465,11 @@ static void i2c_scan_task(void *arg)
             g_displays[i].present = (err == ESP_OK);
             if (err == ESP_OK) g_displays[i].last_seen_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
         }
+#if CONFIG_SARCASMOS_MOUTH_ESPNOW
+        if (g_mouth_initialized) {
+            mouth_espnow_send(CMD_PING, NULL, 0, true);
+        }
+#endif
         vTaskDelay(pdMS_TO_TICKS(3000));
     }
 }
@@ -404,7 +489,7 @@ static void animation_task(void *arg)
 
 static esp_err_t status_handler(httpd_req_t *req)
 {
-    char json[768];
+    char json[1024];
     int pos = snprintf(json, sizeof(json),
         "{\"state\":\"%s\",\"uptime_ms\":%llu,\"wifi_connected\":%s,\"ethernet_connected\":%s,\"brightness\":%u,\"displays\":[",
         state_name(g_state), esp_timer_get_time() / 1000ULL, g_wifi_connected ? "true" : "false",
@@ -415,7 +500,23 @@ static esp_err_t status_handler(httpd_req_t *req)
             i ? "," : "", g_displays[i].name, g_displays[i].address,
             g_displays[i].present ? "true" : "false", g_displays[i].last_seen_ms);
     }
-    snprintf(json + pos, sizeof(json) - pos, "]}");
+    mouth_espnow_status_t mouth;
+    mouth_espnow_get_status(&mouth);
+    snprintf(json + pos, sizeof(json) - pos,
+             "%s{\"name\":\"mouth\",\"transport\":\"esp-now\","
+             "\"mac\":\"%02X:%02X:%02X:%02X:%02X:%02X\","
+             "\"present\":%s,\"firmware\":\"%u.%u\",\"channel\":%u,"
+             "\"animation\":%u,\"brightness\":%u,\"intensity\":%u,"
+             "\"last_seen_ms\":%" PRIu32 ",\"retries\":%" PRIu32 ","
+             "\"timeouts\":%" PRIu32 "}]}",
+             sizeof(g_displays) > 0 ? "," : "",
+             mouth.mac[0], mouth.mac[1], mouth.mac[2],
+             mouth.mac[3], mouth.mac[4], mouth.mac[5],
+             mouth.present ? "true" : "false",
+             mouth.firmware_major, mouth.firmware_minor, mouth.channel,
+             mouth.current_animation, mouth.brightness,
+             mouth.speaking_intensity, mouth.last_ack_ms,
+             mouth.retry_count, mouth.timeout_count);
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, json);
 }
@@ -471,7 +572,13 @@ void app_main(void)
     configure_gpio();
     configure_i2c();
     configure_audio();
-    start_wifi();
+    esp_err_t wifi_err = start_wifi();
+    if (wifi_err != ESP_OK && wifi_err != ESP_ERR_NOT_SUPPORTED) {
+        ESP_LOGE(TAG, "Wi-Fi radio start failed: %s", esp_err_to_name(wifi_err));
+    }
+    if (wifi_err == ESP_OK) {
+        start_mouth_espnow();
+    }
     start_ethernet();
     start_http_server();
 
@@ -480,7 +587,7 @@ void app_main(void)
     g_state = STATE_IDLE;
     set_animation_all(ANIM_IDLE);
 
-    xTaskCreate(i2c_scan_task, "i2c_scan", 4096, NULL, 5, NULL);
+    xTaskCreate(display_health_task, "display_health", 4096, NULL, 5, NULL);
     xTaskCreate(animation_task, "animation", 4096, NULL, 5, NULL);
     ESP_LOGI(TAG, "SarcasmOS brain ready");
 }

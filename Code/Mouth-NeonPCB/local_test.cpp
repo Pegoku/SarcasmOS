@@ -14,9 +14,17 @@ constexpr uint8_t kBrightnessStep = 16;
 constexpr uint8_t kIntensityStep = 16;
 
 const char *const kAnimationNames[] = {
-    "idle",          "listening", "thinking", "thinking audio", "thinking long",
-    "speaking",      "happy",     "angry",    "error",          "sleep",
+    "idle",        "listening",  "thinking",   "thinking_audio",
+    "thinking_long", "speaking", "happy_fake", "angry",
+    "error",       "asleep",     "tool",       "left",
+    "right",       "up",         "down",       "center",
+    "neutral",     "sarcastic",  "suspicious", "tired",
+    "surprised",   "bored",      "dramatic",   "watch",
+    "party",       "battery_low", "sunny",     "rainy",
+    "cloudy",      "stormy",     "snowy",
 };
+static_assert(sizeof(kAnimationNames) / sizeof(kAnimationNames[0]) ==
+              kAnimCount);
 
 bool autoPlay = true;
 bool showingDiagnostic = false;
@@ -26,10 +34,9 @@ uint32_t lastAutoStepMs = 0;
 
 void printHelp() {
     Serial.println("\nLocal mouth animation test");
-    Serial.println("  0     resting Bender grille");
-    Serial.println("  5     speaking waveform");
-    Serial.println("  a     toggle automatic idle/speaking cycle");
-    Serial.println("  n     toggle idle/speaking");
+    Serial.println("  0..9  select a legacy state");
+    Serial.println("  a     toggle automatic all-state cycle");
+    Serial.println("  n     advance to the next state");
     Serial.println("  p     next RGB/panel diagnostic");
     Serial.println("  + / - increase/decrease brightness");
     Serial.println("  ] / [ increase/decrease speaking intensity");
@@ -37,7 +44,7 @@ void printHelp() {
 }
 
 void selectAnimation(uint8_t animation) {
-    if (animation > kAnimSleep) return;
+    if (!isValidAnimation(animation)) return;
     autoAnimation = animation;
     showingDiagnostic = false;
     mouth_display::setAnimation(animation);
@@ -47,8 +54,7 @@ void selectAnimation(uint8_t animation) {
 }
 
 void nextAnimation() {
-    selectAnimation(autoAnimation == kAnimSpeaking ? kAnimIdle
-                                                   : kAnimSpeaking);
+    selectAnimation(static_cast<uint8_t>((autoAnimation + 1) % kAnimCount));
 }
 
 void adjustBrightness(int change) {
@@ -115,7 +121,7 @@ void handleSerial(char command) {
         showingDiagnostic = false;
         lastAutoStepMs = millis();
         mouth_display::showNow();
-        Serial.printf("Automatic animation cycle: %s\n",
+        Serial.printf("Automatic all-state cycle: %s\n",
                       autoPlay ? "on" : "off");
         break;
     case 'n':
@@ -161,7 +167,7 @@ void setup() {
 
     printHelp();
     selectAnimation(kAnimIdle);
-    Serial.println("Automatic animation cycle: on");
+    Serial.println("Automatic all-state cycle: on");
 }
 
 void loop() {

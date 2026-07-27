@@ -214,9 +214,9 @@ application packets and protocol mistakes.
 Run these in order:
 
 1. **Radio bring-up:** both serial logs show the intended channel; brain can
-   ping the mouth and parse firmware `2.0`, role `2`.
-2. **Command coverage:** verify all ten animations, brightness `0/64/255`,
-   intensity `0/120/255`, stop, and reset.
+   ping the mouth and parse firmware `3.0`, application protocol `2`, role `2`.
+2. **Command coverage:** verify all animation IDs `0x00` through `0x1e`,
+   brightness `0/64/255`, intensity `0/120/255`, stop, and reset.
 3. **Acknowledgement:** verify returned source MAC, sequence, echoed command,
    role, CRC, and result for every request.
 4. **Retry:** temporarily shield or power-cycle the mouth; confirm retries use

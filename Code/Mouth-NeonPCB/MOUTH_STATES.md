@@ -27,15 +27,14 @@ or change the panel's logical origin.
 
 ## Canonical Workflow states
 
-The target column describes the intended visual language. Only **idle**,
-**speaking**, and **asleep** currently have distinct mouth rendering; the
-current firmware holds the resting grille for the other states.
+The rendered behavior follows the visual language conveyed by the Workflow's
+ASCII hint while retaining Bender's grille styling.
 
-| State | Workflow hint | Target mouth behavior |
+| State | Workflow hint | Rendered mouth behavior |
 | --- | --- | --- |
 | `idle` | `-----` | Resting tooth grille |
-| `thinking` | `#####` | Resting grille; thinking motion belongs primarily to the eyes |
-| `tool` | `=====` | Firm resting grille while a tool runs |
+| `thinking` | `#####` | Grille with a paced animated ellipsis |
+| `tool` | `=====` | Firm double bar with a moving progress mark |
 | `speaking` | `#####` | Centered, intensity-driven waveform inside the grille |
 | `left` | `-----` | Preserve the current mouth; gaze affects only the eyes |
 | `right` | `-----` | Preserve the current mouth; gaze affects only the eyes |
@@ -72,9 +71,9 @@ states:
 
 | Input | Canonical behavior |
 | --- | --- |
-| `listening` | Preserve the base mouth while the eyes show attention |
-| `thinking_audio` | Preserve the base mouth; eyes indicate audio processing |
-| `thinking_long` | Preserve the base mouth; eyes indicate prolonged work |
+| `listening` | Resting grille with a subtle listening scan |
+| `thinking_audio` | Faster, wider thinking ellipsis |
+| `thinking_long` | Deliberately slower thinking ellipsis |
 | `happy` | Alias of `happy_fake` |
 | `mouth.talk` | Enter `speaking`, driven by audio intensity |
 | `mouth.smirk` | Enter or set `sarcastic` |
@@ -100,13 +99,13 @@ instead of always returning to neutral.
 
 ## Protocol status
 
-The current ESP-NOW protocol exposes only the legacy IDs `0x00` through
-`0x09`: idle, listening, thinking, thinking-audio, thinking-long, speaking,
-happy, angry, error, and sleep. It cannot uniquely represent all canonical
-Workflow expressions or gaze-independent composition.
+Application protocol version 2 preserves legacy IDs `0x00` through `0x09` and
+adds the missing Workflow states at `0x0a` through `0x1e`. The Brain-side C
+header and mouth-side C++ header use the same assignments.
 
-Before implementing the target-only visuals above, the Brain and mouth should
-share a versioned face-state contract that carries:
+The byte-sized animation command can now select every state, but it still
+represents only one state at a time. A future composited face-state command
+should carry:
 
 - persistent expression;
 - transient activity;

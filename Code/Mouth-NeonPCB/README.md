@@ -42,15 +42,14 @@ pio run -e local_animation_test --target upload
 pio device monitor -e local_animation_test
 ```
 
-The local tester alternates between the resting grille and centered speaking
-waveform so visual changes can be checked without the Brain. Its serial
-controls are:
+The local tester cycles through every supported state so visual changes can
+be checked without the Brain. Its serial controls are:
 
 | Key | Action |
 | --- | --- |
 | `0`..`9` | select one animation |
-| `a` | toggle automatic idle/speaking cycling |
-| `n` | toggle between idle and speaking |
+| `a` | toggle automatic all-state cycling |
+| `n` | advance to the next state |
 | `p` | cycle red, green, blue, white, color bars, RGB rows, and geometry tests |
 | `+` / `-` | adjust brightness |
 | `]` / `[` | adjust speaking intensity |
@@ -61,8 +60,9 @@ environment when local testing is complete.
 
 ## Display behavior
 
-The firmware starts with Bender's pale-yellow tooth grille and supports the
-legacy animation IDs already used by SarcasmOS:
+The firmware starts with Bender's pale-yellow tooth grille. IDs `0x00` through
+`0x09` preserve the legacy SarcasmOS assignments; the remaining IDs cover the
+complete Workflow state set:
 
 | ID | State |
 | ---: | --- |
@@ -76,11 +76,32 @@ legacy animation IDs already used by SarcasmOS:
 | `0x07` | angry |
 | `0x08` | error |
 | `0x09` | sleep |
+| `0x0a` | tool |
+| `0x0b` | left |
+| `0x0c` | right |
+| `0x0d` | up |
+| `0x0e` | down |
+| `0x0f` | center |
+| `0x10` | neutral |
+| `0x11` | sarcastic |
+| `0x12` | suspicious |
+| `0x13` | tired |
+| `0x14` | surprised |
+| `0x15` | bored |
+| `0x16` | dramatic |
+| `0x17` | watch |
+| `0x18` | party |
+| `0x19` | battery low |
+| `0x1a` | sunny |
+| `0x1b` | rainy |
+| `0x1c` | cloudy |
+| `0x1d` | stormy |
+| `0x1e` | snowy |
 
 Brightness defaults to `64/255`. `SET_PARAM` key `1` controls speaking mouth
-intensity. At present, speaking has a distinct waveform and sleep blanks the
-panel; the other legacy states hold the resting grille. The full Workflow
-state set and protocol gap are described in `MOUTH_STATES.md`.
+intensity. Gaze-only states deliberately retain the neutral resting mouth,
+because gaze affects the eyes rather than replacing the mouth expression.
+Detailed behavior is described in `MOUTH_STATES.md`.
 
 ## ESP-NOW packet format
 

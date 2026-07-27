@@ -2,6 +2,9 @@
 
 Pico SDK C++ firmware for each RP2040 eye board.
 
+The complete Workflow-derived visual and state contract is documented in
+[`EYE_STATES.md`](EYE_STATES.md).
+
 ## Build
 
 Left eye:

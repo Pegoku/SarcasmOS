@@ -4,6 +4,9 @@ Arduino C++ firmware for the custom ESP32-S3-MINI-1-N8 driver PCB and one
 64x32, 1/16-scan HUB75 RGB panel. It renders the same mouth states as
 `../Mouth`, but receives commands wirelessly over ESP-NOW instead of I2C.
 
+The complete Workflow-derived visual and state contract is documented in
+[`MOUTH_STATES.md`](MOUTH_STATES.md).
+
 Supported commands are ping, device info, brightness, animation/expression,
 animation phase sync, stop, speaking intensity, and reset. Every valid command
 gets a status response carrying its sequence number and result.
@@ -39,14 +42,15 @@ pio run -e local_animation_test --target upload
 pio device monitor -e local_animation_test
 ```
 
-The local tester automatically cycles through every animation. Its serial
+The local tester alternates between the resting grille and centered speaking
+waveform so visual changes can be checked without the Brain. Its serial
 controls are:
 
 | Key | Action |
 | --- | --- |
 | `0`..`9` | select one animation |
-| `a` | toggle automatic animation cycling |
-| `n` | advance to the next animation |
+| `a` | toggle automatic idle/speaking cycling |
+| `n` | toggle between idle and speaking |
 | `p` | cycle red, green, blue, white, color bars, RGB rows, and geometry tests |
 | `+` / `-` | adjust brightness |
 | `]` / `[` | adjust speaking intensity |
@@ -57,8 +61,8 @@ environment when local testing is complete.
 
 ## Display behavior
 
-The firmware starts in the orange idle state and supports the animation IDs
-already used by SarcasmOS:
+The firmware starts with Bender's pale-yellow tooth grille and supports the
+legacy animation IDs already used by SarcasmOS:
 
 | ID | State |
 | ---: | --- |
@@ -74,7 +78,9 @@ already used by SarcasmOS:
 | `0x09` | sleep |
 
 Brightness defaults to `64/255`. `SET_PARAM` key `1` controls speaking mouth
-intensity.
+intensity. At present, speaking has a distinct waveform and sleep blanks the
+panel; the other legacy states hold the resting grille. The full Workflow
+state set and protocol gap are described in `MOUTH_STATES.md`.
 
 ## ESP-NOW packet format
 

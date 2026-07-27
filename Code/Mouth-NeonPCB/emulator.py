@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import hashlib
 import math
 import pathlib
@@ -18,6 +19,16 @@ import asset_tool
 
 FRAME_MS = 40
 BLACK = (0, 0, 0)
+EDIT_SETTLE_MS = 250
+
+
+@dataclass
+class EditTarget:
+    path: pathlib.Path
+    state: str
+    frame: int
+    observed_signature: tuple[int, int]
+    changed_at_ms: int | None = None
 
 
 class AssetPack:
@@ -65,11 +76,15 @@ class AssetPack:
         self, state_id: int, elapsed_ms: int, intensity: int,
     ) -> tuple[int, list[tuple[int, int, int]]]:
         local_frame = self.local_frame(state_id, elapsed_ms, intensity)
+        return local_frame, self.frame_pixels(state_id, local_frame)
+
+    def frame_pixels(
+        self, state_id: int, local_frame: int,
+    ) -> list[tuple[int, int, int]]:
         sprite = self.sprite_name(state_id, local_frame)
-        pixels = [
+        return [
             self.palette[index] for index in self.sprite_cache[sprite]
         ]
-        return local_frame, pixels
 
 
 class EmulatorWindow:
@@ -84,14 +99,16 @@ class EmulatorWindow:
         self.auto_play = not args.paused
         self.brightness = args.brightness
         self.intensity = args.intensity
-        self.last_step_ms = time.monotonic_ns() // 1_000_000
+        now_ms = time.monotonic_ns() // 1_000_000
+        self.last_step_ms = now_ms
+        self.last_update_ms = now_ms
+        self.animation_elapsed_ms = 0
         self.last_pixels: list[tuple[int, int, int] | None] = (
             [None] * (self.assets.width * self.assets.height)
         )
         self.current_local_frame = 0
-        self.edit_path: pathlib.Path | None = None
-        self.edit_state: str | None = None
-        self.edit_frame: int | None = None
+        self.edit_targets: dict[pathlib.Path, EditTarget] = {}
+        self.current_edit_path: pathlib.Path | None = None
         self.notice = ""
         self.notice_until_ms = 0
 
@@ -128,6 +145,7 @@ class EmulatorWindow:
         buttons.pack(fill="x", padx=8, pady=(0, 5))
         for label, action in (
             ("Open frame in GIMP (E)", self.open_in_gimp),
+            ("Open animation in GIMP (O)", self.open_animation_in_gimp),
             ("Copy frame (C)", self.copy_frame),
             ("Import saved edit (I)", self.import_edit),
             ("Reload assets (R)", self.reload_assets),
@@ -139,8 +157,8 @@ class EmulatorWindow:
         tk.Label(
             self.root,
             text=(
-                "←/→ state   Space/A autoplay   +/- brightness   "
-                "[/] intensity   Q quit"
+                "←/→ state   ↑/↓ frame   Space/A play/pause   "
+                "+/- brightness   [/] intensity   Q quit"
             ),
             background="#111111", foreground="#aaaaaa",
             font=("monospace", 9),
@@ -160,6 +178,8 @@ class EmulatorWindow:
         self.state_id = state_id % len(self.assets.animations)
         if pause:
             self.auto_play = False
+        self.current_local_frame = 0
+        self.animation_elapsed_ms = 0
         self.last_step_ms = time.monotonic_ns() // 1_000_000
 
     def current_source_pixels(self) -> list[tuple[int, int, int]]:
@@ -171,33 +191,74 @@ class EmulatorWindow:
             for index in self.assets.sprite_cache[sprite]
         ]
 
-    def native_ppm(self) -> bytes:
-        pixels = self.current_source_pixels()
+    def native_ppm(
+        self, state_id: int | None = None, local_frame: int | None = None,
+    ) -> bytes:
+        if state_id is None:
+            state_id = self.state_id
+        if local_frame is None:
+            local_frame = self.current_local_frame
+        pixels = self.assets.frame_pixels(state_id, local_frame)
         body = bytearray(channel for pixel in pixels for channel in pixel)
         return (
             f"P6\n{self.assets.width} {self.assets.height}\n255\n".encode() +
             body
         )
 
-    def open_in_gimp(self) -> None:
-        if shutil.which("gimp") is None:
-            self.show_notice("GIMP is not installed")
-            return
+    @staticmethod
+    def file_signature(path: pathlib.Path) -> tuple[int, int]:
+        stat = path.stat()
+        return stat.st_mtime_ns, stat.st_size
+
+    def export_edit_target(
+        self, state_id: int, local_frame: int,
+    ) -> pathlib.Path:
         edit_dir = pathlib.Path(tempfile.gettempdir()) / "sarcasmos-mouth-edit"
         edit_dir.mkdir(parents=True, exist_ok=True)
-        self.edit_path = edit_dir / (
-            f"{self.state_name}-frame-{self.current_local_frame:02d}.ppm"
+        state = self.assets.animations[state_id]["name"]
+        path = edit_dir / f"{state}-frame-{local_frame:02d}.ppm"
+        path.write_bytes(self.native_ppm(state_id, local_frame))
+        self.edit_targets[path] = EditTarget(
+            path=path,
+            state=state,
+            frame=local_frame,
+            observed_signature=self.file_signature(path),
         )
-        self.edit_path.write_bytes(self.native_ppm())
-        self.edit_state = self.state_name
-        self.edit_frame = self.current_local_frame
+        self.current_edit_path = path
+        return path
+
+    def launch_gimp(self, paths: list[pathlib.Path]) -> bool:
+        if shutil.which("gimp") is None:
+            self.show_notice("GIMP is not installed")
+            return False
         subprocess.Popen(
-            ["gimp", str(self.edit_path)],
+            ["gimp", *(str(path) for path in paths)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        return True
+
+    def open_in_gimp(self) -> None:
+        path = self.export_edit_target(
+            self.state_id, self.current_local_frame,
+        )
+        if not self.launch_gimp([path]):
+            return
         self.show_notice(
-            f"Opened {self.edit_path.name}; save it, then press I to import"
+            f"Opened {path.name}; overwrites import automatically"
+        )
+
+    def open_animation_in_gimp(self) -> None:
+        animation = self.assets.animations[self.state_id]
+        paths = [
+            self.export_edit_target(self.state_id, local_frame)
+            for local_frame in range(len(animation["frames"]))
+        ]
+        if not self.launch_gimp(paths):
+            return
+        self.show_notice(
+            f"Opened all {len(paths)} {self.state_name} frames; "
+            "overwrites import automatically"
         )
 
     def copy_frame(self) -> None:
@@ -228,21 +289,48 @@ class EmulatorWindow:
             self.show_notice("wl-copy could not access the image clipboard")
 
     def import_edit(self) -> None:
-        if (self.edit_path is None or self.edit_state is None or
-                self.edit_frame is None):
+        if self.current_edit_path is None:
             self.show_notice("Open a frame in GIMP before importing")
             return
+        target = self.edit_targets.get(self.current_edit_path)
+        if target is None:
+            self.show_notice("The current GIMP edit is no longer tracked")
+            return
+        self.import_target(target, automatic=False)
+
+    def import_target(self, target: EditTarget, automatic: bool) -> bool:
         try:
             asset_tool.import_sprite(
-                self.edit_state, self.edit_frame, self.edit_path,
+                target.state, target.frame, target.path,
             )
+            current_name = self.state_name
             self.assets.reload()
+            self.state_id = self.assets.state_ids[current_name]
             self.last_pixels[:] = [None] * len(self.last_pixels)
+            target.observed_signature = self.file_signature(target.path)
+            target.changed_at_ms = None
+            prefix = "Auto-imported" if automatic else "Imported"
             self.show_notice(
-                f"Imported {self.edit_state} frame {self.edit_frame}"
+                f"{prefix} {target.state} frame {target.frame + 1}"
             )
+            return True
         except (OSError, ValueError, KeyError) as error:
             self.show_notice(f"Import failed: {error}")
+            return False
+
+    def watch_gimp_edits(self, now_ms: int) -> None:
+        for target in self.edit_targets.values():
+            try:
+                signature = self.file_signature(target.path)
+            except OSError:
+                continue
+            if signature != target.observed_signature:
+                target.observed_signature = signature
+                target.changed_at_ms = now_ms
+                continue
+            if (target.changed_at_ms is not None and
+                    now_ms - target.changed_at_ms >= EDIT_SETTLE_MS):
+                self.import_target(target, automatic=True)
 
     def reload_assets(self) -> None:
         current_name = self.state_name
@@ -260,6 +348,16 @@ class EmulatorWindow:
             self.select(self.state_id - 1)
         elif key == "Right":
             self.select(self.state_id + 1)
+        elif key in ("Up", "Down"):
+            self.auto_play = False
+            animation = self.assets.animations[self.state_id]
+            direction = 1 if key == "Up" else -1
+            self.current_local_frame = (
+                self.current_local_frame + direction
+            ) % len(animation["frames"])
+            self.animation_elapsed_ms = (
+                self.current_local_frame * animation["frame_ms"]
+            )
         elif key in ("space", "a", "A"):
             self.auto_play = not self.auto_play
             self.last_step_ms = time.monotonic_ns() // 1_000_000
@@ -273,6 +371,8 @@ class EmulatorWindow:
             self.intensity = max(0, self.intensity - 16)
         elif key in ("e", "E"):
             self.open_in_gimp()
+        elif key in ("o", "O"):
+            self.open_animation_in_gimp()
         elif key in ("c", "C"):
             self.copy_frame()
         elif key in ("i", "I"):
@@ -284,12 +384,23 @@ class EmulatorWindow:
 
     def update(self) -> None:
         now_ms = time.monotonic_ns() // 1_000_000
+        delta_ms = max(0, now_ms - self.last_update_ms)
+        self.last_update_ms = now_ms
+        self.watch_gimp_edits(now_ms)
+
+        if self.auto_play:
+            self.animation_elapsed_ms += delta_ms
         if self.auto_play and now_ms - self.last_step_ms >= self.interval_ms:
             self.select(self.state_id + 1, pause=False)
 
-        self.current_local_frame, pixels = self.assets.pixels(
-            self.state_id, now_ms, self.intensity,
-        )
+        if self.auto_play:
+            self.current_local_frame, pixels = self.assets.pixels(
+                self.state_id, self.animation_elapsed_ms, self.intensity,
+            )
+        else:
+            pixels = self.assets.frame_pixels(
+                self.state_id, self.current_local_frame,
+            )
         factor = math.sqrt(self.brightness / 255)
         for index, color in enumerate(pixels):
             scaled = tuple(round(channel * factor) for channel in color)

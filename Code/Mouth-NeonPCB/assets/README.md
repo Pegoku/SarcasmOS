@@ -21,12 +21,15 @@ Playback modes are:
 
 Run `../emulator.py`, pause on a state with Left or Right, and use:
 
-1. **Open frame in GIMP** (`e`) to export and open the current native frame.
-2. Edit without resizing the 64x32 canvas. Disable interpolation when scaling
+1. Pause playback with Space. Use Up/Down to select an exact frame.
+2. **Open frame in GIMP** (`e`) to export and open the current native frame,
+   or **Open animation in GIMP** (`o`) to open every frame for the state.
+3. Edit without resizing the 64x32 canvas. Disable interpolation when scaling
    the view; individual pixels are intentional.
-3. Overwrite the opened PPM from GIMP.
-4. **Import saved edit** (`i`) to quantize it to the palette, update this pack,
-   regenerate the firmware header, and reload the preview.
+4. Overwrite the opened PPM from GIMP. The emulator detects the overwrite,
+   quantizes it to the palette, updates this pack, regenerates the firmware
+   header, and reloads the preview automatically. **Import saved edit** (`i`)
+   remains available as a manual refresh.
 
 **Copy frame** (`c`) copies a 64x32 PNG for sharing or attaching to a request.
 

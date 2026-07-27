@@ -75,16 +75,20 @@ native 64x32 sprite, frame sequence, playback mode, and frame duration.
 PlatformIO regenerates `generated/mouth_assets.hpp` from that file before
 building the firmware.
 
-Left and Right select states and pause autoplay. Space or `a` resumes it;
-`+`/`-` changes brightness, `[`/`]` changes speaking intensity, and `q` exits.
+Left and Right select states and pause playback. Space or `a` toggles playback,
+including both automatic state changes and animation frames. While paused, Up
+selects the next frame and Down selects the previous frame. `+`/`-` changes
+brightness, `[`/`]` changes speaking intensity, and `q` exits.
 
 The editor controls operate on the exact animation frame currently displayed:
 
 - `e` or **Open frame in GIMP** exports the native 64x32 sprite and opens it.
-  Save/overwrite the PPM in GIMP, then return to the emulator.
-- `i` or **Import saved edit** quantizes the saved image to the shared palette,
-  updates `mouth_assets.json`, regenerates the firmware header, and reloads
-  the window.
+  Overwrite the PPM in GIMP and the emulator automatically detects, imports,
+  and displays the edit.
+- `o` or **Open animation in GIMP** exports and opens every frame of the
+  selected animation. Each overwritten frame is imported automatically.
+- `i` or **Import saved edit** manually reimports the most recently opened
+  frame if an explicit refresh is needed.
 - `c` or **Copy frame** puts a native-resolution PNG on the Wayland clipboard.
 - `r` or **Reload assets** reloads changes made outside the emulator.
 

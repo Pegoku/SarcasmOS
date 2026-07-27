@@ -21,6 +21,45 @@ import asset_tool
 FRAME_MS = 40
 BLACK = (0, 0, 0)
 EDIT_SETTLE_MS = 250
+WEATHER_STATES = {"sunny", "rainy", "cloudy", "stormy", "snowy"}
+TEMPERATURE_MIN = -127
+TEMPERATURE_MAX = 127
+TEMPERATURE_FONT = asset_tool.load_temperature_font()
+TEMPERATURE_GLYPHS = asset_tool.temperature_glyphs(TEMPERATURE_FONT)
+GLYPH_WIDTH = TEMPERATURE_FONT["width"]
+GLYPH_HEIGHT = TEMPERATURE_FONT["height"]
+GLYPH_SPACING = TEMPERATURE_FONT["spacing"]
+
+
+def temperature_text(temperature: int) -> str:
+    return f"{temperature}°C"
+
+
+def temperature_origin(
+    width: int, height: int, temperature: int,
+) -> tuple[int, int, int]:
+    glyph_count = len(temperature_text(temperature))
+    text_width = (
+        glyph_count * GLYPH_WIDTH +
+        (glyph_count - 1) * GLYPH_SPACING
+    )
+    return (width - text_width) // 2, (height - GLYPH_HEIGHT) // 2, text_width
+
+
+def apply_temperature_overlay(
+    pixels: list[tuple[int, int, int]], width: int, height: int,
+    temperature: int,
+) -> list[tuple[int, int, int]]:
+    rendered = pixels.copy()
+    x, y, _ = temperature_origin(width, height, temperature)
+    for character in temperature_text(temperature):
+        rows = TEMPERATURE_GLYPHS[character]
+        for row, bits in enumerate(rows):
+            for column in range(GLYPH_WIDTH):
+                if bits & (1 << (GLYPH_WIDTH - column - 1)):
+                    rendered[(y + row) * width + x + column] = BLACK
+        x += GLYPH_WIDTH + GLYPH_SPACING
+    return rendered
 
 
 @dataclass
@@ -141,6 +180,7 @@ class EmulatorWindow:
         self.auto_play = not args.paused
         self.brightness = args.brightness
         self.intensity = args.intensity
+        self.temperature = args.temperature
         now_ms = time.monotonic_ns() // 1_000_000
         self.last_step_ms = now_ms
         self.last_update_ms = now_ms
@@ -202,7 +242,7 @@ class EmulatorWindow:
             self.root,
             text=(
                 "←/→ state   ↑/↓ frame   Space/A play/pause   "
-                "+/- brightness   [/] intensity   Q quit"
+                "+/- brightness   [/] intensity   ,/. temperature   Q quit"
             ),
             background="#111111", foreground="#aaaaaa",
             font=("monospace", 9),
@@ -501,6 +541,14 @@ class EmulatorWindow:
             self.intensity = min(255, self.intensity + 16)
         elif key == "bracketleft":
             self.intensity = max(0, self.intensity - 16)
+        elif key in ("period", "greater"):
+            self.temperature = min(
+                TEMPERATURE_MAX, self.temperature + 1,
+            )
+        elif key in ("comma", "less"):
+            self.temperature = max(
+                TEMPERATURE_MIN, self.temperature - 1,
+            )
         elif key in ("e", "E"):
             self.open_in_gimp()
         elif key in ("o", "O"):
@@ -533,6 +581,11 @@ class EmulatorWindow:
             pixels = self.assets.frame_pixels(
                 self.state_id, self.current_local_frame,
             )
+        if self.state_name in WEATHER_STATES:
+            pixels = apply_temperature_overlay(
+                pixels, self.assets.width, self.assets.height,
+                self.temperature,
+            )
         factor = math.sqrt(self.brightness / 255)
         for index, color in enumerate(pixels):
             scaled = tuple(round(channel * factor) for channel in color)
@@ -551,6 +604,8 @@ class EmulatorWindow:
             f"{mode}   brightness {self.brightness:3}/255   "
             f"intensity {self.intensity:3}/255"
         )
+        if self.state_name in WEATHER_STATES:
+            status += f"   temperature {temperature_text(self.temperature)}"
         if now_ms < self.notice_until_ms:
             status = self.notice
         self.status.set(status)
@@ -581,7 +636,20 @@ def self_test(assets: AssetPack) -> None:
             hashes.add(hashlib.sha256(raw).hexdigest())
         if animation["name"] != "asleep" and lit_frames == 0:
             raise AssertionError(f"{animation['name']}: every frame is blank")
+    common_origins = {
+        temperature_origin(assets.width, assets.height, value)[0]
+        for value in (30, -5)
+    }
+    if len(common_origins) != 1:
+        raise AssertionError("two-character temperatures must share a center")
+    for value in (30, -5, -10, TEMPERATURE_MIN, TEMPERATURE_MAX):
+        x, y, text_width = temperature_origin(
+            assets.width, assets.height, value,
+        )
+        if x < 0 or y < 0 or x + text_width > assets.width:
+            raise AssertionError(f"{value}°C does not fit the display")
     asset_tool.compile_assets()
+    asset_tool.compile_temperature_font()
     print(
         f"OK: rendered {len(assets.animations)} animations and "
         f"{len(assets.data['sprites'])} native 64x32 sprites"
@@ -598,6 +666,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--interval", type=float, default=2.5)
     parser.add_argument("--brightness", type=int, default=64)
     parser.add_argument("--intensity", type=int, default=120)
+    parser.add_argument(
+        "--temperature", type=int, default=30,
+        help="test temperature shown over weather states (default: 30)",
+    )
     parser.add_argument("--paused", action="store_true")
     parser.add_argument(
         "--self-test", action="store_true",
@@ -615,6 +687,11 @@ def parse_args() -> argparse.Namespace:
     for option in ("brightness", "intensity"):
         if not 0 <= getattr(args, option) <= 255:
             parser.error(f"--{option} must be in the range 0..255")
+    if not TEMPERATURE_MIN <= args.temperature <= TEMPERATURE_MAX:
+        parser.error(
+            f"--temperature must be in the range "
+            f"{TEMPERATURE_MIN}..{TEMPERATURE_MAX}"
+        )
     return args
 
 
@@ -625,8 +702,18 @@ def main() -> int:
         self_test(assets)
         return 0
     if args.dump is not None:
-        asset_tool.export_sprite(
-            args.state, 0, args.dump, args.brightness,
+        pixels = assets.frame_pixels(assets.state_ids[args.state], 0)
+        if args.state in WEATHER_STATES:
+            pixels = apply_temperature_overlay(
+                pixels, assets.width, assets.height, args.temperature,
+            )
+        factor = math.sqrt(args.brightness / 255)
+        pixels = [
+            tuple(round(channel * factor) for channel in color)
+            for color in pixels
+        ]
+        asset_tool.write_ppm(
+            args.dump, assets.width, assets.height, pixels,
         )
         return 0
     try:

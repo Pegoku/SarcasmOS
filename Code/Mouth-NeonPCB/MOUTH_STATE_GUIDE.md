@@ -113,15 +113,26 @@ eyes without replacing the mouth state where possible.
 | `0x09` | `asleep` | The face/display is sleeping or intentionally off. Protocol and Brain code may call this `sleep`. | `STOP`, explicit sleep, shutdown policy, or display-off request. | Until an explicit wake/new-animation command or reboot. | Fully black panel. |
 | `0x17` | `watch` | The assistant is checking sensors, device status, or another live condition. | `robot_status`, sensor query, or monitoring action. | Until the status result is available. Firmware timeout: none. | Alert progress/scan in warm yellow; 9 frames, 192 ms each, 1.728 s cycle. |
 | `0x19` | `battery_low` | Available battery energy is low and charging or shutdown may soon be needed. | Intended to come from a validated fuel-gauge threshold or explicit test; never from a guessed value. | Until the battery recovers above a hysteresis threshold, charging policy clears it, or sleep begins. Firmware timeout: none. | Dim sagging warning; 4 frames, 500 ms each, 2.000 s cycle. |
-| `0x1a` | `sunny` | The most recent real weather result is sunny or clear. | Weather tool result containing clear/sunny conditions. | Until another expression/state replaces it; weather should be refreshed before treating it as current. | Static upturned grin. |
-| `0x1b` | `rainy` | The most recent real weather result reports rain, drizzle, or showers. | Weather tool result containing rain-related conditions. | Until another expression/state replaces it. Firmware timeout: none. | Slow wave/downturn in rain color; 8 frames, 128 ms each, 1.024 s cycle. |
-| `0x1c` | `cloudy` | The most recent real weather result reports cloud or overcast conditions. | Weather tool result containing cloud/overcast conditions. | Until another expression/state replaces it. Firmware timeout: none. | Soft subdued oval; 3 frames, 480 ms each, 1.440 s cycle. |
-| `0x1d` | `stormy` | The most recent real weather result reports a storm or thunder. | Weather tool result containing thunder/storm conditions. | Until another expression/state replaces it. Firmware timeout: none. | Angular zigzag in storm color; 6 frames, 160 ms each, 960 ms cycle. |
-| `0x1e` | `snowy` | The most recent real weather result reports snow or sleet. | Weather tool result containing snow/sleet conditions. | Until another expression/state replaces it. Firmware timeout: none. | Sparse gentle snow-colored dots; 6 frames, 288 ms each, 1.728 s cycle. |
+| `0x1a` | `sunny` | The most recent real weather result is sunny or clear. | Weather tool result containing clear/sunny conditions and a real temperature. | Until another expression/state replaces it; weather should be refreshed before treating it as current. | Static upturned grin with centered black temperature text. |
+| `0x1b` | `rainy` | The most recent real weather result reports rain, drizzle, or showers. | Weather tool result containing rain-related conditions and a real temperature. | Until another expression/state replaces it. Firmware timeout: none. | Slow wave/downturn in rain color; 8 frames, 128 ms each, 1.024 s cycle, with centered black temperature text. |
+| `0x1c` | `cloudy` | The most recent real weather result reports cloud or overcast conditions. | Weather tool result containing cloud/overcast conditions and a real temperature. | Until another expression/state replaces it. Firmware timeout: none. | Soft subdued oval; 3 frames, 480 ms each, 1.440 s cycle, with centered black temperature text. |
+| `0x1d` | `stormy` | The most recent real weather result reports a storm or thunder. | Weather tool result containing thunder/storm conditions and a real temperature. | Until another expression/state replaces it. Firmware timeout: none. | Angular zigzag in storm color; 6 frames, 160 ms each, 960 ms cycle, with centered black temperature text. |
+| `0x1e` | `snowy` | The most recent real weather result reports snow or sleet. | Weather tool result containing snow/sleet conditions and a real temperature. | Until another expression/state replaces it. Firmware timeout: none. | Sparse gentle snow-colored dots; 6 frames, 288 ms each, 1.728 s cycle, with centered black temperature text. |
 
 Weather states must follow a real weather lookup. The system prompt explicitly
 forbids inventing weather data, sensor values, battery readings, and completed
 hardware actions.
+
+`SET_PARAM` (`0x30`) with key `2` supplies temperature as a signed int8 number
+of degrees Celsius. The usual two-character numeric forms, such as `30` and
+`-5`, use equal-width character cells and therefore share the same horizontal
+center. Wider valid values such as `-10` are measured and recentered rather
+than clipped to two characters. The complete display text is `30°C`, `-5°C`,
+and so on. The supported live-data range is `-127..127`; byte value `-128`
+means “temperature unavailable” and hides the text. The value persists across
+all five weather states until updated or cleared. The normal firmware starts
+unavailable, while the local emulator/test firmware uses `30°C` as obvious
+test data.
 
 ## Speaking intensity
 

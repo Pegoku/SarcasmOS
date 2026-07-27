@@ -8,8 +8,9 @@ The complete Workflow-derived visual and state contract is documented in
 [`MOUTH_STATES.md`](MOUTH_STATES.md).
 
 Supported commands are ping, device info, brightness, animation/expression,
-animation phase sync, stop, speaking intensity, and reset. Every valid command
-gets a status response carrying its sequence number and result.
+animation phase sync, stop, speaking intensity, weather temperature, and
+reset. Every valid command gets a status response carrying its sequence
+number and result.
 
 ## Firmware variants
 
@@ -55,6 +56,7 @@ be checked without the Brain. Its serial controls are:
 | `p` | cycle red, green, blue, white, color bars, RGB rows, and geometry tests |
 | `+` / `-` | adjust brightness |
 | `]` / `[` | adjust speaking intensity |
+| `.` / `,` | adjust the weather-test temperature by 1°C |
 | `h` | print help |
 
 Uploading one variant replaces the other in flash. Re-upload the regular
@@ -72,13 +74,15 @@ physical 64x32 panel:
 The emulator and firmware consume the same source-of-truth asset pack:
 [`assets/mouth_assets.json`](assets/mouth_assets.json). It contains every
 native 64x32 sprite, frame sequence, playback mode, and frame duration.
-PlatformIO regenerates `generated/mouth_assets.hpp` from that file before
-building the firmware.
+The live temperature glyphs are likewise shared through
+[`assets/temperature_font.json`](assets/temperature_font.json). PlatformIO
+regenerates their C++ headers before building the firmware.
 
 Left and Right select states and pause playback. Space or `a` toggles playback,
 including both automatic state changes and animation frames. While paused, Up
 selects the next frame and Down selects the previous frame. `+`/`-` changes
 brightness, `[`/`]` changes speaking intensity, and `q` exits.
+`,`/`.` changes the test temperature shown on the five weather states.
 
 The editor controls operate on the exact animation frame currently displayed:
 
@@ -106,6 +110,7 @@ The renderer can also be validated on a machine without a graphical session:
 ```sh
 ./emulator.py --self-test
 ./emulator.py --state speaking --dump speaking.ppm
+./emulator.py --state snowy --temperature=-10 --dump snowy-minus10.ppm
 ```
 
 Sprites can also be managed without opening the GUI:
@@ -166,7 +171,11 @@ complete Workflow state set:
 | `0x1e` | snowy |
 
 Brightness defaults to `64/255`. `SET_PARAM` key `1` controls speaking mouth
-intensity. Gaze-only states deliberately retain the neutral resting mouth,
+intensity. Key `2` carries a signed int8 temperature in degrees Celsius.
+Weather states render that value as centered black `°C` text over every
+animation frame. `-128` means unavailable and suppresses the overlay; the
+regular firmware starts in that unavailable state so it never invents a
+reading. Gaze-only states deliberately retain the neutral resting mouth,
 because gaze affects the eyes rather than replacing the mouth expression.
 Detailed behavior is described in `MOUTH_STATES.md`.
 For a beginner-friendly explanation of every state's meaning, cause, lifetime,
@@ -191,6 +200,17 @@ All multi-byte payload values are little-endian. Packets are variable length:
 
 CRC uses polynomial `0x07`, initial value `0`, no reflection, and no final
 XOR. Command IDs and packet helpers are in `protocol.hpp`.
+
+`SET_PARAM` payloads currently are:
+
+| Key | Value byte |
+| ---: | --- |
+| `1` | speaking intensity, unsigned `0..255` |
+| `2` | temperature in °C, signed int8 (`-127..127`); `-128` hides it |
+
+Send key `2` before selecting a weather animation. The value persists across
+`sunny`, `rainy`, `cloudy`, `stormy`, and `snowy` until it is replaced or
+cleared with `-128`.
 
 The status payload is:
 

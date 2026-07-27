@@ -64,6 +64,9 @@ inline bool isValidAnimation(uint8_t animation) {
 }
 
 constexpr uint8_t kParamMouthIntensity = 0x01;
+// Signed int8 degrees Celsius. INT8_MIN means unavailable/do not draw.
+constexpr uint8_t kParamTemperatureCelsius = 0x02;
+constexpr int8_t kTemperatureUnavailable = INT8_MIN;
 
 constexpr uint8_t kErrorNone = 0x00;
 constexpr uint8_t kErrorMalformed = 0x01;

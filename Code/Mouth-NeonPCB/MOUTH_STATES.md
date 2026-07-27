@@ -59,11 +59,11 @@ ASCII hint while retaining Bender's grille styling.
 | `party` | `\___/` | Animated wide smile |
 | `error` | `!!!!!` | Red warning or jagged mouth, without rapid flashing |
 | `battery_low` | `.._..` | Dim sagging mouth |
-| `sunny` | `\___/` | Upturned grin |
-| `rainy` | `~~~~~` | Slow wavy or downturned mouth |
-| `cloudy` | `(___)` / `(____)` | Soft, subdued oval |
-| `stormy` | `ZZZZZ` | Angular zigzag mouth |
-| `snowy` | `.....` | Sparse, gentle dot motion |
+| `sunny` | `\___/` | Upturned grin with live black `°C` text |
+| `rainy` | `~~~~~` | Slow wavy or downturned mouth with live black `°C` text |
+| `cloudy` | `(___)` / `(____)` | Soft oval with live black `°C` text |
+| `stormy` | `ZZZZZ` | Angular zigzag with live black `°C` text |
+| `snowy` | `.....` | Sparse dot motion with live black `°C` text |
 
 The two Workflow implementations differ only in the number of underscores in
 the `cloudy` ASCII hint. The semantic state is the same.

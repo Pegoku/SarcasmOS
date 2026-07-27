@@ -4,6 +4,12 @@
 emulator and ESP32 firmware. Artwork and animation timing must be changed here,
 not in `mouth_display.cpp`, `emulator.py`, or the generated C++ header.
 
+Live weather temperature text is a dynamic black overlay and is intentionally
+not baked into these sprites. Editing a weather frame in GIMP therefore edits
+only the underlying animation; firmware and emulator add the current `°C`
+value after rendering the selected frame. Its small pixel glyphs live in
+`temperature_font.json`, which is also shared by both renderers.
+
 The pack contains:
 
 - a shared palette of up to 16 RGB colors;
@@ -63,6 +69,6 @@ Import accepts binary P6 PPM images at exactly 64x32. Colors are mapped to the
 nearest shared palette entry. Both full asset colors and the emulator's
 default `64/255` brightness colors map back to the same palette.
 
-`generated/mouth_assets.hpp` is a deterministic RLE build artifact. PlatformIO
-regenerates it when either the JSON pack or compiler is newer. Never edit it
-by hand.
+`generated/mouth_assets.hpp` and `generated/temperature_font.hpp` are
+deterministic build artifacts. PlatformIO regenerates them when their source
+asset or compiler is newer. Never edit either generated header by hand.

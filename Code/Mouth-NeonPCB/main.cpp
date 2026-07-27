@@ -17,7 +17,7 @@ namespace {
 using namespace mouth_protocol;
 
 constexpr uint8_t kFirmwareMajor = 3;
-constexpr uint8_t kFirmwareMinor = 0;
+constexpr uint8_t kFirmwareMinor = 1;
 
 struct PendingPacket {
     uint8_t source[6];
@@ -149,12 +149,20 @@ bool processCommand(const PacketView &packet) {
         return true;
     case kCmdSetParam:
         if (!requirePayload(packet, 2)) return false;
-        if (packet.payload[0] != kParamMouthIntensity) {
-            lastError = kErrorInvalidPayload;
-            return false;
+        if (packet.payload[0] == kParamMouthIntensity) {
+            mouth_display::setMouthIntensity(packet.payload[1]);
+            return true;
         }
-        mouth_display::setMouthIntensity(packet.payload[1]);
-        return true;
+        if (packet.payload[0] == kParamTemperatureCelsius) {
+            const int16_t signedValue = packet.payload[1] <= INT8_MAX
+                                            ? packet.payload[1]
+                                            : packet.payload[1] - 256;
+            mouth_display::setTemperatureCelsius(
+                static_cast<int8_t>(signedValue));
+            return true;
+        }
+        lastError = kErrorInvalidPayload;
+        return false;
     case kCmdReset:
         return true;
     default:

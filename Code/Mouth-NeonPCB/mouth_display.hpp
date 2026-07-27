@@ -20,6 +20,9 @@ uint8_t brightness();
 void setMouthIntensity(uint8_t intensity);
 uint8_t mouthIntensity();
 
+void setTemperatureCelsius(int8_t temperature);
+int8_t temperatureCelsius();
+
 void setSyncPhase(uint32_t phaseMs);
 
 void showSolid(uint8_t red, uint8_t green, uint8_t blue);

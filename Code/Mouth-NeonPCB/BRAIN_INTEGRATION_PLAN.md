@@ -150,12 +150,20 @@ The existing command paths then change as follows:
 | assistant state | `0x20`, one animation byte |
 | phase synchronization | `0x22`, four-byte little-endian phase |
 | speaking level | `0x30`, `{1, intensity}` |
+| weather temperature | `0x30`, `{2, signed_int8_celsius}` |
 | sleep/stop | `0x23`, no payload |
 | health poll | `0x01`, no payload |
 
 Send brightness before the first animation. During speaking, rate-limit
 intensity updates to about 20-25 Hz and drop stale queued intensity commands;
 mouth movement should not build up seconds of latency.
+
+For weather results, send the real temperature parameter before selecting
+`sunny`, `rainy`, `cloudy`, `stormy`, or `snowy`. Encode negative values in
+two's-complement signed int8 form (`-5` is `0xFB`, `-10` is `0xF6`). Use
+`-128` (`0x80`) to clear unavailable or stale temperature data. Do not select
+a weather state using fabricated data merely to exercise the display; the
+emulator and local test firmware already provide explicit test data.
 
 ## 7. Expose wireless mouth health
 

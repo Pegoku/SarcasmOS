@@ -12,6 +12,7 @@ using namespace mouth_protocol;
 constexpr uint32_t kAutoStepMs = 2500;
 constexpr uint8_t kBrightnessStep = 16;
 constexpr uint8_t kIntensityStep = 16;
+constexpr int8_t kTestTemperatureCelsius = 30;
 
 const char *const kAnimationNames[] = {
     "idle",        "listening",  "thinking",   "thinking_audio",
@@ -43,6 +44,7 @@ void printHelp() {
     Serial.println("  p     next RGB/panel diagnostic");
     Serial.println("  + / - increase/decrease brightness");
     Serial.println("  ] / [ increase/decrease speaking intensity");
+    Serial.println("  . / , increase/decrease weather temperature");
     Serial.println("  h     show this help");
 }
 
@@ -79,6 +81,15 @@ void adjustIntensity(int change) {
     mouth_display::setMouthIntensity(static_cast<uint8_t>(value));
     if (!showingDiagnostic) mouth_display::showNow();
     Serial.printf("Speaking intensity: %d/255\n", value);
+}
+
+void adjustTemperature(int change) {
+    const int value = constrain(
+        static_cast<int>(mouth_display::temperatureCelsius()) + change,
+        -127, 127);
+    mouth_display::setTemperatureCelsius(static_cast<int8_t>(value));
+    if (!showingDiagnostic) mouth_display::showNow();
+    Serial.printf("Weather temperature: %d C\n", value);
 }
 
 void nextDiagnostic() {
@@ -176,6 +187,12 @@ void handleSerial(char command) {
     case '[':
         adjustIntensity(-kIntensityStep);
         break;
+    case '.':
+        adjustTemperature(1);
+        break;
+    case ',':
+        adjustTemperature(-1);
+        break;
     case 'h':
     case 'H':
     case '?':
@@ -197,6 +214,7 @@ void setup() {
     }
 
     printHelp();
+    mouth_display::setTemperatureCelsius(kTestTemperatureCelsius);
     selectAnimation(kAnimIdle);
     Serial.println("Automatic all-state cycle: on");
 }

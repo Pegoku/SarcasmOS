@@ -4,14 +4,18 @@
 
 #include <Arduino.h>
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
+#include <cstdio>
+#include <cstring>
 
 #include "generated/mouth_assets.hpp"
+#include "generated/temperature_font.hpp"
 #include "protocol.hpp"
 
 namespace mouth_display {
 namespace {
 
 using namespace mouth_protocol;
+using namespace mouth_temperature_font;
 
 constexpr int kPanelWidth = 64;
 constexpr int kPanelHeight = 32;
@@ -43,6 +47,7 @@ MatrixPanel_I2S_DMA *matrix = nullptr;
 uint8_t currentAnimation = kAnimIdle;
 uint8_t currentBrightness = kDefaultBrightness;
 uint8_t currentMouthIntensity = kDefaultMouthIntensity;
+int8_t currentTemperatureCelsius = kTemperatureUnavailable;
 uint32_t syncPhaseMs = 0;
 uint32_t lastFrameMs = 0;
 
@@ -96,6 +101,55 @@ void drawAssetFrame(uint8_t spriteId) {
     }
 }
 
+bool isWeatherAnimation(uint8_t animationId) {
+    return animationId >= kAnimSunny && animationId <= kAnimSnowy;
+}
+
+const uint8_t *glyphFor(char character) {
+    if (character >= '0' && character <= '9') {
+        return kDigitGlyphs[character - '0'];
+    }
+    if (character == '-') return kMinusGlyph;
+    if (character == 'C') return kCelsiusGlyph;
+    return kDegreeGlyph;
+}
+
+void drawGlyph(int x, int y, const uint8_t *rows) {
+    const uint16_t black = rgb(0, 0, 0);
+    for (uint8_t row = 0; row < kGlyphHeight; ++row) {
+        for (uint8_t column = 0; column < kGlyphWidth; ++column) {
+            if ((rows[row] & (1u << (kGlyphWidth - column - 1))) != 0) {
+                matrix->drawPixel(x + column, y + row, black);
+            }
+        }
+    }
+}
+
+void drawTemperatureOverlay(uint8_t animationId) {
+    if (!isWeatherAnimation(animationId) ||
+        currentTemperatureCelsius == kTemperatureUnavailable) {
+        return;
+    }
+
+    char digits[5] = {};
+    std::snprintf(digits, sizeof(digits), "%d",
+                  static_cast<int>(currentTemperatureCelsius));
+    const size_t digitCount = strlen(digits);
+    const size_t glyphCount = digitCount + 2;  // degree symbol and C
+    const int textWidth =
+        glyphCount * kGlyphWidth + (glyphCount - 1) * kGlyphSpacing;
+    int x = (kPanelWidth - textWidth) / 2;
+    constexpr int y = (kPanelHeight - kGlyphHeight) / 2;
+
+    for (size_t index = 0; index < digitCount; ++index) {
+        drawGlyph(x, y, glyphFor(digits[index]));
+        x += kGlyphWidth + kGlyphSpacing;
+    }
+    drawGlyph(x, y, kDegreeGlyph);
+    x += kGlyphWidth + kGlyphSpacing;
+    drawGlyph(x, y, kCelsiusGlyph);
+}
+
 void drawMouth(uint32_t elapsedMs) {
     matrix->clearScreen();
     const uint8_t animationId =
@@ -106,6 +160,7 @@ void drawMouth(uint32_t elapsedMs) {
     const uint8_t spriteId = mouth_assets::kFrameReferences[
         animation.firstFrameReference + localFrame];
     drawAssetFrame(spriteId);
+    drawTemperatureOverlay(animationId);
     present();
 }
 
@@ -166,6 +221,14 @@ void setMouthIntensity(uint8_t intensity) {
 
 uint8_t mouthIntensity() {
     return currentMouthIntensity;
+}
+
+void setTemperatureCelsius(int8_t temperature) {
+    currentTemperatureCelsius = temperature;
+}
+
+int8_t temperatureCelsius() {
+    return currentTemperatureCelsius;
 }
 
 void setSyncPhase(uint32_t phaseMs) {

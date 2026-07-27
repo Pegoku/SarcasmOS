@@ -60,6 +60,38 @@ be checked without the Brain. Its serial controls are:
 Uploading one variant replaces the other in flash. Re-upload the regular
 environment when local testing is complete.
 
+## Desktop display emulator
+
+The dependency-free desktop emulator opens a scaled window representing the
+physical 64x32 panel:
+
+```sh
+./emulator.py
+```
+
+It uses the same state ID order, dimensions, colors, geometry, animation
+timing, brightness, and speaking intensity as the firmware. Left and Right
+select states and pause autoplay. Space or `a` resumes it; `+`/`-` changes
+brightness, `[`/`]` changes speaking intensity, and `q` exits.
+
+Start paused on a particular state with:
+
+```sh
+./emulator.py --state sarcastic --paused
+```
+
+The renderer can also be validated on a machine without a graphical session:
+
+```sh
+./emulator.py --self-test
+./emulator.py --state speaking --dump speaking.ppm
+```
+
+ESP-IDF QEMU has an optional virtual RGB framebuffer, but the Arduino HUB75
+DMA driver used here does not target that virtual peripheral. The desktop
+emulator avoids a second ESP-IDF-specific display driver and starts without an
+ESP toolchain.
+
 ## Display behavior
 
 The firmware starts with Bender's pale-yellow tooth grille. IDs `0x00` through

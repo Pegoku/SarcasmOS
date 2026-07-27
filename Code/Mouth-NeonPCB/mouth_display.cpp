@@ -86,29 +86,23 @@ void drawBenderTeeth(bool speaking, uint32_t tick) {
         (amplitude * static_cast<int>(currentMouthIntensity)) / 120, 1, 9);
 
     constexpr int kCenterY = 16;
-    drawThickLine(3, kCenterY - 1, 27, kCenterY - 1, seam);
-    drawThickLine(3, kCenterY + 1, 27, kCenterY + 1, seam);
+    // Keep the waveform centered: it opens at 1/4 of the panel, reaches its
+    // peak near the middle, and closes at roughly 3/4.
+    drawThickLine(3, kCenterY - 1, 15, kCenterY - 1, seam);
+    drawThickLine(3, kCenterY + 1, 15, kCenterY + 1, seam);
 
-    drawThickLine(27, kCenterY - 1, 43, kCenterY - amplitude, seam);
-    drawThickLine(43, kCenterY - amplitude, 52, kCenterY - amplitude / 2,
-                  seam);
-    drawThickLine(52, kCenterY - amplitude / 2, 60, kCenterY - 1, seam);
+    drawThickLine(15, kCenterY - 1, 32, kCenterY - amplitude, seam);
+    drawThickLine(32, kCenterY - amplitude, 49, kCenterY - 1, seam);
+    drawThickLine(49, kCenterY - 1, 60, kCenterY - 1, seam);
 
-    drawThickLine(27, kCenterY + 1, 43, kCenterY + amplitude, seam);
-    drawThickLine(43, kCenterY + amplitude, 52, kCenterY + amplitude / 2,
-                  seam);
-    drawThickLine(52, kCenterY + amplitude / 2, 60, kCenterY + 1, seam);
+    drawThickLine(15, kCenterY + 1, 32, kCenterY + amplitude, seam);
+    drawThickLine(32, kCenterY + amplitude, 49, kCenterY + 1, seam);
+    drawThickLine(49, kCenterY + 1, 60, kCenterY + 1, seam);
 }
 
 void drawMouth(uint32_t tick) {
     matrix->clearScreen();
     if (currentAnimation == kAnimSleep) {
-        present();
-        return;
-    }
-
-    if (currentAnimation == kAnimIdle) {
-        drawBenderTeeth(false, tick);
         present();
         return;
     }
@@ -119,38 +113,9 @@ void drawMouth(uint32_t tick) {
         return;
     }
 
-    uint16_t color = rgb(255, 110, 24);
-    if (currentAnimation == kAnimHappy) color = rgb(40, 255, 70);
-    if (currentAnimation == kAnimAngry || currentAnimation == kAnimError) {
-        color = rgb(255, 0, 0);
-    }
-    if (currentAnimation == kAnimListening) color = rgb(0, 120, 255);
-    if (currentAnimation == kAnimThinking ||
-        currentAnimation == kAnimThinkingAudio ||
-        currentAnimation == kAnimThinkingLong) {
-        color = rgb(150, 0, 255);
-    }
-
-    if (currentAnimation == kAnimError) {
-        for (int i = 0; i < 9; ++i) {
-            const int y = (tick + i * 7) % kPanelHeight;
-            matrix->fillRect(i * 8, y, 5, 3, color);
-        }
-    } else if (currentAnimation == kAnimHappy) {
-        for (int x = 9; x < 55; ++x) {
-            const int dx = x - 32;
-            const int y = 13 + (dx * dx) / 85;
-            matrix->fillRect(x, y, 2, 2, color);
-        }
-    } else {
-        int y = 16;
-        if (currentAnimation == kAnimThinking ||
-            currentAnimation == kAnimThinkingAudio ||
-            currentAnimation == kAnimThinkingLong) {
-            y += ((tick / 8) % 7) - 3;
-        }
-        matrix->fillRect(9, y - 2, 46, 4, color);
-    }
+    // Until Bender-specific expressions are designed, every non-speaking
+    // state uses the canonical resting grille instead of placeholder shapes.
+    drawBenderTeeth(false, tick);
     present();
 }
 
@@ -163,6 +128,9 @@ bool begin() {
     };
     HUB75_I2S_CFG config(kPanelWidth, kPanelHeight, kPanelChain, pins);
     config.double_buff = true;
+    // This panel samples RGB on the opposite clock edge. The default phase
+    // rotates the scan chain by one pixel (1..63,0 instead of 0..63).
+    config.clkphase = false;
 
     matrix = new MatrixPanel_I2S_DMA(config);
     if (matrix == nullptr || !matrix->begin()) return false;

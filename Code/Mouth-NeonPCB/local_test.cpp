@@ -26,9 +26,10 @@ uint32_t lastAutoStepMs = 0;
 
 void printHelp() {
     Serial.println("\nLocal mouth animation test");
-    Serial.println("  0..9  select animation");
-    Serial.println("  a     toggle automatic animation cycle");
-    Serial.println("  n     next animation");
+    Serial.println("  0     resting Bender grille");
+    Serial.println("  5     speaking waveform");
+    Serial.println("  a     toggle automatic idle/speaking cycle");
+    Serial.println("  n     toggle idle/speaking");
     Serial.println("  p     next RGB/panel diagnostic");
     Serial.println("  + / - increase/decrease brightness");
     Serial.println("  ] / [ increase/decrease speaking intensity");
@@ -46,7 +47,8 @@ void selectAnimation(uint8_t animation) {
 }
 
 void nextAnimation() {
-    selectAnimation((autoAnimation + 1) % (kAnimSleep + 1));
+    selectAnimation(autoAnimation == kAnimSpeaking ? kAnimIdle
+                                                   : kAnimSpeaking);
 }
 
 void adjustBrightness(int change) {

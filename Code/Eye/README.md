@@ -76,6 +76,21 @@ header when the editable JSON or compiler changes.
 
 ## Build
 
+The helper script can build, upload, and then monitor either eye in one command:
+
+```sh
+./flash.sh --build --upload --monitor --left
+./flash.sh --build --upload --monitor --right
+```
+
+Actions and the eye selector can appear in any order. The monitor automatically
+uses the only connected `/dev/serial/by-id`, `/dev/ttyACM`, or `/dev/ttyUSB`
+device. If more than one is connected, select one with `--port /dev/ttyACM0`
+or set `EYE_LEFT_PORT` and `EYE_RIGHT_PORT`. Run `./flash.sh --help` for all
+options and environment overrides.
+
+The equivalent manual build commands are below.
+
 Left eye:
 
 ```sh

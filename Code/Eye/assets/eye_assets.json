@@ -504,7 +504,7 @@
       "id": 11,
       "name": "left",
       "flip_left": false,
-      "flip_right": false,
+      "flip_right": true,
       "playback": "loop",
       "frame_ms": 1000,
       "frames": [
@@ -518,7 +518,7 @@
       "id": 12,
       "name": "right",
       "flip_left": false,
-      "flip_right": false,
+      "flip_right": true,
       "playback": "loop",
       "frame_ms": 1000,
       "frames": [

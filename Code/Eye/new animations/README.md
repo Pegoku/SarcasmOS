@@ -1,9 +1,10 @@
 # Procedural bot animations
 
 This folder extracts the procedural renderer from `BotAnimator_ESP32.ino` into
-portable C++17. It contains no PNGs, GIFs, frame arrays, generated sprites, or
-other hardcoded bitmaps. Every frame is rebuilt from RGB565 drawing primitives,
-math, the selected state, and a caller-supplied timestamp.
+portable C++17 and includes a generated bitmap pack that the repository's
+existing `emulator.py` can display. The renderer itself contains no hardcoded
+animation bitmaps; `eye_assets.json` is a sampled, regenerable preview/export
+of its RGB565 drawing primitives.
 
 The renderer targets one 240x240 round display at a time. Call it with the same
 timestamp for the left and right boards to keep the pair synchronized.
@@ -32,9 +33,40 @@ invented here.
 
 - `procedural_animations.hpp` is the stable public API and complete state list.
 - `procedural_animations.cpp` contains all extracted animation behavior.
+- `eye_assets.json` contains the rendered, palette-indexed 240x240 frames in
+  the same `sarcasmos-eye-assets` format used by the current emulator.
+- `bitmap_exporter.cpp` rasterizes the real extracted C++ renderer.
+- `build_bitmap_pack.py` rebuilds `eye_assets.json` from that rasterizer.
 - `adapters/tft_espi_canvas.hpp` connects it to the original Arduino library.
 - `tests/smoke_test.cpp` renders both sides of every selectable variant through
   a fake drawing backend.
+
+## View the animations
+
+Run this from the `Eye` directory:
+
+```sh
+python emulator.py --assets "new animations/eye_assets.json" --view both
+```
+
+Use Left/Right to move through all 44 animations, Up/Down to step frames, and
+Space to play or pause. Alternate packs are intentionally view-only in the UI,
+so previewing them cannot accidentally overwrite the production 31-state pack.
+
+Headless preview and validation work too:
+
+```sh
+python emulator.py \
+  --assets "new animations/eye_assets.json" \
+  --state eye-angry --view both --dump /tmp/eye-angry.ppm
+python emulator.py --assets "new animations/eye_assets.json" --self-test
+```
+
+Regenerate every bitmap after changing the procedural C++:
+
+```sh
+python "new animations/build_bitmap_pack.py"
+```
 
 ## Use later in firmware
 
@@ -90,6 +122,8 @@ c++ -std=c++17 -Wall -Wextra -Werror \
 /tmp/bot-animation-smoke
 ```
 
-The original memory rule still applies: render directly to the display when
-possible. The package stores zero full-screen frames and does not require a
-framebuffer.
+The original memory rule still applies to firmware: use the procedural renderer
+to store zero full-screen frames when possible. The JSON bitmap pack exists for
+the desktop emulator and asset interchange. It can also be compiled by the
+existing RLE compiler, but adding all 44 IDs to production firmware still
+requires a deliberate protocol mapping.

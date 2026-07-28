@@ -56,6 +56,17 @@ python asset_tool.py validate
 python asset_tool.py compile
 ```
 
+An alternate emulator-compatible pack containing the 44 animations extracted
+from the external procedural ESP32 sketch can be previewed without replacing
+the production assets:
+
+```sh
+python emulator.py --assets "new animations/eye_assets.json" --view both
+```
+
+Alternate packs are view-only; the editor continues to write only to the
+production `assets/eye_assets.json` pack.
+
 `create_default_assets.py --force` recreates the initial procedural artwork
 and destroys manual sprite edits. Normal CMake builds regenerate only the C++
 header when the editable JSON or compiler changes.

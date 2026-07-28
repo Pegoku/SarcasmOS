@@ -259,7 +259,6 @@ if $do_swd_monitor; then
         -c "set USE_CORE 0" \
         -f target/rp2040.cfg \
         -c "init" \
-        -c "resume" \
         -c "rtt setup $rtt_address 0x100" \
         -c "rtt polling_interval 20" \
         -c "rtt start" \

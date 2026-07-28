@@ -92,11 +92,12 @@ Mouth speaking animation does not force the pupils back to center.
 
 ## Firmware status
 
-The present RP2040 firmware supports the legacy animation IDs `0x00` through
-`0x09` and renders a basic iris/pupil eye. It does not yet implement the full
-canonical expression set, eyelid poses, independent gaze commands, target
-tracking, or composited transient state.
+The RP2040 firmware supports all animation IDs `0x00` through `0x1e` using
+paired, editable 240x240 left/right artwork. Every state has a distinct eye
+pose or animation, including directional gaze, Bender-style angry and laugh
+expressions, activity states, status states, and weather accents. Unknown
+future expressions render as `neutral`.
 
-The Brain and both eye boards should eventually use the same versioned
-face-state contract as the mouth. Unknown future expressions should render as
-`neutral`, while unknown gaze values should render as `center`.
+The current byte-sized animation command still selects one state at a time.
+Independent persistent expression, transient activity, gaze composition, and
+continuous target coordinates remain future protocol work.

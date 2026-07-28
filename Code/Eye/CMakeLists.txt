@@ -7,8 +7,22 @@ set(CMAKE_CXX_STANDARD 17)
 
 pico_sdk_init()
 
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(EYE_ASSET_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/generated/eye_assets.hpp)
+add_custom_command(
+    OUTPUT ${EYE_ASSET_HEADER}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/asset_tool.py compile
+    DEPENDS
+        ${CMAKE_CURRENT_SOURCE_DIR}/asset_tool.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/assets/eye_assets.json
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMENT "Compiling eye animation assets"
+)
+add_custom_target(generate_eye_assets DEPENDS ${EYE_ASSET_HEADER})
+
 add_executable(sarcasmos_eye src/main.cpp src/gc9a01.cpp)
-target_include_directories(sarcasmos_eye PRIVATE include)
+add_dependencies(sarcasmos_eye generate_eye_assets)
+target_include_directories(sarcasmos_eye PRIVATE include ${CMAKE_CURRENT_SOURCE_DIR})
 if(NOT DEFINED DEVICE_ROLE)
     set(DEVICE_ROLE 0)
 endif()

@@ -43,8 +43,8 @@ cmake --build build-animation-test --target sarcasmos_eye
 ```
 
 This is the real eye firmware with automatic animation selection enabled. It
-cycles through idle, thinking, speaking, happy, angry, error, and sleep in
-23 seconds. Normal builds leave autoplay disabled and continue to select
+shows each of the 31 animation states for three seconds, completing a cycle in
+93 seconds. Normal builds leave autoplay disabled and continue to select
 animations through I2C.
 
 ## Upload with J-LinkOB

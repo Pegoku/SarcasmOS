@@ -128,8 +128,9 @@ class EmulatorWindow:
         self.simpledialog = simpledialog
         self.assets = AssetPack()
         self.state_id = self.assets.state_ids[args.state]
-        self.role = args.role
+        self.view = args.view
         self.scale = args.scale
+        self.gap = args.gap
         self.interval_ms = round(args.interval * 1000)
         self.auto_play = not args.paused
         self.brightness = args.brightness
@@ -147,8 +148,8 @@ class EmulatorWindow:
         self.notice = ""
         self.notice_until_ms = 0
         self.last_render_key: tuple[Any, ...] | None = None
-        self.photo_native = None
-        self.photo_scaled = None
+        self.photo_native: list[Any] = []
+        self.photo_scaled: list[Any] = []
 
         self.root = tk.Tk()
         self.root.title("SarcasmOS 240x240 round-eye asset emulator")
@@ -163,21 +164,27 @@ class EmulatorWindow:
         ).pack(fill="x", padx=8, pady=(7, 4))
 
         size = self.assets.width * self.scale
+        canvas_width = size * (2 if self.view == "both" else 1)
+        if self.view == "both":
+            canvas_width += self.gap * self.scale
         self.canvas = tk.Canvas(
-            self.root, width=size + 16, height=size + 16,
+            self.root, width=canvas_width + 16, height=size + 16,
             background="#20252a", highlightthickness=0,
         )
         self.canvas.pack(padx=8, pady=(0, 5))
-        self.image_item = self.canvas.create_image(8, 8, anchor="nw")
-        self.canvas.create_oval(
-            8, 8, 8 + size, 8 + size,
-            outline="#8b949e", width=max(1, self.scale),
-        )
 
         buttons = tk.Frame(self.root, background="#111111")
         buttons.pack(fill="x", padx=8, pady=(0, 5))
+        for label, view in (
+            ("Left eye", "left"),
+            ("Both eyes", "both"),
+            ("Right eye", "right"),
+        ):
+            tk.Button(
+                buttons, text=label,
+                command=lambda selected=view: self.set_view(selected),
+            ).pack(side="left", padx=(0, 5))
         for label, action in (
-            ("Switch eye (Tab)", self.switch_role),
             ("Open frame in GIMP (E)", self.open_in_gimp),
             ("Open animation in GIMP (O)", self.open_animation_in_gimp),
             ("Copy frame (C)", self.copy_frame),
@@ -202,7 +209,7 @@ class EmulatorWindow:
         tk.Label(
             self.root,
             text=(
-                "←/→ state   ↑/↓ frame   Tab left/right eye   "
+                "←/→ state   ↑/↓ frame   Tab left/both/right view   "
                 "Space/A play/pause\n"
                 "Insert/Delete frame   T frame time   S sync folder   "
                 "+/- brightness   Q quit"
@@ -230,11 +237,24 @@ class EmulatorWindow:
         self.last_step_ms = time.monotonic_ns() // 1_000_000
         self.last_render_key = None
 
-    def switch_role(self) -> None:
-        self.role = "right" if self.role == "left" else "left"
+    @property
+    def edit_role(self) -> str:
+        return self.view if self.view in asset_tool.ROLES else "left"
+
+    def set_view(self, view: str) -> None:
+        self.view = view
         self.current_edit_path = None
         self.current_animation_edit = None
         self.last_render_key = None
+        size = self.assets.width * self.scale
+        width = size * (2 if view == "both" else 1)
+        if view == "both":
+            width += self.gap * self.scale
+        self.canvas.configure(width=width + 16, height=size + 16)
+
+    def switch_view(self) -> None:
+        views = ("left", "both", "right")
+        self.set_view(views[(views.index(self.view) + 1) % len(views)])
 
     def native_ppm(
         self, state_id: int | None = None, frame: int | None = None,
@@ -242,7 +262,7 @@ class EmulatorWindow:
     ) -> bytes:
         state_id = self.state_id if state_id is None else state_id
         frame = self.current_local_frame if frame is None else frame
-        role = self.role if role is None else role
+        role = self.edit_role if role is None else role
         pixels = self.assets.frame_pixels(state_id, role, frame)
         body = bytearray(channel for pixel in pixels for channel in pixel)
         return (
@@ -263,12 +283,12 @@ class EmulatorWindow:
         edit_dir = self.edit_root() / "frames"
         edit_dir.mkdir(parents=True, exist_ok=True)
         path = edit_dir / (
-            f"{self.state_name}-{self.role}-"
+            f"{self.state_name}-{self.edit_role}-"
             f"frame-{self.current_local_frame + 1:02d}.ppm"
         )
         path.write_bytes(self.native_ppm())
         self.edit_targets[path] = EditTarget(
-            path=path, state=self.state_name, role=self.role,
+            path=path, state=self.state_name, role=self.edit_role,
             frame=self.current_local_frame,
             observed_signature=self.file_signature(path),
         )
@@ -294,7 +314,7 @@ class EmulatorWindow:
             )
 
     def open_animation_in_gimp(self) -> None:
-        state, role = self.state_name, self.role
+        state, role = self.state_name, self.edit_role
         animation = self.assets.animations[self.state_id]
         edit_dir = self.edit_root() / "animations" / state / role
         edit_dir.mkdir(parents=True, exist_ok=True)
@@ -502,7 +522,7 @@ class EmulatorWindow:
             self.show_notice(f"Could not set frame time: {error}")
 
     def sync_current_animation_folder(self) -> None:
-        state, role = self.state_name, self.role
+        state, role = self.state_name, self.edit_role
         directory = self.edit_root() / "animations" / state / role
         if not directory.is_dir():
             self.show_notice(
@@ -532,7 +552,7 @@ class EmulatorWindow:
             ) % len(frames)
             self.last_render_key = None
         elif key in ("Tab", "ISO_Left_Tab"):
-            self.switch_role()
+            self.switch_view()
         elif key in ("space", "a", "A"):
             self.auto_play = not self.auto_play
         elif key in ("plus", "equal", "KP_Add"):
@@ -560,20 +580,39 @@ class EmulatorWindow:
         elif key in ("q", "Q", "Escape"):
             self.root.destroy()
 
-    def render(self, pixels: list[tuple[int, int, int]]) -> None:
+    def render(self) -> None:
         factor = math.sqrt(self.brightness / 255)
-        scaled = [
-            tuple(round(channel * factor) for channel in pixel)
-            for pixel in pixels
-        ]
-        body = bytearray(channel for pixel in scaled for channel in pixel)
-        ppm = (
-            f"P6\n{self.assets.width} {self.assets.height}\n255\n".encode() +
-            body
-        )
-        self.photo_native = self.tk.PhotoImage(data=ppm, format="PPM")
-        self.photo_scaled = self.photo_native.zoom(self.scale, self.scale)
-        self.canvas.itemconfigure(self.image_item, image=self.photo_scaled)
+        roles = asset_tool.ROLES if self.view == "both" else (self.view,)
+        size = self.assets.width * self.scale
+        self.canvas.delete("preview")
+        self.photo_native = []
+        self.photo_scaled = []
+        for index, role in enumerate(roles):
+            pixels = self.assets.frame_pixels(
+                self.state_id, role, self.current_local_frame,
+            )
+            scaled = [
+                tuple(round(channel * factor) for channel in pixel)
+                for pixel in pixels
+            ]
+            body = bytearray(channel for pixel in scaled for channel in pixel)
+            ppm = (
+                f"P6\n{self.assets.width} {self.assets.height}\n255\n".encode() +
+                body
+            )
+            native = self.tk.PhotoImage(data=ppm, format="PPM")
+            photo = native.zoom(self.scale, self.scale)
+            x = 8 + index * (size + self.gap * self.scale)
+            self.canvas.create_image(
+                x, 8, anchor="nw", image=photo, tags="preview",
+            )
+            self.canvas.create_oval(
+                x, 8, x + size, 8 + size,
+                outline="#8b949e", width=max(1, self.scale),
+                tags="preview",
+            )
+            self.photo_native.append(native)
+            self.photo_scaled.append(photo)
 
     def update(self) -> None:
         now_ms = time.monotonic_ns() // 1_000_000
@@ -589,19 +628,17 @@ class EmulatorWindow:
                 self.state_id, self.animation_elapsed_ms,
             )
         render_key = (
-            self.state_id, self.role, self.current_local_frame, self.brightness,
+            self.state_id, self.view, self.current_local_frame, self.brightness,
         )
         if render_key != self.last_render_key:
-            self.render(self.assets.frame_pixels(
-                self.state_id, self.role, self.current_local_frame,
-            ))
+            self.render()
             self.last_render_key = render_key
 
         animation = self.assets.animations[self.state_id]
         mode = "AUTO" if self.auto_play else "PAUSED"
         status = (
             f"0x{self.state_id:02x}  {self.state_name:<16} "
-            f"{self.role.upper():<5} eye   "
+            f"{self.view.upper():<5} view  "
             f"frame {self.current_local_frame + 1}/"
             f"{len(animation['frames'])}   "
             f"delay {animation['frame_ms']} ms   {mode}   "
@@ -619,6 +656,24 @@ class EmulatorWindow:
 def self_test(assets: AssetPack) -> None:
     hashes = set()
     for state_id, animation in enumerate(assets.animations):
+        for frame in range(len(animation["frames"])):
+            left = assets.sprite_cache[
+                animation["frames"][frame]["left"]
+            ]
+            right = assets.sprite_cache[
+                animation["frames"][frame]["right"]
+            ]
+            mirrored = [
+                value
+                for y in range(assets.height)
+                for value in reversed(
+                    left[y * assets.width:(y + 1) * assets.width]
+                )
+            ]
+            if right != mirrored:
+                raise AssertionError(
+                    f"{animation['name']} frame {frame + 1} is not mirrored"
+                )
         for role in asset_tool.ROLES:
             lit_frames = 0
             for frame in range(len(animation["frames"])):
@@ -657,8 +712,18 @@ def parse_args() -> argparse.Namespace:
     states = tuple(animation["name"] for animation in assets.animations)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--state", choices=states, default="idle")
-    parser.add_argument("--role", choices=asset_tool.ROLES, default="left")
+    parser.add_argument(
+        "--view", choices=("left", "right", "both"), default="left",
+    )
+    parser.add_argument(
+        "--role", dest="view", choices=asset_tool.ROLES,
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument("--scale", type=int, default=2)
+    parser.add_argument(
+        "--gap", type=int, default=24,
+        help="native-pixel gap between eyes in the combined view",
+    )
     parser.add_argument("--interval", type=float, default=3.0)
     parser.add_argument("--brightness", type=int, default=180)
     parser.add_argument("--paused", action="store_true")
@@ -673,6 +738,8 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if args.scale < 1:
         parser.error("--scale must be at least 1")
+    if args.gap < 0:
+        parser.error("--gap cannot be negative")
     if args.interval <= 0:
         parser.error("--interval must be greater than zero")
     if not 0 <= args.brightness <= 255:
@@ -687,16 +754,30 @@ def main() -> int:
         self_test(assets)
         return 0
     if args.dump is not None:
-        pixels = assets.frame_pixels(
-            assets.state_ids[args.state], args.role, 0,
-        )
+        roles = asset_tool.ROLES if args.view == "both" else (args.view,)
+        role_pixels = [
+            assets.frame_pixels(assets.state_ids[args.state], role, 0)
+            for role in roles
+        ]
         factor = math.sqrt(args.brightness / 255)
+        if len(role_pixels) == 1:
+            pixels = role_pixels[0]
+            width = assets.width
+        else:
+            width = assets.width * 2 + args.gap
+            pixels = []
+            for row in range(assets.height):
+                start = row * assets.width
+                end = start + assets.width
+                pixels.extend(role_pixels[0][start:end])
+                pixels.extend([BLACK] * args.gap)
+                pixels.extend(role_pixels[1][start:end])
         pixels = [
             tuple(round(channel * factor) for channel in pixel)
             for pixel in pixels
         ]
         asset_tool.write_ppm(
-            args.dump, assets.width, assets.height, pixels,
+            args.dump, width, assets.height, pixels,
         )
         return 0
     try:

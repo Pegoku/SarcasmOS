@@ -15,14 +15,16 @@ python emulator.py
 ```
 
 The preview is clipped to the GC9A01's round screen. Each animation frame
-contains separate left- and right-eye artwork so expressions can mirror
-correctly while gaze states still point both pupils in the same direction.
+uses flat Bender-style artwork with a square pupil. The right-eye artwork is
+always generated as an exact horizontal mirror of the left eye. Weather states
+replace the eye completely with a full-screen weather symbol.
 
 Main controls:
 
 - Left/Right: select one of the 31 states.
 - Up/Down: select a frame and pause playback.
-- Tab: switch between left- and right-eye artwork.
+- Left eye/Both eyes/Right eye buttons: choose the preview layout.
+- Tab: cycle through left, both side by side, and right views.
 - Space or A: play/pause.
 - E: open the current native 240x240 frame in GIMP.
 - O: open every frame of the current eye/animation in GIMP.
@@ -36,13 +38,15 @@ Saving an emulator-exported PPM over the same file makes the emulator import
 it automatically, update `assets/eye_assets.json`, regenerate
 `generated/eye_assets.hpp`, and reload the preview. New exact colors occupy
 free slots in the shared 16-color palette; once full, imports use the nearest
-palette color.
+palette color. Editing either eye automatically regenerates the other eye as
+its horizontal mirror.
 
 Headless validation and command-line frame exchange are also available:
 
 ```sh
 python emulator.py --self-test
-python emulator.py --state angry --role right --dump angry-right.ppm
+python emulator.py --state angry --view both --gap 24 --dump angry-pair.ppm
+python emulator.py --state angry --view right --dump angry-right.ppm
 python asset_tool.py export happy_fake happy-left.ppm --role left --frame 2
 python asset_tool.py import happy_fake happy-left.ppm --role left --frame 2
 python asset_tool.py validate

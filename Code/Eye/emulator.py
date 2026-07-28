@@ -77,11 +77,13 @@ def compact_animation_files(
 
 
 class AssetPack:
-    def __init__(self) -> None:
+    def __init__(self, path: pathlib.Path = asset_tool.DEFAULT_ASSETS) -> None:
+        self.path = path.resolve()
+        self.is_production = asset_tool.is_default_asset_path(self.path)
         self.reload()
 
     def reload(self) -> None:
-        self.data = asset_tool.load_assets()
+        self.data = asset_tool.load_assets(self.path)
         self.width = self.data["width"]
         self.height = self.data["height"]
         self.palette = asset_tool.palette(self.data)
@@ -130,7 +132,7 @@ class EmulatorWindow:
 
         self.tk = tk
         self.simpledialog = simpledialog
-        self.assets = AssetPack()
+        self.assets = AssetPack(args.assets)
         self.state_id = self.assets.state_ids[args.state]
         self.view = args.view
         self.scale = args.scale
@@ -276,6 +278,9 @@ class EmulatorWindow:
         self.set_view(views[(views.index(self.view) + 1) % len(views)])
 
     def toggle_flip(self, role: str) -> None:
+        if not self.assets.is_production:
+            self.show_notice("Alternate asset packs are view-only")
+            return
         animation = self.assets.animations[self.state_id]
         key = f"flip_{role}"
         animation[key] = not animation[key]
@@ -339,6 +344,9 @@ class EmulatorWindow:
         return True
 
     def open_in_gimp(self) -> None:
+        if not self.assets.is_production:
+            self.show_notice("Alternate asset packs are view-only")
+            return
         path = self.export_edit_target()
         if self.launch_gimp([path]):
             self.show_notice(
@@ -346,6 +354,9 @@ class EmulatorWindow:
             )
 
     def open_animation_in_gimp(self) -> None:
+        if not self.assets.is_production:
+            self.show_notice("Alternate asset packs are view-only")
+            return
         state, role = self.state_name, self.edit_role
         animation = self.assets.animations[self.state_id]
         edit_dir = self.edit_root() / "animations" / state / role
@@ -487,7 +498,7 @@ class EmulatorWindow:
             self.assets.reload()
             self.state_id = self.assets.state_ids[state]
             self.last_render_key = None
-            self.show_notice("Reloaded assets/eye_assets.json")
+            self.show_notice(f"Reloaded {self.assets.path}")
         except (OSError, ValueError, KeyError) as error:
             self.show_notice(f"Reload failed: {error}")
 
@@ -514,6 +525,9 @@ class EmulatorWindow:
         self.last_render_key = None
 
     def add_frame(self) -> None:
+        if not self.assets.is_production:
+            self.show_notice("Alternate asset packs are view-only")
+            return
         state = self.state_name
         try:
             inserted = asset_tool.insert_animation_frame(
@@ -525,6 +539,9 @@ class EmulatorWindow:
             self.show_notice(f"Could not add frame: {error}")
 
     def remove_frame(self) -> None:
+        if not self.assets.is_production:
+            self.show_notice("Alternate asset packs are view-only")
+            return
         state = self.state_name
         try:
             selected = asset_tool.remove_animation_frame(
@@ -536,6 +553,9 @@ class EmulatorWindow:
             self.show_notice(f"Could not remove frame: {error}")
 
     def change_frame_time(self) -> None:
+        if not self.assets.is_production:
+            self.show_notice("Alternate asset packs are view-only")
+            return
         state = self.state_name
         animation = self.assets.animations[self.state_id]
         value = self.simpledialog.askinteger(
@@ -554,6 +574,9 @@ class EmulatorWindow:
             self.show_notice(f"Could not set frame time: {error}")
 
     def sync_current_animation_folder(self) -> None:
+        if not self.assets.is_production:
+            self.show_notice("Alternate asset packs are view-only")
+            return
         state, role = self.state_name, self.edit_role
         directory = self.edit_root() / "animations" / state / role
         if not directory.is_dir():
@@ -704,7 +727,7 @@ def self_test(assets: AssetPack) -> None:
                     left[y * assets.width:(y + 1) * assets.width]
                 )
             ]
-            if right != expected:
+            if assets.is_production and right != expected:
                 raise AssertionError(
                     f"{animation['name']} frame {frame + 1} is not mirrored"
                 )
@@ -733,7 +756,13 @@ def self_test(assets: AssetPack) -> None:
                 raise AssertionError(
                     f"{animation['name']} {role}: every frame is blank"
                 )
-    asset_tool.compile_assets()
+    if assets.is_production:
+        asset_tool.compile_assets()
+    else:
+        with tempfile.TemporaryDirectory() as directory:
+            asset_tool.compile_assets(
+                assets.path, pathlib.Path(directory) / "eye_assets.hpp",
+            )
     print(
         f"OK: rendered {len(assets.animations)} paired animations, "
         f"{len(assets.data['sprites'])} native 240x240 sprites"
@@ -742,10 +771,12 @@ def self_test(assets: AssetPack) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    assets = AssetPack()
-    states = tuple(animation["name"] for animation in assets.animations)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--state", choices=states, default="idle")
+    parser.add_argument(
+        "--assets", type=pathlib.Path, default=asset_tool.DEFAULT_ASSETS,
+        help="alternate sarcasmos-eye-assets JSON pack to preview",
+    )
+    parser.add_argument("--state", default=None)
     parser.add_argument(
         "--view", choices=("left", "right", "both"), default="left",
     )
@@ -770,6 +801,17 @@ def parse_args() -> argparse.Namespace:
         help="write the selected first frame as a native PPM and exit",
     )
     args = parser.parse_args()
+    try:
+        assets = AssetPack(args.assets)
+    except (OSError, ValueError, KeyError) as error:
+        parser.error(f"cannot load --assets: {error}")
+    states = tuple(animation["name"] for animation in assets.animations)
+    if args.state is None:
+        args.state = states[0]
+    elif args.state not in states:
+        parser.error(
+            f"--state must be one of: {', '.join(states)}"
+        )
     if args.scale < 1:
         parser.error("--scale must be at least 1")
     if args.gap < 0:
@@ -783,7 +825,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    assets = AssetPack()
+    assets = AssetPack(args.assets)
     if args.self_test:
         self_test(assets)
         return 0

@@ -26,9 +26,19 @@ ROLES = ("left", "right")
 PLAYBACK_IDS = {"loop": 0, "ping_pong": 1}
 
 
-def load_assets(path: pathlib.Path = DEFAULT_ASSETS) -> dict[str, Any]:
+def is_default_asset_path(path: pathlib.Path) -> bool:
+    return path.resolve() == DEFAULT_ASSETS.resolve()
+
+
+def load_assets(
+    path: pathlib.Path = DEFAULT_ASSETS,
+    *,
+    strict_protocol: bool | None = None,
+) -> dict[str, Any]:
     data = json.loads(path.read_text())
-    validate_assets(data)
+    if strict_protocol is None:
+        strict_protocol = is_default_asset_path(path)
+    validate_assets(data, strict_protocol=strict_protocol)
     return data
 
 
@@ -56,7 +66,9 @@ def animation_for(data: dict[str, Any], state: str) -> dict[str, Any]:
         raise ValueError(f"unknown animation state {state!r}") from error
 
 
-def validate_assets(data: dict[str, Any]) -> None:
+def validate_assets(
+    data: dict[str, Any], *, strict_protocol: bool = True,
+) -> None:
     if data.get("format") != "sarcasmos-eye-assets":
         raise ValueError("unsupported eye asset format")
     if data.get("version") != 1:
@@ -77,8 +89,12 @@ def validate_assets(data: dict[str, Any]) -> None:
 
     animations = data.get("animations", [])
     names = tuple(animation.get("name") for animation in animations)
-    if names != EXPECTED_STATES:
+    if strict_protocol and names != EXPECTED_STATES:
         raise ValueError("animation order/names do not match protocol.hpp")
+    if not animations or any(not isinstance(name, str) or not name for name in names):
+        raise ValueError("the asset pack must contain named animations")
+    if len(set(names)) != len(names):
+        raise ValueError("animation names must be unique")
     for state_id, animation in enumerate(animations):
         if animation.get("id") != state_id:
             raise ValueError(f"{animation['name']}: ID must be {state_id}")
@@ -110,7 +126,7 @@ def validate_assets(data: dict[str, Any]) -> None:
                     )
             left = data["sprites"][frame["left"]]["rows"]
             right = data["sprites"][frame["right"]]["rows"]
-            if right != mirror_rows(left):
+            if strict_protocol and right != mirror_rows(left):
                 raise ValueError(
                     f"{animation['name']}: right source must mirror left source"
                 )
@@ -123,9 +139,10 @@ def validate_assets(data: dict[str, Any]) -> None:
         if not set("".join(rows)) <= valid_characters:
             raise ValueError(f"{name}: sprite uses invalid palette indices")
 
-    header = (ROOT / "include" / "protocol.hpp").read_text()
-    if "kAnimCount = 0x1F;" not in header:
-        raise ValueError("protocol.hpp animation count does not match assets")
+    if strict_protocol:
+        header = (ROOT / "include" / "protocol.hpp").read_text()
+        if "kAnimCount = 0x1F;" not in header:
+            raise ValueError("protocol.hpp animation count does not match assets")
 
 
 def encode_rle(indices: list[int]) -> list[int]:
@@ -364,7 +381,7 @@ def write_asset_pack(
     assets_path: pathlib.Path = DEFAULT_ASSETS,
     header_path: pathlib.Path = DEFAULT_HEADER,
 ) -> None:
-    validate_assets(data)
+    validate_assets(data, strict_protocol=is_default_asset_path(assets_path))
     token = time.monotonic_ns()
     temporary_assets = assets_path.with_name(
         f".{assets_path.name}.{token}.tmp"

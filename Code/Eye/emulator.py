@@ -158,7 +158,10 @@ class EmulatorWindow:
         self.photo_scaled: list[Any] = []
 
         self.root = tk.Tk()
-        self.root.title("SarcasmOS 240x240 round-eye asset emulator")
+        self.root.title(
+            "SarcasmOS 240x240 round-eye asset emulator — "
+            f"{self.assets.path.name}"
+        )
         self.root.configure(background="#111111")
         self.root.resizable(False, False)
 
@@ -278,18 +281,17 @@ class EmulatorWindow:
         self.set_view(views[(views.index(self.view) + 1) % len(views)])
 
     def toggle_flip(self, role: str) -> None:
-        if not self.assets.is_production:
-            self.show_notice("Alternate asset packs are view-only")
-            return
         animation = self.assets.animations[self.state_id]
         key = f"flip_{role}"
         animation[key] = not animation[key]
         try:
-            asset_tool.save_asset_source(self.assets.data)
+            asset_tool.save_asset_source(
+                self.assets.data, self.assets.path,
+            )
             self.last_render_key = None
             state = "flipped" if animation[key] else "normal"
             self.show_notice(f"{role.title()} eye orientation: {state}")
-        except OSError as error:
+        except (OSError, ValueError, KeyError) as error:
             animation[key] = not animation[key]
             self.show_notice(f"Could not save eye orientation: {error}")
 
@@ -312,9 +314,14 @@ class EmulatorWindow:
         stat = path.stat()
         return stat.st_mtime_ns, stat.st_size
 
-    @staticmethod
-    def edit_root() -> pathlib.Path:
-        return pathlib.Path(tempfile.gettempdir()) / "sarcasmos-eye-edit"
+    def edit_root(self) -> pathlib.Path:
+        pack_token = hashlib.sha256(
+            str(self.assets.path).encode()
+        ).hexdigest()[:10]
+        return (
+            pathlib.Path(tempfile.gettempdir()) / "sarcasmos-eye-edit" /
+            f"{self.assets.path.stem}-{pack_token}"
+        )
 
     def export_edit_target(self) -> pathlib.Path:
         edit_dir = self.edit_root() / "frames"
@@ -344,9 +351,6 @@ class EmulatorWindow:
         return True
 
     def open_in_gimp(self) -> None:
-        if not self.assets.is_production:
-            self.show_notice("Alternate asset packs are view-only")
-            return
         path = self.export_edit_target()
         if self.launch_gimp([path]):
             self.show_notice(
@@ -354,9 +358,6 @@ class EmulatorWindow:
             )
 
     def open_animation_in_gimp(self) -> None:
-        if not self.assets.is_production:
-            self.show_notice("Alternate asset packs are view-only")
-            return
         state, role = self.state_name, self.edit_role
         animation = self.assets.animations[self.state_id]
         edit_dir = self.edit_root() / "animations" / state / role
@@ -410,6 +411,7 @@ class EmulatorWindow:
         try:
             asset_tool.import_sprite(
                 target.state, target.role, target.frame, target.path,
+                assets_path=self.assets.path,
             )
             current_state = self.state_name
             self.assets.reload()
@@ -436,6 +438,7 @@ class EmulatorWindow:
             )
             count = asset_tool.sync_animation_frames(
                 session.state, session.role, paths,
+                assets_path=self.assets.path,
             )
             compacted = compact_animation_files(
                 paths, session.state, session.role,
@@ -525,13 +528,11 @@ class EmulatorWindow:
         self.last_render_key = None
 
     def add_frame(self) -> None:
-        if not self.assets.is_production:
-            self.show_notice("Alternate asset packs are view-only")
-            return
         state = self.state_name
         try:
             inserted = asset_tool.insert_animation_frame(
                 state, self.current_local_frame,
+                assets_path=self.assets.path,
             )
             self.reload_after_frame_change(state, inserted)
             self.show_notice(f"Added paired frame {inserted + 1} to {state}")
@@ -539,13 +540,11 @@ class EmulatorWindow:
             self.show_notice(f"Could not add frame: {error}")
 
     def remove_frame(self) -> None:
-        if not self.assets.is_production:
-            self.show_notice("Alternate asset packs are view-only")
-            return
         state = self.state_name
         try:
             selected = asset_tool.remove_animation_frame(
                 state, self.current_local_frame,
+                assets_path=self.assets.path,
             )
             self.reload_after_frame_change(state, selected)
             self.show_notice(f"Removed paired frame from {state}")
@@ -553,9 +552,6 @@ class EmulatorWindow:
             self.show_notice(f"Could not remove frame: {error}")
 
     def change_frame_time(self) -> None:
-        if not self.assets.is_production:
-            self.show_notice("Alternate asset packs are view-only")
-            return
         state = self.state_name
         animation = self.assets.animations[self.state_id]
         value = self.simpledialog.askinteger(
@@ -567,16 +563,15 @@ class EmulatorWindow:
         if value is None:
             return
         try:
-            asset_tool.set_animation_frame_ms(state, value)
+            asset_tool.set_animation_frame_ms(
+                state, value, assets_path=self.assets.path,
+            )
             self.reload_assets()
             self.show_notice(f"{state} frame time: {value} ms")
         except (OSError, ValueError, KeyError) as error:
             self.show_notice(f"Could not set frame time: {error}")
 
     def sync_current_animation_folder(self) -> None:
-        if not self.assets.is_production:
-            self.show_notice("Alternate asset packs are view-only")
-            return
         state, role = self.state_name, self.edit_role
         directory = self.edit_root() / "animations" / state / role
         if not directory.is_dir():

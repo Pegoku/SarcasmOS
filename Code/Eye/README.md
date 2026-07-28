@@ -64,8 +64,11 @@ and order. It can be previewed without replacing the production assets:
 python emulator.py --assets "new animations/eye_assets.json" --view both
 ```
 
-Alternate packs are view-only; the editor continues to write only to the
-production `assets/eye_assets.json` pack.
+Alternate packs support the same frame editing, GIMP auto-import, add/remove,
+timing, folder synchronization, and orientation controls as the production
+pack. Changes are written only to the path passed through `--assets`; editing an
+alternate pack does not regenerate the production firmware header. Independent
+left/right artwork is preserved when only one alternate-pack eye is edited.
 
 `create_default_assets.py --force` recreates the initial procedural artwork
 and destroys manual sprite edits. Normal CMake builds regenerate only the C++

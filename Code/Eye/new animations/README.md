@@ -52,9 +52,14 @@ python emulator.py --assets "new animations/eye_assets.json" --view both
 ```
 
 Use Left/Right to move through all 31 mapped animations, Up/Down to step frames,
-and Space to play or pause. Alternate packs are intentionally view-only in the
-UI, so previewing them cannot accidentally overwrite the production 31-state
-pack.
+and Space to play or pause. Frame editing, GIMP auto-import, add/remove, timing,
+folder synchronization, and orientation controls write directly to this
+alternate JSON without changing the production pack or firmware header.
+
+Edits to one eye preserve the other eye's independent artwork. Running
+`build_bitmap_pack.py` again deliberately regenerates this file and replaces
+manual edits, so copy an edited pack first if the procedural source is also
+being changed.
 
 Headless preview and validation work too:
 

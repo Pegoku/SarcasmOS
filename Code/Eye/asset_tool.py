@@ -379,31 +379,42 @@ def sprite_pixels(
 def write_asset_pack(
     data: dict[str, Any],
     assets_path: pathlib.Path = DEFAULT_ASSETS,
-    header_path: pathlib.Path = DEFAULT_HEADER,
+    header_path: pathlib.Path | None = None,
 ) -> None:
-    validate_assets(data, strict_protocol=is_default_asset_path(assets_path))
+    production = is_default_asset_path(assets_path)
+    validate_assets(data, strict_protocol=production)
+    if header_path is None and production:
+        header_path = DEFAULT_HEADER
     token = time.monotonic_ns()
     temporary_assets = assets_path.with_name(
         f".{assets_path.name}.{token}.tmp"
     )
-    temporary_header = header_path.with_name(
-        f".{header_path.name}.{token}.tmp"
+    temporary_header = (
+        header_path.with_name(f".{header_path.name}.{token}.tmp")
+        if header_path is not None else None
     )
     try:
         temporary_assets.parent.mkdir(parents=True, exist_ok=True)
         temporary_assets.write_text(json.dumps(data, indent=2) + "\n")
-        compile_assets(temporary_assets, temporary_header)
+        if temporary_header is not None:
+            temporary_header.parent.mkdir(parents=True, exist_ok=True)
+            compile_assets(temporary_assets, temporary_header)
         temporary_assets.replace(assets_path)
-        temporary_header.replace(header_path)
+        if temporary_header is not None and header_path is not None:
+            temporary_header.replace(header_path)
     finally:
         temporary_assets.unlink(missing_ok=True)
-        temporary_header.unlink(missing_ok=True)
+        if temporary_header is not None:
+            temporary_header.unlink(missing_ok=True)
 
 
 def import_sprite(
     state: str, role: str, frame_index: int, source: pathlib.Path,
+    *,
+    assets_path: pathlib.Path = DEFAULT_ASSETS,
+    header_path: pathlib.Path | None = None,
 ) -> None:
-    data = load_assets()
+    data = load_assets(assets_path)
     width, height, pixels = read_ppm(source)
     if (width, height) != (240, 240):
         raise ValueError(f"edited sprite must be 240x240, got {width}x{height}")
@@ -413,16 +424,27 @@ def import_sprite(
     except IndexError as error:
         raise ValueError(f"{state} has no frame {frame_index + 1}") from error
     edited_rows = pixels_to_rows(data, pixels)
-    left_rows = edited_rows if role == "left" else mirror_rows(edited_rows)
-    right_rows = mirror_rows(left_rows)
-    left_sprite = f"{state}_left_{frame_index:02d}_edited"
-    right_sprite = f"{state}_right_{frame_index:02d}_mirrored"
-    data["sprites"][left_sprite] = {"rows": left_rows}
-    data["sprites"][right_sprite] = {"rows": right_rows}
-    frame["left"] = left_sprite
-    frame["right"] = right_sprite
+    source_role = (
+        "right" if role == "left" else "left"
+    ) if animation[f"flip_{role}"] else role
+    if is_default_asset_path(assets_path):
+        left_rows = (
+            edited_rows
+            if source_role == "left" else mirror_rows(edited_rows)
+        )
+        right_rows = mirror_rows(left_rows)
+        left_sprite = f"{state}_left_{frame_index:02d}_edited"
+        right_sprite = f"{state}_right_{frame_index:02d}_mirrored"
+        data["sprites"][left_sprite] = {"rows": left_rows}
+        data["sprites"][right_sprite] = {"rows": right_rows}
+        frame["left"] = left_sprite
+        frame["right"] = right_sprite
+    else:
+        sprite = f"{state}_{source_role}_{frame_index:02d}_edited"
+        data["sprites"][sprite] = {"rows": edited_rows}
+        frame[source_role] = sprite
     prune_unreferenced_sprites(data)
-    write_asset_pack(data)
+    write_asset_pack(data, assets_path, header_path)
     print(f"Imported {source} -> {state} {role} frame {frame_index + 1}")
 
 
@@ -437,8 +459,12 @@ def prune_unreferenced_sprites(data: dict[str, Any]) -> None:
         del data["sprites"][sprite]
 
 
-def insert_animation_frame(state: str, after_index: int) -> int:
-    data = load_assets()
+def insert_animation_frame(
+    state: str, after_index: int, *,
+    assets_path: pathlib.Path = DEFAULT_ASSETS,
+    header_path: pathlib.Path | None = None,
+) -> int:
+    data = load_assets(assets_path)
     animation = animation_for(data, state)
     frames = animation["frames"]
     if not 0 <= after_index < len(frames):
@@ -447,12 +473,16 @@ def insert_animation_frame(state: str, after_index: int) -> int:
         raise ValueError(f"{state} cannot contain more than 255 frames")
     inserted = after_index + 1
     frames.insert(inserted, dict(frames[after_index]))
-    write_asset_pack(data)
+    write_asset_pack(data, assets_path, header_path)
     return inserted
 
 
-def remove_animation_frame(state: str, frame_index: int) -> int:
-    data = load_assets()
+def remove_animation_frame(
+    state: str, frame_index: int, *,
+    assets_path: pathlib.Path = DEFAULT_ASSETS,
+    header_path: pathlib.Path | None = None,
+) -> int:
+    data = load_assets(assets_path)
     animation = animation_for(data, state)
     frames = animation["frames"]
     if len(frames) <= 1:
@@ -461,54 +491,82 @@ def remove_animation_frame(state: str, frame_index: int) -> int:
         raise ValueError(f"{state} has no frame {frame_index + 1}")
     del frames[frame_index]
     prune_unreferenced_sprites(data)
-    write_asset_pack(data)
+    write_asset_pack(data, assets_path, header_path)
     return min(frame_index, len(frames) - 1)
 
 
-def set_animation_frame_ms(state: str, frame_ms: int) -> None:
+def set_animation_frame_ms(
+    state: str, frame_ms: int, *,
+    assets_path: pathlib.Path = DEFAULT_ASSETS,
+    header_path: pathlib.Path | None = None,
+) -> None:
     if not 1 <= frame_ms <= 65535:
         raise ValueError("frame time must be in the range 1..65535 ms")
-    data = load_assets()
+    data = load_assets(assets_path)
     animation_for(data, state)["frame_ms"] = frame_ms
-    write_asset_pack(data)
+    write_asset_pack(data, assets_path, header_path)
 
 
-def save_asset_source(data: dict[str, Any]) -> None:
+def save_asset_source(
+    data: dict[str, Any], assets_path: pathlib.Path = DEFAULT_ASSETS,
+) -> None:
     """Atomically save loaded assets without compiling the firmware header."""
+    validate_assets(
+        data, strict_protocol=is_default_asset_path(assets_path),
+    )
     token = time.monotonic_ns()
-    temporary = DEFAULT_ASSETS.with_name(
-        f".{DEFAULT_ASSETS.name}.{token}.tmp"
+    temporary = assets_path.with_name(
+        f".{assets_path.name}.{token}.tmp"
     )
     try:
+        temporary.parent.mkdir(parents=True, exist_ok=True)
         temporary.write_text(json.dumps(data, indent=2) + "\n")
-        temporary.replace(DEFAULT_ASSETS)
+        temporary.replace(assets_path)
     finally:
         temporary.unlink(missing_ok=True)
 
 
 def sync_animation_frames(
     state: str, role: str, sources: list[pathlib.Path],
+    *,
+    assets_path: pathlib.Path = DEFAULT_ASSETS,
+    header_path: pathlib.Path | None = None,
 ) -> int:
     if not sources or len(sources) > 255:
         raise ValueError(f"{state} must keep 1..255 frames")
-    data = load_assets()
+    data = load_assets(assets_path)
     animation = animation_for(data, state)
+    existing_frames = animation["frames"]
+    production = is_default_asset_path(assets_path)
+    source_role = (
+        "right" if role == "left" else "left"
+    ) if animation[f"flip_{role}"] else role
     new_frames = []
     for index, source in enumerate(sources):
         width, height, pixels = read_ppm(source)
         if (width, height) != (240, 240):
             raise ValueError(f"{source.name} must be 240x240")
         edited_rows = pixels_to_rows(data, pixels)
-        left_rows = edited_rows if role == "left" else mirror_rows(edited_rows)
-        right_rows = mirror_rows(left_rows)
-        left_sprite = f"{state}_left_{index:02d}_edited"
-        right_sprite = f"{state}_right_{index:02d}_mirrored"
-        data["sprites"][left_sprite] = {"rows": left_rows}
-        data["sprites"][right_sprite] = {"rows": right_rows}
-        new_frames.append({"left": left_sprite, "right": right_sprite})
+        if production:
+            left_rows = (
+                edited_rows
+                if source_role == "left" else mirror_rows(edited_rows)
+            )
+            right_rows = mirror_rows(left_rows)
+            left_sprite = f"{state}_left_{index:02d}_edited"
+            right_sprite = f"{state}_right_{index:02d}_mirrored"
+            data["sprites"][left_sprite] = {"rows": left_rows}
+            data["sprites"][right_sprite] = {"rows": right_rows}
+            frame = {"left": left_sprite, "right": right_sprite}
+        else:
+            sprite = f"{state}_{source_role}_{index:02d}_edited"
+            data["sprites"][sprite] = {"rows": edited_rows}
+            frame = dict(existing_frames[min(index, len(existing_frames) - 1)])
+            frame[source_role] = sprite
+        new_frames.append(frame)
     animation["frames"] = new_frames
     prune_unreferenced_sprites(data)
-    write_asset_pack(data)
+    write_asset_pack(data, assets_path, header_path)
     return len(new_frames)
 
 

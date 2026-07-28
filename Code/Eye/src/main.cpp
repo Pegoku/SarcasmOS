@@ -11,6 +11,7 @@
 #include "gc9a01.hpp"
 #include "generated/eye_assets.hpp"
 #include "protocol.hpp"
+#include "swd_rtt.hpp"
 
 #ifndef DEVICE_ROLE
 #define DEVICE_ROLE kRoleLeftEye
@@ -43,20 +44,35 @@ static uint8_t last_sequence;
 static uint8_t last_error;
 static uint32_t sync_phase_ms;
 
-#ifdef ANIMATION_AUTOPLAY
 static const char *const kAnimationNames[] = {
-    "idle",      "listening",  "thinking",  "thinking_audio",
-    "thinking_long", "speaking",   "happy_fake", "angry",
-    "error",     "asleep",     "tool",      "left",
-    "right",     "up",         "down",      "center",
-    "neutral",   "sarcastic",  "suspicious", "tired",
-    "surprised", "bored",      "dramatic",  "watch",
-    "party",     "battery_low", "sunny",     "rainy",
-    "cloudy",    "stormy",     "snowy",
+    "idle", "listening", "thinking", "thinking_audio",
+    "thinking_long", "speaking", "happy_fake", "angry",
+    "error", "asleep", "tool", "left",
+    "right", "up", "down", "center",
+    "neutral", "sarcastic", "suspicious", "tired",
+    "surprised", "bored", "dramatic", "watch",
+    "party", "battery_low", "sunny", "rainy",
+    "cloudy", "stormy", "snowy",
 };
 static_assert(sizeof(kAnimationNames) / sizeof(kAnimationNames[0]) == kAnimCount,
-              "demo animation name count mismatch");
+              "animation name count mismatch");
 
+static void report_animation(const char *label) {
+    printf("%s animation %u/%u: %s (id=0x%02x)\n",
+           label,
+           static_cast<unsigned>(current_animation + 1),
+           static_cast<unsigned>(kAnimCount),
+           kAnimationNames[current_animation],
+           static_cast<unsigned>(current_animation));
+    swd_rtt_printf("%s animation %u/%u: %s (id=0x%02x)\n",
+                   label,
+                   static_cast<unsigned>(current_animation + 1),
+                   static_cast<unsigned>(kAnimCount),
+                   kAnimationNames[current_animation],
+                   static_cast<unsigned>(current_animation));
+}
+
+#ifdef ANIMATION_AUTOPLAY
 static void update_animation_autoplay(uint32_t now_ms) {
     constexpr uint32_t kStateDurationMs = 3000;
     static uint8_t previous_animation = kAnimCount;
@@ -64,11 +80,7 @@ static void update_animation_autoplay(uint32_t now_ms) {
     if (next_animation != previous_animation) {
         current_animation = next_animation;
         previous_animation = next_animation;
-        printf("Demo animation %u/%u: %s (id=0x%02x)\n",
-               static_cast<unsigned>(current_animation + 1),
-               static_cast<unsigned>(kAnimCount),
-               kAnimationNames[current_animation],
-               static_cast<unsigned>(current_animation));
+        report_animation("Demo");
     }
 }
 #endif
@@ -122,7 +134,7 @@ static void i2c_slave_init() {
 }
 
 static void display_init() {
-    const uint8_t madctl = (DEVICE_ROLE == kRoleRightEye) ? 0x88 : 0x48;
+    const uint8_t madctl = (DEVICE_ROLE == kRoleRightEye) ? 0x48 : 0x88;
     eye_display::init(brightness, madctl);
 }
 
@@ -204,6 +216,7 @@ static void parse_command() {
         prepare_status_response();
         return;
     }
+    const uint8_t previous_animation = current_animation;
     uint8_t command = local[1];
     last_sequence = local[2];
     const uint8_t *payload = &local[4];
@@ -237,6 +250,9 @@ static void parse_command() {
         break;
     }
     prepare_status_response();
+    if (current_animation != previous_animation) {
+        report_animation("Current");
+    }
 }
 
 int main() {
@@ -246,6 +262,11 @@ int main() {
     display_init();
     i2c_slave_init();
     printf("SarcasmOS eye role=%d addr=0x%02x\n", DEVICE_ROLE, I2C_ADDRESS);
+    swd_rtt_printf("SarcasmOS eye role=%d addr=0x%02x\n",
+                   DEVICE_ROLE, I2C_ADDRESS);
+#ifndef ANIMATION_AUTOPLAY
+    report_animation("Current");
+#endif
 
     uint32_t last_draw = 0;
     while (true) {

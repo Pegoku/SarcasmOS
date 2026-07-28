@@ -24,10 +24,12 @@ Actions (run in this order regardless of argument order):
   --build                Configure and build the selected firmware
   --upload               Flash and verify it with J-Link/OpenOCD
   --monitor              Open its 115200-baud UART with minicom
+  --swd-monitor          Stream state changes through SWD using RTT
 
 Options:
   --port DEVICE          Serial device for --monitor (for example /dev/ttyACM0)
   --baud RATE            Monitor baud rate (default: 115200)
+  --rtt-port PORT        Local RTT TCP port (default: 9090)
   -h, --help             Show this help
 
 Environment overrides:
@@ -37,9 +39,9 @@ Environment overrides:
   EYE_RIGHT_PORT         Serial device used for --right
 
 Examples:
-  ./flash.sh --left --regular --build --upload --monitor
-  ./flash.sh --left --self-test --build --upload --monitor
-  ./flash.sh --right --demo --build --upload --monitor
+  ./flash.sh --left --regular --build --upload --swd-monitor
+  ./flash.sh --left --self-test --build --upload --swd-monitor
+  ./flash.sh --right --demo --build --upload --swd-monitor
 
 For convenience, --monitor--left and --monitor--right are also accepted.
 EOF
@@ -56,8 +58,10 @@ firmware_selected=false
 do_build=false
 do_upload=false
 do_monitor=false
+do_swd_monitor=false
 serial_port=""
 baud=115200
+rtt_port=9090
 
 while (($#)); do
     case "$1" in
@@ -80,6 +84,7 @@ while (($#)); do
         --build) do_build=true ;;
         --upload) do_upload=true ;;
         --monitor) do_monitor=true ;;
+        --swd-monitor) do_swd_monitor=true ;;
         --monitor--left)
             [[ -z "$eye" || "$eye" == left ]] || fail "choose only one of --left and --right"
             eye=left
@@ -100,6 +105,11 @@ while (($#)); do
             baud=$2
             shift
             ;;
+        --rtt-port)
+            (($# >= 2)) || fail "--rtt-port requires a port number"
+            rtt_port=$2
+            shift
+            ;;
         -h|--help)
             show_help
             exit 0
@@ -110,8 +120,12 @@ while (($#)); do
 done
 
 [[ -n "$eye" ]] || fail "select an eye with --left or --right"
-$do_build || $do_upload || $do_monitor || fail "select at least one action: --build, --upload, or --monitor"
+$do_build || $do_upload || $do_monitor || $do_swd_monitor || \
+    fail "select at least one action: --build, --upload, --monitor, or --swd-monitor"
 [[ "$baud" =~ ^[0-9]+$ ]] && ((baud > 0)) || fail "invalid baud rate: $baud"
+[[ "$rtt_port" =~ ^[0-9]+$ ]] && ((rtt_port > 0 && rtt_port <= 65535)) || \
+    fail "invalid RTT port: $rtt_port"
+$do_monitor && $do_swd_monitor && fail "choose only one of --monitor and --swd-monitor"
 
 if [[ "$eye" == left ]]; then
     role=0
@@ -171,7 +185,7 @@ if $do_build; then
     cmake --build "$build_dir" --target "$build_target"
 fi
 
-if $do_upload; then
+if $do_upload || $do_swd_monitor; then
     [[ -f "$image" ]] || fail "firmware not found at $image; run with --build first"
 
     openocd_bin=""
@@ -194,16 +208,74 @@ if $do_upload; then
         [[ -x "$openocd_bin" ]] || fail "OpenOCD is not executable at $openocd_bin"
         [[ -d "$openocd_scripts" ]] || fail "OpenOCD scripts not found at $openocd_scripts"
     fi
-
-    printf 'Uploading %s firmware to the %s eye with OpenOCD...\n' "$firmware" "$eye"
     openocd_args=()
     [[ -z "$openocd_scripts" ]] || openocd_args+=(-s "$openocd_scripts")
+fi
+
+if $do_upload; then
+    printf 'Uploading %s firmware to the %s eye with OpenOCD...\n' "$firmware" "$eye"
     "$openocd_bin" "${openocd_args[@]}" \
         -f interface/jlink.cfg \
         -c "adapter speed 100" \
         -c "set USE_CORE 0" \
         -f target/rp2040.cfg \
         -c "program $image verify reset exit"
+fi
+
+if $do_swd_monitor; then
+    command -v arm-none-eabi-nm >/dev/null 2>&1 || \
+        fail "arm-none-eabi-nm is required for --swd-monitor"
+    command -v nc >/dev/null 2>&1 || fail "nc is required for --swd-monitor"
+
+    rtt_address=$(arm-none-eabi-nm "$image" | awk \
+        '$3 == "swd_rtt_control_block" { print "0x" $1; exit }')
+    [[ -n "$rtt_address" ]] || \
+        fail "RTT control block not found in $image; rebuild the firmware"
+
+    openocd_log=$(mktemp "${TMPDIR:-/tmp}/eye-openocd.XXXXXX")
+    openocd_pid=""
+    cleanup_swd_monitor() {
+        if [[ -n "$openocd_pid" ]] && kill -0 "$openocd_pid" 2>/dev/null; then
+            kill "$openocd_pid" 2>/dev/null || true
+            wait "$openocd_pid" 2>/dev/null || true
+        fi
+        rm -f -- "$openocd_log"
+    }
+    trap cleanup_swd_monitor EXIT
+    trap 'exit 130' INT TERM
+
+    if nc -z 127.0.0.1 "$rtt_port" 2>/dev/null; then
+        fail "RTT port $rtt_port is already in use; choose another with --rtt-port"
+    fi
+
+    printf 'Starting non-halting SWD monitor for %s firmware on the %s eye...\n' \
+        "$firmware" "$eye"
+    "$openocd_bin" "${openocd_args[@]}" \
+        -c "gdb port disabled" \
+        -c "tcl port disabled" \
+        -c "telnet port disabled" \
+        -f interface/jlink.cfg \
+        -c "adapter speed 100" \
+        -c "set USE_CORE 0" \
+        -f target/rp2040.cfg \
+        -c "init" \
+        -c "resume" \
+        -c "rtt setup $rtt_address 0x100" \
+        -c "rtt polling_interval 20" \
+        -c "rtt start" \
+        -c "rtt server start $rtt_port 0" \
+        >"$openocd_log" 2>&1 &
+    openocd_pid=$!
+
+    printf 'Streaming RTT state messages (Ctrl-C to exit)...\n'
+    while ! nc 127.0.0.1 "$rtt_port" 2>/dev/null; do
+        if ! kill -0 "$openocd_pid" 2>/dev/null; then
+            printf 'OpenOCD failed to start:\n' >&2
+            sed -n '1,160p' "$openocd_log" >&2
+            fail "could not start the SWD monitor"
+        fi
+        sleep 0.1
+    done
 fi
 
 if $do_monitor; then

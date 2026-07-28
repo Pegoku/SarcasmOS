@@ -80,19 +80,25 @@ The helper script can build, upload, and then monitor all three firmware types
 for either eye:
 
 ```sh
-./flash.sh --left --regular --build --upload --monitor
-./flash.sh --left --self-test --build --upload --monitor
-./flash.sh --right --demo --build --upload --monitor
+./flash.sh --left --regular --build --upload --swd-monitor
+./flash.sh --left --self-test --build --upload --swd-monitor
+./flash.sh --right --demo --build --upload --swd-monitor
 ```
 
 `--regular` is the default and receives animation commands over I2C.
 `--self-test` cycles through display patterns, while `--demo` cycles through all
-31 animations and prints each animation's name and ID to the serial monitor.
-Actions, firmware type, and the eye selector can appear in any order. The
+31 animations and prints each animation's name and ID. Regular firmware also
+reports every I2C-driven animation change. Use `--monitor` for UART or
+`--swd-monitor` to stream the same messages non-intrusively over SWD using RTT;
+the SWD monitor needs no serial adapter and keeps the RP2040 running.
+Actions, firmware type, and the eye selector can appear in any order. The UART
 monitor automatically uses the only connected `/dev/serial/by-id`,
 `/dev/ttyACM`, or `/dev/ttyUSB` device. If more than one is connected, select
 one with `--port /dev/ttyACM0` or set `EYE_LEFT_PORT` and `EYE_RIGHT_PORT`.
 Run `./flash.sh --help` for all options and environment overrides.
+
+All three firmware modes rotate the display output 180 degrees while retaining
+the correct mirrored orientation for each eye.
 
 The equivalent manual build commands are below.
 

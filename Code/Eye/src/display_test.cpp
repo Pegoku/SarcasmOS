@@ -5,6 +5,7 @@
 
 #include "gc9a01.hpp"
 #include "protocol.hpp"
+#include "swd_rtt.hpp"
 
 #ifndef DEVICE_ROLE
 #define DEVICE_ROLE kRoleLeftEye
@@ -115,7 +116,7 @@ int main() {
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
     watchdog_enable(2000, true);
-    const uint8_t madctl = (DEVICE_ROLE == kRoleRightEye) ? 0x88 : 0x48;
+    const uint8_t madctl = (DEVICE_ROLE == kRoleRightEye) ? 0x48 : 0x88;
     eye_display::init(255, madctl);
 
     int last_pattern = -1;
@@ -128,6 +129,9 @@ int main() {
             last_pattern = pattern;
             printf("Display test %d/%d: %s\n",
                    pattern + 1, kPatternCount, kPatternNames[pattern]);
+            swd_rtt_printf("Display test %d/%d: %s\n",
+                           pattern + 1, kPatternCount,
+                           kPatternNames[pattern]);
             draw_pattern(static_cast<Pattern>(pattern));
         }
         tight_loop_contents();

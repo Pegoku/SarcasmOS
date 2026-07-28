@@ -20,7 +20,7 @@ add_custom_command(
 )
 add_custom_target(generate_eye_assets DEPENDS ${EYE_ASSET_HEADER})
 
-add_executable(sarcasmos_eye src/main.cpp src/gc9a01.cpp)
+add_executable(sarcasmos_eye src/main.cpp src/gc9a01.cpp src/swd_rtt.cpp)
 add_dependencies(sarcasmos_eye generate_eye_assets)
 target_include_directories(sarcasmos_eye PRIVATE include ${CMAKE_CURRENT_SOURCE_DIR})
 if(NOT DEFINED DEVICE_ROLE)
@@ -39,7 +39,11 @@ pico_enable_stdio_uart(sarcasmos_eye 1)
 pico_enable_stdio_usb(sarcasmos_eye 0)
 pico_add_extra_outputs(sarcasmos_eye)
 
-add_executable(sarcasmos_eye_display_test src/display_test.cpp src/gc9a01.cpp)
+add_executable(sarcasmos_eye_display_test
+    src/display_test.cpp
+    src/gc9a01.cpp
+    src/swd_rtt.cpp
+)
 target_include_directories(sarcasmos_eye_display_test PRIVATE include)
 target_compile_definitions(sarcasmos_eye_display_test PRIVATE DEVICE_ROLE=${DEVICE_ROLE})
 target_link_libraries(sarcasmos_eye_display_test

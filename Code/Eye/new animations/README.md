@@ -9,6 +9,12 @@ of its RGB565 drawing primitives.
 The renderer targets one 240x240 round display at a time. Call it with the same
 timestamp for the left and right boards to keep the pair synchronized.
 
+The current extraction comes from
+`ESP32_Bot_Animations_Code(1)/esp32/BotAnimator_ESP32.ino`, SHA-256
+`79bee8c3205b0529782df7d4fd7d64983247466becd68e4a8155f625e0e9dc20`.
+Compared with the previous supplied sketch, this revision adds pulsing ringed
+Play/Pause/Stop icons and renders them identically on both displays.
+
 ## Extracted catalog
 
 The source sketch exposes 44 selectable variants:

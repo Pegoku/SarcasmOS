@@ -14,6 +14,8 @@ import tempfile
 
 HERE = pathlib.Path(__file__).resolve().parent
 DEFAULT_OUTPUT = HERE / "eye_assets.json"
+SOURCE_NAME = "ESP32_Bot_Animations_Code(1)/esp32/BotAnimator_ESP32.ino"
+SOURCE_SHA256 = "79bee8c3205b0529782df7d4fd7d64983247466becd68e4a8155f625e0e9dc20"
 
 
 def rgb565(value: int) -> list[int]:
@@ -157,6 +159,8 @@ def build_pack(frames_directory: pathlib.Path) -> dict:
     return {
         "format": "sarcasmos-eye-assets",
         "version": 1,
+        "source": SOURCE_NAME,
+        "source_sha256": SOURCE_SHA256,
         "width": 240,
         "height": 240,
         "palette": PALETTE,
@@ -195,7 +199,6 @@ def map_to_protocol(source: dict) -> dict:
         })
     return {
         **source,
-        "source": "BotAnimator_ESP32.ino procedural mapping",
         "animations": animations,
         "sprites": {
             name: sprite

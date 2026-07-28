@@ -91,6 +91,7 @@ private:
     void drawWeather(const State& state, bool left, uint32_t nowMs);
     void drawSystem(const State& state, bool left, uint32_t nowMs);
     void drawEqualizer(bool withTime, uint32_t nowMs);
+    void drawMusicIcon(MusicMode mode, uint32_t nowMs);
     void drawPowerEye(bool left, bool on, uint32_t elapsedMs);
     void drawRoundBackground(uint16_t color);
     void drawBezel();

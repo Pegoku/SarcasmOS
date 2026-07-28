@@ -198,6 +198,29 @@ void Renderer::drawEqualizer(bool withTime, uint32_t nowMs) {
     drawBezel();
 }
 
+void Renderer::drawMusicIcon(MusicMode mode, uint32_t nowMs) {
+    const float pulse = 1.0f + std::fabs(std::sin(
+        seconds(nowMs) * 2.0f * kPi)) * 0.04f;
+    canvas_.drawCircle(kCenterX, kCenterY, 82, kCyan);
+    canvas_.drawCircle(kCenterX, kCenterY, 81, kCyan);
+    if (mode == MusicMode::Play) {
+        canvas_.fillTriangle(
+            kCenterX - 26 * pulse, kCenterY - 44 * pulse,
+            kCenterX - 26 * pulse, kCenterY + 44 * pulse,
+            kCenterX + 48 * pulse, kCenterY, kCyan);
+    } else if (mode == MusicMode::Pause) {
+        const int16_t height = 92 * pulse;
+        canvas_.fillRoundRect(kCenterX - 36, kCenterY - height / 2,
+                              24, height, 5, kCyan);
+        canvas_.fillRoundRect(kCenterX + 12, kCenterY - height / 2,
+                              24, height, 5, kCyan);
+    } else if (mode == MusicMode::Stop) {
+        const int16_t size = 76 * pulse;
+        canvas_.fillRoundRect(kCenterX - size / 2, kCenterY - size / 2,
+                              size, size, 8, kCyan);
+    }
+}
+
 void Renderer::drawMusic(const State& state, bool left, uint32_t nowMs) {
     drawRoundBackground(kDark);
     const float time = seconds(nowMs);
@@ -231,17 +254,7 @@ void Renderer::drawMusic(const State& state, bool left, uint32_t nowMs) {
             canvas_.drawPixel(x, y + 1, kCyan);
         }
     } else {
-        if (!left) { drawEqualizer(false, nowMs); return; }
-        if (state.music == MusicMode::Play)
-            canvas_.fillTriangle(kCenterX - 28, kCenterY - 38,
-                                 kCenterX - 28, kCenterY + 38,
-                                 kCenterX + 42, kCenterY, kCyan);
-        if (state.music == MusicMode::Pause) {
-            canvas_.fillRect(kCenterX - 30, kCenterY - 36, 22, 72, kCyan);
-            canvas_.fillRect(kCenterX + 10, kCenterY - 36, 22, 72, kCyan);
-        }
-        if (state.music == MusicMode::Stop)
-            canvas_.fillRect(kCenterX - 28, kCenterY - 28, 56, 56, kCyan);
+        drawMusicIcon(state.music, nowMs);
     }
     drawBezel();
 }

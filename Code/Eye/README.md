@@ -56,9 +56,9 @@ python asset_tool.py validate
 python asset_tool.py compile
 ```
 
-An alternate emulator-compatible pack containing the 44 animations extracted
-from the external procedural ESP32 sketch can be previewed without replacing
-the production assets:
+An alternate emulator-compatible pack maps animations extracted from the
+external procedural ESP32 sketch onto the production pack's same 31 state IDs
+and order. It can be previewed without replacing the production assets:
 
 ```sh
 python emulator.py --assets "new animations/eye_assets.json" --view both

@@ -34,7 +34,9 @@ invented here.
 - `procedural_animations.hpp` is the stable public API and complete state list.
 - `procedural_animations.cpp` contains all extracted animation behavior.
 - `eye_assets.json` contains the rendered, palette-indexed 240x240 frames in
-  the same `sarcasmos-eye-assets` format used by the current emulator.
+  the same `sarcasmos-eye-assets` format used by the current emulator. It uses
+  the production pack's exact 31 IDs, names, and order.
+- `MAPPING.md` records how each production state maps to a procedural source.
 - `bitmap_exporter.cpp` rasterizes the real extracted C++ renderer.
 - `build_bitmap_pack.py` rebuilds `eye_assets.json` from that rasterizer.
 - `adapters/tft_espi_canvas.hpp` connects it to the original Arduino library.
@@ -49,9 +51,10 @@ Run this from the `Eye` directory:
 python emulator.py --assets "new animations/eye_assets.json" --view both
 ```
 
-Use Left/Right to move through all 44 animations, Up/Down to step frames, and
-Space to play or pause. Alternate packs are intentionally view-only in the UI,
-so previewing them cannot accidentally overwrite the production 31-state pack.
+Use Left/Right to move through all 31 mapped animations, Up/Down to step frames,
+and Space to play or pause. Alternate packs are intentionally view-only in the
+UI, so previewing them cannot accidentally overwrite the production 31-state
+pack.
 
 Headless preview and validation work too:
 
@@ -67,6 +70,9 @@ Regenerate every bitmap after changing the procedural C++:
 ```sh
 python "new animations/build_bitmap_pack.py"
 ```
+
+The procedural source still contains all 44 original variants. Generate a
+temporary unmapped pack containing all of them with `--all`; see `MAPPING.md`.
 
 ## Use later in firmware
 
@@ -125,5 +131,6 @@ c++ -std=c++17 -Wall -Wextra -Werror \
 The original memory rule still applies to firmware: use the procedural renderer
 to store zero full-screen frames when possible. The JSON bitmap pack exists for
 the desktop emulator and asset interchange. It can also be compiled by the
-existing RLE compiler, but adding all 44 IDs to production firmware still
-requires a deliberate protocol mapping.
+existing RLE compiler. Its state count and ordering already match the current
+firmware protocol; replacing production artwork remains a separate deliberate
+integration step.

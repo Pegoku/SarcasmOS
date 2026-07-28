@@ -46,6 +46,43 @@ PALETTE = [
     {"name": "bezel_inner", "rgb": rgb565(0x2104)},
 ]
 
+# Target protocol state, closest source animation, optional selected frames.
+# None keeps the complete source animation. Selections make static gaze/status
+# poses from a particular point in an otherwise continuous source animation.
+PROTOCOL_MAPPING = (
+    ("idle", "eye-idle", None),
+    ("listening", "eye-listening", None),
+    ("thinking", "eye-dizzy", None),
+    ("thinking_audio", "eye-listening", None),
+    ("thinking_long", "eye-look", None),
+    ("speaking", "eye-happy", None),
+    ("happy_fake", "eye-happy", None),
+    ("angry", "eye-angry", None),
+    ("error", "system-error", None),
+    ("asleep", "eye-sleep", None),
+    ("tool", "eye-angry", None),
+    ("left", "eye-look", (6,)),
+    ("right", "eye-look", (2,)),
+    ("up", "eye-look", (7,)),
+    ("down", "eye-look", (2,)),
+    ("center", "eye-idle", (0,)),
+    ("neutral", "eye-idle", (0,)),
+    ("sarcastic", "eye-confused", None),
+    ("suspicious", "eye-suspicious", None),
+    ("tired", "eye-sleep", None),
+    ("surprised", "eye-surprised", None),
+    ("bored", "eye-suspicious", (0,)),
+    ("dramatic", "eye-alert", None),
+    ("watch", "eye-look", None),
+    ("party", "eye-glitch", None),
+    ("battery_low", "system-battery", None),
+    ("sunny", "weather-sun", None),
+    ("rainy", "weather-rain", None),
+    ("cloudy", "weather-clouds", None),
+    ("stormy", "weather-storm", None),
+    ("snowy", "weather-snow", None),
+)
+
 
 def read_ppm(path: pathlib.Path) -> list[tuple[int, int, int]]:
     header, dimensions, maximum, body = path.read_bytes().split(b"\n", 3)
@@ -128,9 +165,53 @@ def build_pack(frames_directory: pathlib.Path) -> dict:
     }
 
 
+def map_to_protocol(source: dict) -> dict:
+    by_name = {
+        animation["name"]: animation
+        for animation in source["animations"]
+    }
+    animations = []
+    referenced_sprites: set[str] = set()
+    for animation_id, (target_name, source_name, selection) in enumerate(
+        PROTOCOL_MAPPING
+    ):
+        original = by_name[source_name]
+        indices = (
+            range(len(original["frames"]))
+            if selection is None else selection
+        )
+        frames = [original["frames"][index] for index in indices]
+        for frame in frames:
+            referenced_sprites.update(frame.values())
+        animations.append({
+            "id": animation_id,
+            "name": target_name,
+            "mapped_from": source_name,
+            "flip_left": False,
+            "flip_right": False,
+            "playback": original["playback"],
+            "frame_ms": 1000 if selection is not None else original["frame_ms"],
+            "frames": frames,
+        })
+    return {
+        **source,
+        "source": "BotAnimator_ESP32.ino procedural mapping",
+        "animations": animations,
+        "sprites": {
+            name: sprite
+            for name, sprite in source["sprites"].items()
+            if name in referenced_sprites
+        },
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=pathlib.Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--all", action="store_true",
+        help="export all 44 source modes instead of the 31-state protocol map",
+    )
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="bot-animation-export-") as temporary:
         temporary_path = pathlib.Path(temporary)
@@ -138,7 +219,8 @@ def main() -> int:
         frames = temporary_path / "frames"
         compile_exporter(exporter)
         subprocess.run([str(exporter), str(frames)], check=True)
-        pack = build_pack(frames)
+        source_pack = build_pack(frames)
+        pack = source_pack if args.all else map_to_protocol(source_pack)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(pack, indent=2) + "\n")
     print(

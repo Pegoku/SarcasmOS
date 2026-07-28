@@ -24,7 +24,6 @@ EXPECTED_STATES = (
 )
 ROLES = ("left", "right")
 PLAYBACK_IDS = {"loop": 0, "ping_pong": 1}
-FLIP_MODES = ("right", "left", "none")
 
 
 def load_assets(path: pathlib.Path = DEFAULT_ASSETS) -> dict[str, Any]:
@@ -85,8 +84,11 @@ def validate_assets(data: dict[str, Any]) -> None:
             raise ValueError(f"{animation['name']}: ID must be {state_id}")
         if animation.get("playback") not in PLAYBACK_IDS:
             raise ValueError(f"{animation['name']}: invalid playback mode")
-        if animation.get("flip") not in FLIP_MODES:
-            raise ValueError(f"{animation['name']}: invalid eye flip mode")
+        for role in ROLES:
+            if not isinstance(animation.get(f"flip_{role}"), bool):
+                raise ValueError(
+                    f"{animation['name']}: flip_{role} must be true or false"
+                )
         if (not isinstance(animation.get("frame_ms"), int) or
                 not 1 <= animation["frame_ms"] <= 65535):
             raise ValueError(f"{animation['name']}: invalid frame_ms")
@@ -108,11 +110,9 @@ def validate_assets(data: dict[str, Any]) -> None:
                     )
             left = data["sprites"][frame["left"]]["rows"]
             right = data["sprites"][frame["right"]]["rows"]
-            expected = mirror_rows(left) if animation["flip"] != "none" else left
-            if right != expected:
+            if right != mirror_rows(left):
                 raise ValueError(
-                    f"{animation['name']}: eye pair does not match "
-                    f"flip={animation['flip']!r}"
+                    f"{animation['name']}: right source must mirror left source"
                 )
 
     valid_characters = set("0123456789ABCDEF"[:len(colors)])
@@ -167,10 +167,13 @@ def compile_assets(
     animation_records = []
     for animation in data["animations"]:
         first_pair = len(frame_pairs)
-        frame_pairs.extend(
-            (sprite_ids[frame["left"]], sprite_ids[frame["right"]])
-            for frame in animation["frames"]
-        )
+        for frame in animation["frames"]:
+            left = "right" if animation["flip_left"] else "left"
+            right = "left" if animation["flip_right"] else "right"
+            frame_pairs.append((
+                sprite_ids[frame[left]],
+                sprite_ids[frame[right]],
+            ))
         animation_records.append((
             first_pair, len(animation["frames"]), animation["frame_ms"],
             PLAYBACK_IDS[animation["playback"]],
@@ -393,13 +396,8 @@ def import_sprite(
     except IndexError as error:
         raise ValueError(f"{state} has no frame {frame_index + 1}") from error
     edited_rows = pixels_to_rows(data, pixels)
-    mirrored = animation["flip"] != "none"
-    left_rows = (
-        edited_rows
-        if role == "left" or not mirrored
-        else mirror_rows(edited_rows)
-    )
-    right_rows = mirror_rows(left_rows) if mirrored else left_rows
+    left_rows = edited_rows if role == "left" else mirror_rows(edited_rows)
+    right_rows = mirror_rows(left_rows)
     left_sprite = f"{state}_left_{frame_index:02d}_edited"
     right_sprite = f"{state}_right_{frame_index:02d}_mirrored"
     data["sprites"][left_sprite] = {"rows": left_rows}
@@ -458,31 +456,17 @@ def set_animation_frame_ms(state: str, frame_ms: int) -> None:
     write_asset_pack(data)
 
 
-def set_animation_flip(state: str, flip: str, source_role: str = "left") -> None:
-    if flip not in FLIP_MODES:
-        raise ValueError(f"flip must be one of {FLIP_MODES}")
-    if source_role not in ROLES:
-        raise ValueError(f"source role must be one of {ROLES}")
-    data = load_assets()
-    animation = animation_for(data, state)
-    animation["flip"] = flip
-    for index, frame in enumerate(animation["frames"]):
-        if flip == "right":
-            source_rows = data["sprites"][frame["left"]]["rows"]
-            sprite = f"{state}_right_{index:02d}_flipped"
-            data["sprites"][sprite] = {"rows": mirror_rows(source_rows)}
-            frame["right"] = sprite
-        elif flip == "left":
-            source_rows = data["sprites"][frame["right"]]["rows"]
-            sprite = f"{state}_left_{index:02d}_flipped"
-            data["sprites"][sprite] = {"rows": mirror_rows(source_rows)}
-            frame["left"] = sprite
-        else:
-            source = frame[source_role]
-            frame["left"] = source
-            frame["right"] = source
-    prune_unreferenced_sprites(data)
-    write_asset_pack(data)
+def save_asset_source(data: dict[str, Any]) -> None:
+    """Atomically save loaded assets without compiling the firmware header."""
+    token = time.monotonic_ns()
+    temporary = DEFAULT_ASSETS.with_name(
+        f".{DEFAULT_ASSETS.name}.{token}.tmp"
+    )
+    try:
+        temporary.write_text(json.dumps(data, indent=2) + "\n")
+        temporary.replace(DEFAULT_ASSETS)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def sync_animation_frames(
@@ -498,13 +482,8 @@ def sync_animation_frames(
         if (width, height) != (240, 240):
             raise ValueError(f"{source.name} must be 240x240")
         edited_rows = pixels_to_rows(data, pixels)
-        mirrored = animation["flip"] != "none"
-        left_rows = (
-            edited_rows
-            if role == "left" or not mirrored
-            else mirror_rows(edited_rows)
-        )
-        right_rows = mirror_rows(left_rows) if mirrored else left_rows
+        left_rows = edited_rows if role == "left" else mirror_rows(edited_rows)
+        right_rows = mirror_rows(left_rows)
         left_sprite = f"{state}_left_{index:02d}_edited"
         right_sprite = f"{state}_right_{index:02d}_mirrored"
         data["sprites"][left_sprite] = {"rows": left_rows}

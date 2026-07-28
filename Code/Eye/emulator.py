@@ -108,7 +108,11 @@ class AssetPack:
         return step % count
 
     def sprite_name(self, state_id: int, role: str, frame: int) -> str:
-        return self.animations[state_id]["frames"][frame][role]
+        animation = self.animations[state_id]
+        source_role = (
+            "right" if role == "left" else "left"
+        ) if animation[f"flip_{role}"] else role
+        return animation["frames"][frame][source_role]
 
     def frame_pixels(
         self, state_id: int, role: str, frame: int,
@@ -209,17 +213,16 @@ class EmulatorWindow:
         flip_buttons = tk.Frame(self.root, background="#111111")
         flip_buttons.pack(fill="x", padx=8, pady=(0, 5))
         tk.Label(
-            flip_buttons, text="Pairing:",
+            flip_buttons, text="Preview orientation:",
             background="#111111", foreground="#aaaaaa",
         ).pack(side="left", padx=(0, 5))
-        for label, mode in (
-            ("Flip right from left", "right"),
-            ("Flip left from right", "left"),
-            ("No flip", "none"),
+        for label, role in (
+            ("Flip left eye", "left"),
+            ("Flip right eye", "right"),
         ):
             tk.Button(
                 flip_buttons, text=label,
-                command=lambda selected=mode: self.set_flip(selected),
+                command=lambda selected=role: self.toggle_flip(selected),
             ).pack(side="left", padx=(0, 5))
 
         tk.Label(
@@ -272,23 +275,18 @@ class EmulatorWindow:
         views = ("left", "both", "right")
         self.set_view(views[(views.index(self.view) + 1) % len(views)])
 
-    def set_flip(self, mode: str) -> None:
-        state = self.state_name
-        source_role = self.edit_role
+    def toggle_flip(self, role: str) -> None:
+        animation = self.assets.animations[self.state_id]
+        key = f"flip_{role}"
+        animation[key] = not animation[key]
         try:
-            asset_tool.set_animation_flip(state, mode, source_role)
-            self.assets.reload()
-            self.state_id = self.assets.state_ids[state]
+            asset_tool.save_asset_source(self.assets.data)
             self.last_render_key = None
-            if mode == "right":
-                message = "Right eye now flips the left eye"
-            elif mode == "left":
-                message = "Left eye now flips the right eye"
-            else:
-                message = f"No flip; copied the {source_role} eye"
-            self.show_notice(message)
-        except (OSError, ValueError, KeyError) as error:
-            self.show_notice(f"Could not change eye pairing: {error}")
+            state = "flipped" if animation[key] else "normal"
+            self.show_notice(f"{role.title()} eye orientation: {state}")
+        except OSError as error:
+            animation[key] = not animation[key]
+            self.show_notice(f"Could not save eye orientation: {error}")
 
     def native_ppm(
         self, state_id: int | None = None, frame: int | None = None,
@@ -673,7 +671,8 @@ class EmulatorWindow:
         status = (
             f"0x{self.state_id:02x}  {self.state_name:<16} "
             f"{self.view.upper():<5} view  "
-            f"flip {animation['flip']:<5}  "
+            f"L:{'flip' if animation['flip_left'] else 'normal'} "
+            f"R:{'flip' if animation['flip_right'] else 'normal'}  "
             f"frame {self.current_local_frame + 1}/"
             f"{len(animation['frames'])}   "
             f"delay {animation['frame_ms']} ms   {mode}   "
@@ -691,7 +690,6 @@ class EmulatorWindow:
 def self_test(assets: AssetPack) -> None:
     hashes = set()
     for state_id, animation in enumerate(assets.animations):
-        flip = animation["flip"]
         for frame in range(len(animation["frames"])):
             left = assets.sprite_cache[
                 animation["frames"][frame]["left"]
@@ -699,7 +697,7 @@ def self_test(assets: AssetPack) -> None:
             right = assets.sprite_cache[
                 animation["frames"][frame]["right"]
             ]
-            expected = left if flip == "none" else [
+            expected = [
                 value
                 for y in range(assets.height)
                 for value in reversed(
@@ -708,8 +706,7 @@ def self_test(assets: AssetPack) -> None:
             ]
             if right != expected:
                 raise AssertionError(
-                    f"{animation['name']} frame {frame + 1} "
-                    f"does not match flip={flip}"
+                    f"{animation['name']} frame {frame + 1} is not mirrored"
                 )
         for role in asset_tool.ROLES:
             lit_frames = 0

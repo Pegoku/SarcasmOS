@@ -1,0 +1,712 @@
+#!/usr/bin/env python3
+"""Desktop emulator and sprite-editing UI for the SarcasmOS round eyes."""
+
+from __future__ import annotations
+
+import argparse
+from dataclasses import dataclass
+import hashlib
+import math
+import pathlib
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from typing import Any
+
+import asset_tool
+
+FRAME_MS = 40
+BLACK = (0, 0, 0)
+EDIT_SETTLE_MS = 250
+
+
+@dataclass
+class EditTarget:
+    path: pathlib.Path
+    state: str
+    role: str
+    frame: int
+    observed_signature: tuple[int, int]
+    changed_at_ms: int | None = None
+
+
+@dataclass
+class AnimationEditSession:
+    directory: pathlib.Path
+    state: str
+    role: str
+    observed_signatures: dict[pathlib.Path, tuple[int, int]]
+    changed_at_ms: int | None = None
+
+
+def numbered_animation_files(
+    directory: pathlib.Path, state: str, role: str,
+) -> list[pathlib.Path]:
+    pattern = re.compile(
+        rf"^{re.escape(state)}-{re.escape(role)}-frame-(\d+)\.ppm$"
+    )
+    numbered = []
+    for path in directory.iterdir():
+        match = pattern.fullmatch(path.name)
+        if path.is_file() and match and int(match.group(1)) > 0:
+            numbered.append((int(match.group(1)), path.name, path))
+    return [entry[2] for entry in sorted(numbered)]
+
+
+def compact_animation_files(
+    files: list[pathlib.Path], state: str, role: str,
+) -> list[pathlib.Path]:
+    if not files:
+        return []
+    directory = files[0].parent
+    token = time.monotonic_ns()
+    temporary = []
+    for index, source in enumerate(files, 1):
+        target = directory / f".{state}-{role}-renumber-{token}-{index}.ppm"
+        source.replace(target)
+        temporary.append(target)
+    compacted = []
+    for index, source in enumerate(temporary, 1):
+        target = directory / f"{state}-{role}-frame-{index:02d}.ppm"
+        source.replace(target)
+        compacted.append(target)
+    return compacted
+
+
+class AssetPack:
+    def __init__(self) -> None:
+        self.reload()
+
+    def reload(self) -> None:
+        self.data = asset_tool.load_assets()
+        self.width = self.data["width"]
+        self.height = self.data["height"]
+        self.palette = asset_tool.palette(self.data)
+        self.animations = self.data["animations"]
+        self.state_ids = {
+            animation["name"]: animation["id"]
+            for animation in self.animations
+        }
+        self.sprite_cache = {
+            name: asset_tool.decode_sprite(self.data, name)
+            for name in self.data["sprites"]
+        }
+
+    def local_frame(self, state_id: int, elapsed_ms: int) -> int:
+        animation = self.animations[state_id]
+        count = len(animation["frames"])
+        if count <= 1:
+            return 0
+        step = elapsed_ms // animation["frame_ms"]
+        if animation["playback"] == "ping_pong":
+            final_frame = count - 1
+            phase = step % (final_frame * 2)
+            return phase if phase <= final_frame else final_frame * 2 - phase
+        return step % count
+
+    def sprite_name(self, state_id: int, role: str, frame: int) -> str:
+        return self.animations[state_id]["frames"][frame][role]
+
+    def frame_pixels(
+        self, state_id: int, role: str, frame: int,
+    ) -> list[tuple[int, int, int]]:
+        sprite = self.sprite_name(state_id, role, frame)
+        return [
+            self.palette[index] for index in self.sprite_cache[sprite]
+        ]
+
+
+class EmulatorWindow:
+    def __init__(self, args: argparse.Namespace) -> None:
+        import tkinter as tk
+        from tkinter import simpledialog
+
+        self.tk = tk
+        self.simpledialog = simpledialog
+        self.assets = AssetPack()
+        self.state_id = self.assets.state_ids[args.state]
+        self.role = args.role
+        self.scale = args.scale
+        self.interval_ms = round(args.interval * 1000)
+        self.auto_play = not args.paused
+        self.brightness = args.brightness
+        now_ms = time.monotonic_ns() // 1_000_000
+        self.last_step_ms = now_ms
+        self.last_update_ms = now_ms
+        self.animation_elapsed_ms = 0
+        self.current_local_frame = 0
+        self.edit_targets: dict[pathlib.Path, EditTarget] = {}
+        self.current_edit_path: pathlib.Path | None = None
+        self.animation_edit_sessions: dict[
+            tuple[str, str], AnimationEditSession
+        ] = {}
+        self.current_animation_edit: tuple[str, str] | None = None
+        self.notice = ""
+        self.notice_until_ms = 0
+        self.last_render_key: tuple[Any, ...] | None = None
+        self.photo_native = None
+        self.photo_scaled = None
+
+        self.root = tk.Tk()
+        self.root.title("SarcasmOS 240x240 round-eye asset emulator")
+        self.root.configure(background="#111111")
+        self.root.resizable(False, False)
+
+        self.status = tk.StringVar()
+        tk.Label(
+            self.root, textvariable=self.status, anchor="w",
+            background="#111111", foreground="#eeeeee",
+            font=("monospace", 11),
+        ).pack(fill="x", padx=8, pady=(7, 4))
+
+        size = self.assets.width * self.scale
+        self.canvas = tk.Canvas(
+            self.root, width=size + 16, height=size + 16,
+            background="#20252a", highlightthickness=0,
+        )
+        self.canvas.pack(padx=8, pady=(0, 5))
+        self.image_item = self.canvas.create_image(8, 8, anchor="nw")
+        self.canvas.create_oval(
+            8, 8, 8 + size, 8 + size,
+            outline="#8b949e", width=max(1, self.scale),
+        )
+
+        buttons = tk.Frame(self.root, background="#111111")
+        buttons.pack(fill="x", padx=8, pady=(0, 5))
+        for label, action in (
+            ("Switch eye (Tab)", self.switch_role),
+            ("Open frame in GIMP (E)", self.open_in_gimp),
+            ("Open animation in GIMP (O)", self.open_animation_in_gimp),
+            ("Copy frame (C)", self.copy_frame),
+            ("Reload assets (R)", self.reload_assets),
+        ):
+            tk.Button(buttons, text=label, command=action).pack(
+                side="left", padx=(0, 5),
+            )
+
+        frame_buttons = tk.Frame(self.root, background="#111111")
+        frame_buttons.pack(fill="x", padx=8, pady=(0, 5))
+        for label, action in (
+            ("Add frame (Insert)", self.add_frame),
+            ("Remove frame (Delete)", self.remove_frame),
+            ("Set frame time (T)", self.change_frame_time),
+            ("Sync folder (S)", self.sync_current_animation_folder),
+        ):
+            tk.Button(frame_buttons, text=label, command=action).pack(
+                side="left", padx=(0, 5),
+            )
+
+        tk.Label(
+            self.root,
+            text=(
+                "←/→ state   ↑/↓ frame   Tab left/right eye   "
+                "Space/A play/pause\n"
+                "Insert/Delete frame   T frame time   S sync folder   "
+                "+/- brightness   Q quit"
+            ),
+            background="#111111", foreground="#aaaaaa",
+            font=("monospace", 9),
+        ).pack(padx=8, pady=(0, 7))
+        self.root.bind_all("<KeyPress>", self.on_key)
+        self.root.after(0, self.update)
+
+    @property
+    def state_name(self) -> str:
+        return self.assets.animations[self.state_id]["name"]
+
+    def show_notice(self, message: str) -> None:
+        self.notice = message
+        self.notice_until_ms = time.monotonic_ns() // 1_000_000 + 4000
+
+    def select(self, state_id: int, pause: bool = True) -> None:
+        self.state_id = state_id % len(self.assets.animations)
+        if pause:
+            self.auto_play = False
+        self.current_local_frame = 0
+        self.animation_elapsed_ms = 0
+        self.last_step_ms = time.monotonic_ns() // 1_000_000
+        self.last_render_key = None
+
+    def switch_role(self) -> None:
+        self.role = "right" if self.role == "left" else "left"
+        self.current_edit_path = None
+        self.current_animation_edit = None
+        self.last_render_key = None
+
+    def native_ppm(
+        self, state_id: int | None = None, frame: int | None = None,
+        role: str | None = None,
+    ) -> bytes:
+        state_id = self.state_id if state_id is None else state_id
+        frame = self.current_local_frame if frame is None else frame
+        role = self.role if role is None else role
+        pixels = self.assets.frame_pixels(state_id, role, frame)
+        body = bytearray(channel for pixel in pixels for channel in pixel)
+        return (
+            f"P6\n{self.assets.width} {self.assets.height}\n255\n".encode() +
+            body
+        )
+
+    @staticmethod
+    def file_signature(path: pathlib.Path) -> tuple[int, int]:
+        stat = path.stat()
+        return stat.st_mtime_ns, stat.st_size
+
+    @staticmethod
+    def edit_root() -> pathlib.Path:
+        return pathlib.Path(tempfile.gettempdir()) / "sarcasmos-eye-edit"
+
+    def export_edit_target(self) -> pathlib.Path:
+        edit_dir = self.edit_root() / "frames"
+        edit_dir.mkdir(parents=True, exist_ok=True)
+        path = edit_dir / (
+            f"{self.state_name}-{self.role}-"
+            f"frame-{self.current_local_frame + 1:02d}.ppm"
+        )
+        path.write_bytes(self.native_ppm())
+        self.edit_targets[path] = EditTarget(
+            path=path, state=self.state_name, role=self.role,
+            frame=self.current_local_frame,
+            observed_signature=self.file_signature(path),
+        )
+        self.current_edit_path = path
+        self.current_animation_edit = None
+        return path
+
+    def launch_gimp(self, paths: list[pathlib.Path]) -> bool:
+        if shutil.which("gimp") is None:
+            self.show_notice("GIMP is not installed")
+            return False
+        subprocess.Popen(
+            ["gimp", *(str(path) for path in paths)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        return True
+
+    def open_in_gimp(self) -> None:
+        path = self.export_edit_target()
+        if self.launch_gimp([path]):
+            self.show_notice(
+                f"Opened {path.name}; saved overwrites import automatically"
+            )
+
+    def open_animation_in_gimp(self) -> None:
+        state, role = self.state_name, self.role
+        animation = self.assets.animations[self.state_id]
+        edit_dir = self.edit_root() / "animations" / state / role
+        edit_dir.mkdir(parents=True, exist_ok=True)
+        for old in edit_dir.glob(f"{state}-{role}-frame-*.ppm"):
+            old.unlink()
+        paths = []
+        for frame in range(len(animation["frames"])):
+            path = edit_dir / f"{state}-{role}-frame-{frame + 1:02d}.ppm"
+            path.write_bytes(self.native_ppm(frame=frame))
+            paths.append(path)
+        key = (state, role)
+        self.animation_edit_sessions[key] = AnimationEditSession(
+            directory=edit_dir, state=state, role=role,
+            observed_signatures={
+                path: self.file_signature(path) for path in paths
+            },
+        )
+        self.current_animation_edit = key
+        self.current_edit_path = None
+        if self.launch_gimp(paths):
+            self.show_notice(
+                f"Opened {len(paths)} {state} {role}-eye frames"
+            )
+
+    def copy_frame(self) -> None:
+        if shutil.which("wl-copy") is None or shutil.which("magick") is None:
+            self.show_notice("Clipboard requires wl-copy and ImageMagick")
+            return
+        converted = subprocess.run(
+            ["magick", "ppm:-", "png:-"], input=self.native_ppm(),
+            capture_output=True, check=False,
+        )
+        if converted.returncode != 0:
+            self.show_notice("ImageMagick could not encode the frame")
+            return
+        try:
+            result = subprocess.run(
+                ["wl-copy", "--type", "image/png"],
+                input=converted.stdout, timeout=2, check=False,
+            )
+        except subprocess.TimeoutExpired:
+            self.show_notice("wl-copy timed out")
+            return
+        self.show_notice(
+            "Copied native 240x240 eye frame"
+            if result.returncode == 0 else "wl-copy failed"
+        )
+
+    def import_target(self, target: EditTarget, automatic: bool) -> bool:
+        try:
+            asset_tool.import_sprite(
+                target.state, target.role, target.frame, target.path,
+            )
+            current_state = self.state_name
+            self.assets.reload()
+            self.state_id = self.assets.state_ids[current_state]
+            target.observed_signature = self.file_signature(target.path)
+            target.changed_at_ms = None
+            self.last_render_key = None
+            prefix = "Auto-imported" if automatic else "Imported"
+            self.show_notice(
+                f"{prefix} {target.state} {target.role} "
+                f"frame {target.frame + 1}"
+            )
+            return True
+        except (OSError, ValueError, KeyError) as error:
+            self.show_notice(f"Import failed: {error}")
+            return False
+
+    def sync_animation_session(
+        self, session: AnimationEditSession, automatic: bool,
+    ) -> bool:
+        try:
+            paths = numbered_animation_files(
+                session.directory, session.state, session.role,
+            )
+            count = asset_tool.sync_animation_frames(
+                session.state, session.role, paths,
+            )
+            compacted = compact_animation_files(
+                paths, session.state, session.role,
+            )
+            session.observed_signatures = {
+                path: self.file_signature(path) for path in compacted
+            }
+            session.changed_at_ms = None
+            current_state = self.state_name
+            self.assets.reload()
+            self.state_id = self.assets.state_ids[current_state]
+            self.current_local_frame = min(
+                self.current_local_frame,
+                len(self.assets.animations[self.state_id]["frames"]) - 1,
+            )
+            self.last_render_key = None
+            prefix = "Auto-synchronized" if automatic else "Synchronized"
+            self.show_notice(
+                f"{prefix} {session.state} {session.role}: {count} frames"
+            )
+            return True
+        except (OSError, ValueError, KeyError) as error:
+            session.changed_at_ms = time.monotonic_ns() // 1_000_000
+            self.show_notice(f"Animation sync failed: {error}")
+            return False
+
+    def watch_edits(self, now_ms: int) -> None:
+        for target in self.edit_targets.values():
+            try:
+                signature = self.file_signature(target.path)
+            except OSError:
+                continue
+            if signature != target.observed_signature:
+                target.observed_signature = signature
+                target.changed_at_ms = now_ms
+            elif (target.changed_at_ms is not None and
+                  now_ms - target.changed_at_ms >= EDIT_SETTLE_MS):
+                self.import_target(target, automatic=True)
+
+        for session in self.animation_edit_sessions.values():
+            try:
+                paths = numbered_animation_files(
+                    session.directory, session.state, session.role,
+                )
+                signatures = {
+                    path: self.file_signature(path) for path in paths
+                }
+            except OSError:
+                continue
+            if signatures != session.observed_signatures:
+                session.observed_signatures = signatures
+                session.changed_at_ms = now_ms
+            elif (session.changed_at_ms is not None and
+                  now_ms - session.changed_at_ms >= EDIT_SETTLE_MS):
+                self.sync_animation_session(session, automatic=True)
+
+    def reload_assets(self) -> None:
+        state = self.state_name
+        try:
+            self.assets.reload()
+            self.state_id = self.assets.state_ids[state]
+            self.last_render_key = None
+            self.show_notice("Reloaded assets/eye_assets.json")
+        except (OSError, ValueError, KeyError) as error:
+            self.show_notice(f"Reload failed: {error}")
+
+    def invalidate_edits(self, state: str) -> None:
+        for key in [key for key in self.animation_edit_sessions if key[0] == state]:
+            del self.animation_edit_sessions[key]
+        self.current_animation_edit = None
+        for path in [
+            path for path, target in self.edit_targets.items()
+            if target.state == state
+        ]:
+            del self.edit_targets[path]
+        self.current_edit_path = None
+
+    def reload_after_frame_change(self, state: str, selected: int) -> None:
+        self.invalidate_edits(state)
+        self.assets.reload()
+        self.state_id = self.assets.state_ids[state]
+        self.auto_play = False
+        self.current_local_frame = selected
+        self.animation_elapsed_ms = (
+            selected * self.assets.animations[self.state_id]["frame_ms"]
+        )
+        self.last_render_key = None
+
+    def add_frame(self) -> None:
+        state = self.state_name
+        try:
+            inserted = asset_tool.insert_animation_frame(
+                state, self.current_local_frame,
+            )
+            self.reload_after_frame_change(state, inserted)
+            self.show_notice(f"Added paired frame {inserted + 1} to {state}")
+        except (OSError, ValueError, KeyError) as error:
+            self.show_notice(f"Could not add frame: {error}")
+
+    def remove_frame(self) -> None:
+        state = self.state_name
+        try:
+            selected = asset_tool.remove_animation_frame(
+                state, self.current_local_frame,
+            )
+            self.reload_after_frame_change(state, selected)
+            self.show_notice(f"Removed paired frame from {state}")
+        except (OSError, ValueError, KeyError) as error:
+            self.show_notice(f"Could not remove frame: {error}")
+
+    def change_frame_time(self) -> None:
+        state = self.state_name
+        animation = self.assets.animations[self.state_id]
+        value = self.simpledialog.askinteger(
+            "Set animation frame time",
+            f"Delay between {state} frames in milliseconds:",
+            parent=self.root, initialvalue=animation["frame_ms"],
+            minvalue=1, maxvalue=65535,
+        )
+        if value is None:
+            return
+        try:
+            asset_tool.set_animation_frame_ms(state, value)
+            self.reload_assets()
+            self.show_notice(f"{state} frame time: {value} ms")
+        except (OSError, ValueError, KeyError) as error:
+            self.show_notice(f"Could not set frame time: {error}")
+
+    def sync_current_animation_folder(self) -> None:
+        state, role = self.state_name, self.role
+        directory = self.edit_root() / "animations" / state / role
+        if not directory.is_dir():
+            self.show_notice(
+                f"No {state}/{role} edit folder; open the animation first"
+            )
+            return
+        session = AnimationEditSession(
+            directory=directory, state=state, role=role,
+            observed_signatures={},
+        )
+        self.animation_edit_sessions[(state, role)] = session
+        self.current_animation_edit = (state, role)
+        self.sync_animation_session(session, automatic=False)
+
+    def on_key(self, event: Any) -> None:
+        key = event.keysym
+        if key == "Left":
+            self.select(self.state_id - 1)
+        elif key == "Right":
+            self.select(self.state_id + 1)
+        elif key in ("Up", "Down"):
+            self.auto_play = False
+            frames = self.assets.animations[self.state_id]["frames"]
+            direction = 1 if key == "Up" else -1
+            self.current_local_frame = (
+                self.current_local_frame + direction
+            ) % len(frames)
+            self.last_render_key = None
+        elif key in ("Tab", "ISO_Left_Tab"):
+            self.switch_role()
+        elif key in ("space", "a", "A"):
+            self.auto_play = not self.auto_play
+        elif key in ("plus", "equal", "KP_Add"):
+            self.brightness = min(255, self.brightness + 16)
+            self.last_render_key = None
+        elif key in ("minus", "underscore", "KP_Subtract"):
+            self.brightness = max(0, self.brightness - 16)
+            self.last_render_key = None
+        elif key == "Insert":
+            self.add_frame()
+        elif key == "Delete":
+            self.remove_frame()
+        elif key in ("t", "T"):
+            self.change_frame_time()
+        elif key in ("s", "S"):
+            self.sync_current_animation_folder()
+        elif key in ("e", "E"):
+            self.open_in_gimp()
+        elif key in ("o", "O"):
+            self.open_animation_in_gimp()
+        elif key in ("c", "C"):
+            self.copy_frame()
+        elif key in ("r", "R"):
+            self.reload_assets()
+        elif key in ("q", "Q", "Escape"):
+            self.root.destroy()
+
+    def render(self, pixels: list[tuple[int, int, int]]) -> None:
+        factor = math.sqrt(self.brightness / 255)
+        scaled = [
+            tuple(round(channel * factor) for channel in pixel)
+            for pixel in pixels
+        ]
+        body = bytearray(channel for pixel in scaled for channel in pixel)
+        ppm = (
+            f"P6\n{self.assets.width} {self.assets.height}\n255\n".encode() +
+            body
+        )
+        self.photo_native = self.tk.PhotoImage(data=ppm, format="PPM")
+        self.photo_scaled = self.photo_native.zoom(self.scale, self.scale)
+        self.canvas.itemconfigure(self.image_item, image=self.photo_scaled)
+
+    def update(self) -> None:
+        now_ms = time.monotonic_ns() // 1_000_000
+        delta_ms = max(0, now_ms - self.last_update_ms)
+        self.last_update_ms = now_ms
+        self.watch_edits(now_ms)
+        if self.auto_play:
+            self.animation_elapsed_ms += delta_ms
+        if self.auto_play and now_ms - self.last_step_ms >= self.interval_ms:
+            self.select(self.state_id + 1, pause=False)
+        if self.auto_play:
+            self.current_local_frame = self.assets.local_frame(
+                self.state_id, self.animation_elapsed_ms,
+            )
+        render_key = (
+            self.state_id, self.role, self.current_local_frame, self.brightness,
+        )
+        if render_key != self.last_render_key:
+            self.render(self.assets.frame_pixels(
+                self.state_id, self.role, self.current_local_frame,
+            ))
+            self.last_render_key = render_key
+
+        animation = self.assets.animations[self.state_id]
+        mode = "AUTO" if self.auto_play else "PAUSED"
+        status = (
+            f"0x{self.state_id:02x}  {self.state_name:<16} "
+            f"{self.role.upper():<5} eye   "
+            f"frame {self.current_local_frame + 1}/"
+            f"{len(animation['frames'])}   "
+            f"delay {animation['frame_ms']} ms   {mode}   "
+            f"brightness {self.brightness:3}/255"
+        )
+        if now_ms < self.notice_until_ms:
+            status = self.notice
+        self.status.set(status)
+        self.root.after(FRAME_MS, self.update)
+
+    def run(self) -> None:
+        self.root.mainloop()
+
+
+def self_test(assets: AssetPack) -> None:
+    hashes = set()
+    for state_id, animation in enumerate(assets.animations):
+        for role in asset_tool.ROLES:
+            lit_frames = 0
+            for frame in range(len(animation["frames"])):
+                pixels = assets.frame_pixels(state_id, role, frame)
+                if len(pixels) != assets.width * assets.height:
+                    raise AssertionError(
+                        f"{animation['name']} {role} frame {frame}: bad size"
+                    )
+                lit = sum(pixel != BLACK for pixel in pixels)
+                lit_frames += lit > 0
+                if animation["name"] == "asleep" and lit == 0:
+                    raise AssertionError("asleep must show a closed eye line")
+                for x, y in ((0, 0), (239, 0), (0, 239), (239, 239)):
+                    if pixels[y * assets.width + x] != BLACK:
+                        raise AssertionError(
+                            f"{animation['name']} leaks outside round screen"
+                        )
+                raw = bytes(
+                    channel for pixel in pixels for channel in pixel
+                )
+                hashes.add(hashlib.sha256(raw).hexdigest())
+            if lit_frames == 0:
+                raise AssertionError(
+                    f"{animation['name']} {role}: every frame is blank"
+                )
+    asset_tool.compile_assets()
+    print(
+        f"OK: rendered {len(assets.animations)} paired animations, "
+        f"{len(assets.data['sprites'])} native 240x240 sprites"
+    )
+    print(f"OK: {len(hashes)} distinct role/frame images")
+
+
+def parse_args() -> argparse.Namespace:
+    assets = AssetPack()
+    states = tuple(animation["name"] for animation in assets.animations)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--state", choices=states, default="idle")
+    parser.add_argument("--role", choices=asset_tool.ROLES, default="left")
+    parser.add_argument("--scale", type=int, default=2)
+    parser.add_argument("--interval", type=float, default=3.0)
+    parser.add_argument("--brightness", type=int, default=180)
+    parser.add_argument("--paused", action="store_true")
+    parser.add_argument(
+        "--self-test", action="store_true",
+        help="validate every asset without opening a window",
+    )
+    parser.add_argument(
+        "--dump", type=pathlib.Path,
+        help="write the selected first frame as a native PPM and exit",
+    )
+    args = parser.parse_args()
+    if args.scale < 1:
+        parser.error("--scale must be at least 1")
+    if args.interval <= 0:
+        parser.error("--interval must be greater than zero")
+    if not 0 <= args.brightness <= 255:
+        parser.error("--brightness must be in the range 0..255")
+    return args
+
+
+def main() -> int:
+    args = parse_args()
+    assets = AssetPack()
+    if args.self_test:
+        self_test(assets)
+        return 0
+    if args.dump is not None:
+        pixels = assets.frame_pixels(
+            assets.state_ids[args.state], args.role, 0,
+        )
+        factor = math.sqrt(args.brightness / 255)
+        pixels = [
+            tuple(round(channel * factor) for channel in pixel)
+            for pixel in pixels
+        ]
+        asset_tool.write_ppm(
+            args.dump, assets.width, assets.height, pixels,
+        )
+        return 0
+    try:
+        EmulatorWindow(args).run()
+    except Exception as error:
+        print(f"Unable to open emulator window: {error}", file=sys.stderr)
+        print("Run with --self-test for headless validation.", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

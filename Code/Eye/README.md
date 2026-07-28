@@ -5,6 +5,54 @@ Pico SDK C++ firmware for each RP2040 eye board.
 The complete Workflow-derived visual and state contract is documented in
 [`EYE_STATES.md`](EYE_STATES.md).
 
+## Animation editor
+
+The desktop emulator and the RP2040 firmware use the same palette-indexed
+240x240 animation pack:
+
+```sh
+python emulator.py
+```
+
+The preview is clipped to the GC9A01's round screen. Each animation frame
+contains separate left- and right-eye artwork so expressions can mirror
+correctly while gaze states still point both pupils in the same direction.
+
+Main controls:
+
+- Left/Right: select one of the 31 states.
+- Up/Down: select a frame and pause playback.
+- Tab: switch between left- and right-eye artwork.
+- Space or A: play/pause.
+- E: open the current native 240x240 frame in GIMP.
+- O: open every frame of the current eye/animation in GIMP.
+- Insert/Delete: add or remove a paired animation frame.
+- T: change the current animation's frame time.
+- S: synchronize an existing animation edit folder.
+- C: copy the current native frame to the image clipboard.
+- R: reload the asset pack.
+
+Saving an emulator-exported PPM over the same file makes the emulator import
+it automatically, update `assets/eye_assets.json`, regenerate
+`generated/eye_assets.hpp`, and reload the preview. New exact colors occupy
+free slots in the shared 16-color palette; once full, imports use the nearest
+palette color.
+
+Headless validation and command-line frame exchange are also available:
+
+```sh
+python emulator.py --self-test
+python emulator.py --state angry --role right --dump angry-right.ppm
+python asset_tool.py export happy_fake happy-left.ppm --role left --frame 2
+python asset_tool.py import happy_fake happy-left.ppm --role left --frame 2
+python asset_tool.py validate
+python asset_tool.py compile
+```
+
+`create_default_assets.py --force` recreates the initial procedural artwork
+and destroys manual sprite edits. Normal CMake builds regenerate only the C++
+header when the editable JSON or compiler changes.
+
 ## Build
 
 Left eye:

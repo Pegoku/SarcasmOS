@@ -84,13 +84,18 @@ class EyeAssets:
     def pixels(
         self, state_id: int, role: str, elapsed_ms: int,
     ) -> tuple[int, list[tuple[int, int, int]]]:
-        animation = self.animations[state_id]
         frame = self.local_frame(state_id, elapsed_ms)
+        return frame, self.frame_pixels(state_id, role, frame)
+
+    def frame_pixels(
+        self, state_id: int, role: str, frame: int,
+    ) -> list[tuple[int, int, int]]:
+        animation = self.animations[state_id]
         source_role = (
             "right" if role == "left" else "left"
         ) if animation[f"flip_{role}"] else role
         sprite = animation["frames"][frame][source_role]
-        return frame, [
+        return [
             self.palette[index] for index in self.sprite_cache[sprite]
         ]
 
@@ -134,13 +139,18 @@ class MouthAssets:
         temperature: int,
     ) -> tuple[int, list[tuple[int, int, int]]]:
         frame = self.local_frame(state_id, elapsed_ms, intensity)
+        return frame, self.frame_pixels(state_id, frame, temperature)
+
+    def frame_pixels(
+        self, state_id: int, frame: int, temperature: int,
+    ) -> list[tuple[int, int, int]]:
         sprite = self.animations[state_id]["frames"][frame]
         pixels = [
             self.palette[index] for index in self.sprite_cache[sprite]
         ]
         if self.animations[state_id]["name"] in WEATHER_STATES:
             pixels = self.apply_temperature(pixels, temperature)
-        return frame, pixels
+        return pixels
 
     def apply_temperature(
         self, pixels: list[tuple[int, int, int]], temperature: int,
@@ -198,6 +208,8 @@ class EmulatorWindow:
         self.intensity = args.intensity
         self.temperature = args.temperature
         self.elapsed_ms = 0
+        self.manual_eye_frame = 0 if args.paused else None
+        self.manual_mouth_frame = 0 if args.paused else None
         now_ms = time.monotonic_ns() // 1_000_000
         self.last_update_ms = now_ms
         self.last_step_ms = now_ms
@@ -253,11 +265,23 @@ class EmulatorWindow:
             controls, text="Reload assets (R)", command=self.reload_assets,
         ).pack(side="right")
 
+        frame_controls = tk.Frame(self.root, background="#111111")
+        frame_controls.pack(fill="x", padx=8, pady=(0, 5))
+        tk.Button(
+            frame_controls, text="Previous frame (↓)",
+            command=lambda: self.step_frames(-1),
+        ).pack(side="left", padx=(0, 5))
+        tk.Button(
+            frame_controls, text="Next frame (↑)",
+            command=lambda: self.step_frames(1),
+        ).pack(side="left")
+
         tk.Label(
             self.root,
             text=(
-                "←/→ state   Space play/pause   +/- brightness   "
-                "[/] intensity   ,/. temperature   R reload   Q quit"
+                "←/→ state   ↑/↓ frame   Space play/pause   "
+                "+/- brightness   [/] intensity   ,/. temperature   "
+                "R reload   Q quit"
             ),
             background="#111111", foreground="#aaaaaa",
             font=("monospace", 9),
@@ -278,6 +302,11 @@ class EmulatorWindow:
         self.state_var.set(self.state_name)
         if pause:
             self.auto_play = False
+            self.manual_eye_frame = 0
+            self.manual_mouth_frame = 0
+        else:
+            self.manual_eye_frame = None
+            self.manual_mouth_frame = None
         self.elapsed_ms = 0
         now_ms = time.monotonic_ns() // 1_000_000
         self.last_step_ms = now_ms
@@ -294,10 +323,41 @@ class EmulatorWindow:
         self.select(self.state_id + 1)
 
     def toggle_playback(self) -> None:
-        self.auto_play = not self.auto_play
+        if self.auto_play:
+            self.manual_eye_frame = self.assets.eye.local_frame(
+                self.state_id, self.elapsed_ms,
+            )
+            self.manual_mouth_frame = self.assets.mouth.local_frame(
+                self.state_id, self.elapsed_ms, self.intensity,
+            )
+            self.auto_play = False
+        else:
+            self.manual_eye_frame = None
+            self.manual_mouth_frame = None
+            self.auto_play = True
         now_ms = time.monotonic_ns() // 1_000_000
         self.last_step_ms = now_ms
         self.last_update_ms = now_ms
+
+    def step_frames(self, direction: int) -> None:
+        eye_animation = self.assets.eye.animations[self.state_id]
+        mouth_animation = self.assets.mouth.animations[self.state_id]
+        if self.manual_eye_frame is None:
+            self.manual_eye_frame = self.assets.eye.local_frame(
+                self.state_id, self.elapsed_ms,
+            )
+        if self.manual_mouth_frame is None:
+            self.manual_mouth_frame = self.assets.mouth.local_frame(
+                self.state_id, self.elapsed_ms, self.intensity,
+            )
+        self.auto_play = False
+        self.manual_eye_frame = (
+            self.manual_eye_frame + direction
+        ) % len(eye_animation["frames"])
+        self.manual_mouth_frame = (
+            self.manual_mouth_frame + direction
+        ) % len(mouth_animation["frames"])
+        self.last_render_key = None
 
     def reload_assets(self) -> None:
         state = self.state_name
@@ -305,6 +365,14 @@ class EmulatorWindow:
             self.assets.reload()
             self.state_id = self.assets.state_ids.get(state, 0)
             self.state_var.set(self.state_name)
+            if self.manual_eye_frame is not None:
+                self.manual_eye_frame %= len(
+                    self.assets.eye.animations[self.state_id]["frames"]
+                )
+            if self.manual_mouth_frame is not None:
+                self.manual_mouth_frame %= len(
+                    self.assets.mouth.animations[self.state_id]["frames"]
+                )
             self.last_render_key = None
             self.show_notice("Reloaded eye and mouth assets")
         except (OSError, ValueError, KeyError) as error:
@@ -323,15 +391,31 @@ class EmulatorWindow:
         return scaled
 
     def render(self) -> tuple[int, int]:
-        left_frame, left = self.assets.eye.pixels(
-            self.state_id, "left", self.elapsed_ms,
-        )
-        right_frame, right = self.assets.eye.pixels(
-            self.state_id, "right", self.elapsed_ms,
-        )
-        mouth_frame, mouth = self.assets.mouth.pixels(
-            self.state_id, self.elapsed_ms, self.intensity, self.temperature,
-        )
+        if self.manual_eye_frame is None:
+            eye_frame, left = self.assets.eye.pixels(
+                self.state_id, "left", self.elapsed_ms,
+            )
+            _, right = self.assets.eye.pixels(
+                self.state_id, "right", self.elapsed_ms,
+            )
+        else:
+            eye_frame = self.manual_eye_frame
+            left = self.assets.eye.frame_pixels(
+                self.state_id, "left", eye_frame,
+            )
+            right = self.assets.eye.frame_pixels(
+                self.state_id, "right", eye_frame,
+            )
+        if self.manual_mouth_frame is None:
+            mouth_frame, mouth = self.assets.mouth.pixels(
+                self.state_id, self.elapsed_ms, self.intensity,
+                self.temperature,
+            )
+        else:
+            mouth_frame = self.manual_mouth_frame
+            mouth = self.assets.mouth.frame_pixels(
+                self.state_id, mouth_frame, self.temperature,
+            )
 
         self.canvas.delete("face")
         self.photos = []
@@ -367,7 +451,7 @@ class EmulatorWindow:
             mouth_y + self.assets.mouth.height * self.mouth_scale,
             outline="#8b949e", width=max(1, self.eye_scale), tags="face",
         )
-        return max(left_frame, right_frame), mouth_frame
+        return eye_frame, mouth_frame
 
     def on_key(self, event: Any) -> None:
         key = event.keysym
@@ -375,6 +459,10 @@ class EmulatorWindow:
             self.previous_state()
         elif key == "Right":
             self.next_state()
+        elif key == "Up":
+            self.step_frames(1)
+        elif key == "Down":
+            self.step_frames(-1)
         elif key in ("space", "a", "A"):
             self.toggle_playback()
         elif key in ("plus", "equal", "KP_Add"):
@@ -411,17 +499,24 @@ class EmulatorWindow:
 
         render_key = (
             self.state_id, self.elapsed_ms // FRAME_MS, self.brightness,
-            self.intensity, self.temperature,
+            self.intensity, self.temperature, self.manual_eye_frame,
+            self.manual_mouth_frame,
         )
         if render_key != self.last_render_key:
             eye_frame, mouth_frame = self.render()
             self.last_render_key = render_key
         else:
-            eye_frame = self.assets.eye.local_frame(
-                self.state_id, self.elapsed_ms,
+            eye_frame = (
+                self.assets.eye.local_frame(self.state_id, self.elapsed_ms)
+                if self.manual_eye_frame is None
+                else self.manual_eye_frame
             )
-            mouth_frame = self.assets.mouth.local_frame(
-                self.state_id, self.elapsed_ms, self.intensity,
+            mouth_frame = (
+                self.assets.mouth.local_frame(
+                    self.state_id, self.elapsed_ms, self.intensity,
+                )
+                if self.manual_mouth_frame is None
+                else self.manual_mouth_frame
             )
 
         eye_animation = self.assets.eye.animations[self.state_id]

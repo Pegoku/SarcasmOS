@@ -76,18 +76,23 @@ header when the editable JSON or compiler changes.
 
 ## Build
 
-The helper script can build, upload, and then monitor either eye in one command:
+The helper script can build, upload, and then monitor all three firmware types
+for either eye:
 
 ```sh
-./flash.sh --build --upload --monitor --left
-./flash.sh --build --upload --monitor --right
+./flash.sh --left --regular --build --upload --monitor
+./flash.sh --left --self-test --build --upload --monitor
+./flash.sh --right --demo --build --upload --monitor
 ```
 
-Actions and the eye selector can appear in any order. The monitor automatically
-uses the only connected `/dev/serial/by-id`, `/dev/ttyACM`, or `/dev/ttyUSB`
-device. If more than one is connected, select one with `--port /dev/ttyACM0`
-or set `EYE_LEFT_PORT` and `EYE_RIGHT_PORT`. Run `./flash.sh --help` for all
-options and environment overrides.
+`--regular` is the default and receives animation commands over I2C.
+`--self-test` cycles through display patterns, while `--demo` cycles through all
+31 animations and prints each animation's name and ID to the serial monitor.
+Actions, firmware type, and the eye selector can appear in any order. The
+monitor automatically uses the only connected `/dev/serial/by-id`,
+`/dev/ttyACM`, or `/dev/ttyUSB` device. If more than one is connected, select
+one with `--port /dev/ttyACM0` or set `EYE_LEFT_PORT` and `EYE_RIGHT_PORT`.
+Run `./flash.sh --help` for all options and environment overrides.
 
 The equivalent manual build commands are below.
 

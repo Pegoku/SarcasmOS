@@ -9,11 +9,16 @@ show_help() {
 Build, upload, and monitor SarcasmOS eye firmware.
 
 Usage:
-  ./flash.sh (--left | --right) [actions] [options]
+  ./flash.sh (--left | --right) [firmware] [actions] [options]
 
 Targets:
   --left                 Use the left-eye firmware (role 0, I2C address 0x30)
   --right                Use the right-eye firmware (role 1, I2C address 0x31)
+
+Firmware (default: --regular):
+  --regular              Normal firmware controlled over I2C
+  --self-test            Cycle through display test patterns
+  --demo                 Cycle through every animation and log its name
 
 Actions (run in this order regardless of argument order):
   --build                Configure and build the selected firmware
@@ -32,9 +37,9 @@ Environment overrides:
   EYE_RIGHT_PORT         Serial device used for --right
 
 Examples:
-  ./flash.sh --build --upload --monitor --left
-  ./flash.sh --right --build --upload
-  ./flash.sh --left --monitor --port /dev/ttyACM0
+  ./flash.sh --left --regular --build --upload --monitor
+  ./flash.sh --left --self-test --build --upload --monitor
+  ./flash.sh --right --demo --build --upload --monitor
 
 For convenience, --monitor--left and --monitor--right are also accepted.
 EOF
@@ -46,6 +51,8 @@ fail() {
 }
 
 eye=""
+firmware=regular
+firmware_selected=false
 do_build=false
 do_upload=false
 do_monitor=false
@@ -61,6 +68,14 @@ while (($#)); do
         --right)
             [[ -z "$eye" || "$eye" == right ]] || fail "choose only one of --left and --right"
             eye=right
+            ;;
+        --regular|--self-test|--demo)
+            requested_firmware=${1#--}
+            if $firmware_selected && [[ "$firmware" != "$requested_firmware" ]]; then
+                fail "choose only one of --regular, --self-test, and --demo"
+            fi
+            firmware=$requested_firmware
+            firmware_selected=true
             ;;
         --build) do_build=true ;;
         --upload) do_upload=true ;;
@@ -108,15 +123,33 @@ else
     role_port=${EYE_RIGHT_PORT:-}
 fi
 
-build_dir="$script_dir/build-$eye"
-image="$build_dir/sarcasmos_eye.elf"
+case "$firmware" in
+    regular)
+        build_dir="$script_dir/build-$eye"
+        build_target=sarcasmos_eye
+        autoplay=OFF
+        ;;
+    self-test)
+        build_dir="$script_dir/build-self-test-$eye"
+        build_target=sarcasmos_eye_display_test
+        autoplay=OFF
+        ;;
+    demo)
+        build_dir="$script_dir/build-demo-$eye"
+        build_target=sarcasmos_eye
+        autoplay=ON
+        ;;
+esac
+image="$build_dir/$build_target.elf"
 
 if $do_build; then
     if [[ -z "${PICO_SDK_PATH:-}" ]]; then
         for cache_file in \
             "$build_dir/CMakeCache.txt" \
             "$script_dir/build-left/CMakeCache.txt" \
-            "$script_dir/build-right/CMakeCache.txt"; do
+            "$script_dir/build-right/CMakeCache.txt" \
+            "$script_dir/build-test/CMakeCache.txt" \
+            "$script_dir/build-animation-test/CMakeCache.txt"; do
             [[ -f "$cache_file" ]] || continue
             cached_sdk=$(sed -n 's/^PICO_SDK_PATH:PATH=//p' "$cache_file" | head -n 1)
             if [[ -f "$cached_sdk/external/pico_sdk_import.cmake" ]]; then
@@ -129,12 +162,13 @@ if $do_build; then
     [[ -f "${PICO_SDK_PATH:-}/external/pico_sdk_import.cmake" ]] || \
         fail "Pico SDK not found; export PICO_SDK_PATH before building"
 
-    printf 'Configuring %s eye...\n' "$eye"
+    printf 'Configuring %s firmware for the %s eye...\n' "$firmware" "$eye"
     cmake -S "$script_dir" -B "$build_dir" \
         -DDEVICE_ROLE="$role" \
-        -DI2C_ADDRESS="$i2c_address"
-    printf 'Building %s eye...\n' "$eye"
-    cmake --build "$build_dir" --target sarcasmos_eye
+        -DI2C_ADDRESS="$i2c_address" \
+        -DANIMATION_AUTOPLAY="$autoplay"
+    printf 'Building %s firmware for the %s eye...\n' "$firmware" "$eye"
+    cmake --build "$build_dir" --target "$build_target"
 fi
 
 if $do_upload; then
@@ -161,7 +195,7 @@ if $do_upload; then
         [[ -d "$openocd_scripts" ]] || fail "OpenOCD scripts not found at $openocd_scripts"
     fi
 
-    printf 'Uploading %s eye with OpenOCD...\n' "$eye"
+    printf 'Uploading %s firmware to the %s eye with OpenOCD...\n' "$firmware" "$eye"
     openocd_args=()
     [[ -z "$openocd_scripts" ]] || openocd_args+=(-s "$openocd_scripts")
     "$openocd_bin" "${openocd_args[@]}" \
@@ -198,7 +232,7 @@ if $do_monitor; then
     fi
     [[ -e "$serial_port" ]] || fail "serial device does not exist: $serial_port"
 
-    printf 'Monitoring %s eye on %s at %s baud (Ctrl-A, X to exit)...\n' \
-        "$eye" "$serial_port" "$baud"
+    printf 'Monitoring %s firmware on the %s eye at %s, %s baud (Ctrl-A, X to exit)...\n' \
+        "$firmware" "$eye" "$serial_port" "$baud"
     exec minicom -D "$serial_port" -b "$baud"
 fi

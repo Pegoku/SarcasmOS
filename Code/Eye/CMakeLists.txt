@@ -41,6 +41,7 @@ pico_add_extra_outputs(sarcasmos_eye)
 
 add_executable(sarcasmos_eye_display_test src/display_test.cpp src/gc9a01.cpp)
 target_include_directories(sarcasmos_eye_display_test PRIVATE include)
+target_compile_definitions(sarcasmos_eye_display_test PRIVATE DEVICE_ROLE=${DEVICE_ROLE})
 target_link_libraries(sarcasmos_eye_display_test
     pico_stdlib
     hardware_pwm

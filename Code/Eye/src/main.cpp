@@ -44,9 +44,32 @@ static uint8_t last_error;
 static uint32_t sync_phase_ms;
 
 #ifdef ANIMATION_AUTOPLAY
+static const char *const kAnimationNames[] = {
+    "idle",      "listening",  "thinking",  "thinking_audio",
+    "thinking_long", "speaking",   "happy_fake", "angry",
+    "error",     "asleep",     "tool",      "left",
+    "right",     "up",         "down",      "center",
+    "neutral",   "sarcastic",  "suspicious", "tired",
+    "surprised", "bored",      "dramatic",  "watch",
+    "party",     "battery_low", "sunny",     "rainy",
+    "cloudy",    "stormy",     "snowy",
+};
+static_assert(sizeof(kAnimationNames) / sizeof(kAnimationNames[0]) == kAnimCount,
+              "demo animation name count mismatch");
+
 static void update_animation_autoplay(uint32_t now_ms) {
     constexpr uint32_t kStateDurationMs = 3000;
-    current_animation = (now_ms / kStateDurationMs) % kAnimCount;
+    static uint8_t previous_animation = kAnimCount;
+    const uint8_t next_animation = (now_ms / kStateDurationMs) % kAnimCount;
+    if (next_animation != previous_animation) {
+        current_animation = next_animation;
+        previous_animation = next_animation;
+        printf("Demo animation %u/%u: %s (id=0x%02x)\n",
+               static_cast<unsigned>(current_animation + 1),
+               static_cast<unsigned>(kAnimCount),
+               kAnimationNames[current_animation],
+               static_cast<unsigned>(current_animation));
+    }
 }
 #endif
 

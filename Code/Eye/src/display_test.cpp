@@ -4,6 +4,11 @@
 #include "pico/stdlib.h"
 
 #include "gc9a01.hpp"
+#include "protocol.hpp"
+
+#ifndef DEVICE_ROLE
+#define DEVICE_ROLE kRoleLeftEye
+#endif
 
 constexpr uint LED_PIN = 2;
 constexpr int WIDTH = eye_display::WIDTH;
@@ -110,7 +115,8 @@ int main() {
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
     watchdog_enable(2000, true);
-    eye_display::init(255, 0x48);
+    const uint8_t madctl = (DEVICE_ROLE == kRoleRightEye) ? 0x88 : 0x48;
+    eye_display::init(255, madctl);
 
     int last_pattern = -1;
     while (true) {

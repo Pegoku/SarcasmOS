@@ -137,6 +137,7 @@
     {
       "id": 0,
       "name": "idle",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 120,
       "frames": [
@@ -177,6 +178,7 @@
     {
       "id": 1,
       "name": "listening",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 192,
       "frames": [
@@ -217,6 +219,7 @@
     {
       "id": 2,
       "name": "thinking",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 160,
       "frames": [
@@ -257,6 +260,7 @@
     {
       "id": 3,
       "name": "thinking_audio",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 110,
       "frames": [
@@ -289,6 +293,7 @@
     {
       "id": 4,
       "name": "thinking_long",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 320,
       "frames": [
@@ -329,6 +334,7 @@
     {
       "id": 5,
       "name": "speaking",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 110,
       "frames": [
@@ -361,6 +367,7 @@
     {
       "id": 6,
       "name": "happy_fake",
+      "flip": "right",
       "playback": "ping_pong",
       "frame_ms": 150,
       "frames": [
@@ -389,6 +396,7 @@
     {
       "id": 7,
       "name": "angry",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 180,
       "frames": [
@@ -413,6 +421,7 @@
     {
       "id": 8,
       "name": "error",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 1024,
       "frames": [
@@ -429,6 +438,7 @@
     {
       "id": 9,
       "name": "asleep",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 1000,
       "frames": [
@@ -441,6 +451,7 @@
     {
       "id": 10,
       "name": "tool",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 192,
       "frames": [
@@ -481,6 +492,7 @@
     {
       "id": 11,
       "name": "left",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 1000,
       "frames": [
@@ -493,6 +505,7 @@
     {
       "id": 12,
       "name": "right",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 1000,
       "frames": [
@@ -505,6 +518,7 @@
     {
       "id": 13,
       "name": "up",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 1000,
       "frames": [
@@ -517,6 +531,7 @@
     {
       "id": 14,
       "name": "down",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 1000,
       "frames": [
@@ -529,6 +544,7 @@
     {
       "id": 15,
       "name": "center",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 1000,
       "frames": [
@@ -541,6 +557,7 @@
     {
       "id": 16,
       "name": "neutral",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 1000,
       "frames": [
@@ -553,6 +570,7 @@
     {
       "id": 17,
       "name": "sarcastic",
+      "flip": "right",
       "playback": "ping_pong",
       "frame_ms": 320,
       "frames": [
@@ -577,6 +595,7 @@
     {
       "id": 18,
       "name": "suspicious",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 300,
       "frames": [
@@ -601,6 +620,7 @@
     {
       "id": 19,
       "name": "tired",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 640,
       "frames": [
@@ -617,6 +637,7 @@
     {
       "id": 20,
       "name": "surprised",
+      "flip": "right",
       "playback": "ping_pong",
       "frame_ms": 350,
       "frames": [
@@ -633,6 +654,7 @@
     {
       "id": 21,
       "name": "bored",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 1000,
       "frames": [
@@ -645,6 +667,7 @@
     {
       "id": 22,
       "name": "dramatic",
+      "flip": "right",
       "playback": "ping_pong",
       "frame_ms": 192,
       "frames": [
@@ -665,6 +688,7 @@
     {
       "id": 23,
       "name": "watch",
+      "flip": "right",
       "playback": "ping_pong",
       "frame_ms": 180,
       "frames": [
@@ -713,6 +737,7 @@
     {
       "id": 24,
       "name": "party",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 144,
       "frames": [
@@ -745,6 +770,7 @@
     {
       "id": 25,
       "name": "battery_low",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 500,
       "frames": [
@@ -761,6 +787,7 @@
     {
       "id": 26,
       "name": "sunny",
+      "flip": "right",
       "playback": "ping_pong",
       "frame_ms": 800,
       "frames": [
@@ -777,6 +804,7 @@
     {
       "id": 27,
       "name": "rainy",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 180,
       "frames": [
@@ -817,6 +845,7 @@
     {
       "id": 28,
       "name": "cloudy",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 300,
       "frames": [
@@ -845,6 +874,7 @@
     {
       "id": 29,
       "name": "stormy",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 160,
       "frames": [
@@ -885,6 +915,7 @@
     {
       "id": 30,
       "name": "snowy",
+      "flip": "right",
       "playback": "loop",
       "frame_ms": 288,
       "frames": [

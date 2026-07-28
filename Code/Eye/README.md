@@ -15,9 +15,10 @@ python emulator.py
 ```
 
 The preview is clipped to the GC9A01's round screen. Each animation frame
-uses flat Bender-style artwork with a square pupil. The right-eye artwork is
-always generated as an exact horizontal mirror of the left eye. Weather states
-replace the eye completely with a full-screen weather symbol.
+uses flat Bender-style artwork with a square pupil. Eye pairing is selected per
+animation: either eye can be generated as a horizontal mirror of the other, or
+both can use the same unflipped artwork. Weather states replace the eye
+completely with a full-screen weather symbol.
 
 Main controls:
 
@@ -25,6 +26,9 @@ Main controls:
 - Up/Down: select a frame and pause playback.
 - Left eye/Both eyes/Right eye buttons: choose the preview layout.
 - Tab: cycle through left, both side by side, and right views.
+- Flip right from left: regenerate the right eye as a mirror of the left.
+- Flip left from right: regenerate the left eye as a mirror of the right.
+- No flip: copy the selected eye to both sides for exceptional states.
 - Space or A: play/pause.
 - E: open the current native 240x240 frame in GIMP.
 - O: open every frame of the current eye/animation in GIMP.
@@ -38,8 +42,7 @@ Saving an emulator-exported PPM over the same file makes the emulator import
 it automatically, update `assets/eye_assets.json`, regenerate
 `generated/eye_assets.hpp`, and reload the preview. New exact colors occupy
 free slots in the shared 16-color palette; once full, imports use the nearest
-palette color. Editing either eye automatically regenerates the other eye as
-its horizontal mirror.
+palette color. Later imports preserve the selected pairing mode.
 
 Headless validation and command-line frame exchange are also available:
 

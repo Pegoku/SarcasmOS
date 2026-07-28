@@ -206,6 +206,22 @@ class EmulatorWindow:
                 side="left", padx=(0, 5),
             )
 
+        flip_buttons = tk.Frame(self.root, background="#111111")
+        flip_buttons.pack(fill="x", padx=8, pady=(0, 5))
+        tk.Label(
+            flip_buttons, text="Pairing:",
+            background="#111111", foreground="#aaaaaa",
+        ).pack(side="left", padx=(0, 5))
+        for label, mode in (
+            ("Flip right from left", "right"),
+            ("Flip left from right", "left"),
+            ("No flip", "none"),
+        ):
+            tk.Button(
+                flip_buttons, text=label,
+                command=lambda selected=mode: self.set_flip(selected),
+            ).pack(side="left", padx=(0, 5))
+
         tk.Label(
             self.root,
             text=(
@@ -255,6 +271,24 @@ class EmulatorWindow:
     def switch_view(self) -> None:
         views = ("left", "both", "right")
         self.set_view(views[(views.index(self.view) + 1) % len(views)])
+
+    def set_flip(self, mode: str) -> None:
+        state = self.state_name
+        source_role = self.edit_role
+        try:
+            asset_tool.set_animation_flip(state, mode, source_role)
+            self.assets.reload()
+            self.state_id = self.assets.state_ids[state]
+            self.last_render_key = None
+            if mode == "right":
+                message = "Right eye now flips the left eye"
+            elif mode == "left":
+                message = "Left eye now flips the right eye"
+            else:
+                message = f"No flip; copied the {source_role} eye"
+            self.show_notice(message)
+        except (OSError, ValueError, KeyError) as error:
+            self.show_notice(f"Could not change eye pairing: {error}")
 
     def native_ppm(
         self, state_id: int | None = None, frame: int | None = None,
@@ -639,6 +673,7 @@ class EmulatorWindow:
         status = (
             f"0x{self.state_id:02x}  {self.state_name:<16} "
             f"{self.view.upper():<5} view  "
+            f"flip {animation['flip']:<5}  "
             f"frame {self.current_local_frame + 1}/"
             f"{len(animation['frames'])}   "
             f"delay {animation['frame_ms']} ms   {mode}   "
@@ -656,6 +691,7 @@ class EmulatorWindow:
 def self_test(assets: AssetPack) -> None:
     hashes = set()
     for state_id, animation in enumerate(assets.animations):
+        flip = animation["flip"]
         for frame in range(len(animation["frames"])):
             left = assets.sprite_cache[
                 animation["frames"][frame]["left"]
@@ -663,16 +699,17 @@ def self_test(assets: AssetPack) -> None:
             right = assets.sprite_cache[
                 animation["frames"][frame]["right"]
             ]
-            mirrored = [
+            expected = left if flip == "none" else [
                 value
                 for y in range(assets.height)
                 for value in reversed(
                     left[y * assets.width:(y + 1) * assets.width]
                 )
             ]
-            if right != mirrored:
+            if right != expected:
                 raise AssertionError(
-                    f"{animation['name']} frame {frame + 1} is not mirrored"
+                    f"{animation['name']} frame {frame + 1} "
+                    f"does not match flip={flip}"
                 )
         for role in asset_tool.ROLES:
             lit_frames = 0

@@ -24,6 +24,7 @@ EXPECTED_STATES = (
 )
 ROLES = ("left", "right")
 PLAYBACK_IDS = {"loop": 0, "ping_pong": 1}
+FLIP_MODES = ("right", "left", "none")
 
 
 def load_assets(path: pathlib.Path = DEFAULT_ASSETS) -> dict[str, Any]:
@@ -84,6 +85,8 @@ def validate_assets(data: dict[str, Any]) -> None:
             raise ValueError(f"{animation['name']}: ID must be {state_id}")
         if animation.get("playback") not in PLAYBACK_IDS:
             raise ValueError(f"{animation['name']}: invalid playback mode")
+        if animation.get("flip") not in FLIP_MODES:
+            raise ValueError(f"{animation['name']}: invalid eye flip mode")
         if (not isinstance(animation.get("frame_ms"), int) or
                 not 1 <= animation["frame_ms"] <= 65535):
             raise ValueError(f"{animation['name']}: invalid frame_ms")
@@ -105,9 +108,11 @@ def validate_assets(data: dict[str, Any]) -> None:
                     )
             left = data["sprites"][frame["left"]]["rows"]
             right = data["sprites"][frame["right"]]["rows"]
-            if right != mirror_rows(left):
+            expected = mirror_rows(left) if animation["flip"] != "none" else left
+            if right != expected:
                 raise ValueError(
-                    f"{animation['name']}: right eye must mirror left eye"
+                    f"{animation['name']}: eye pair does not match "
+                    f"flip={animation['flip']!r}"
                 )
 
     valid_characters = set("0123456789ABCDEF"[:len(colors)])
@@ -388,8 +393,13 @@ def import_sprite(
     except IndexError as error:
         raise ValueError(f"{state} has no frame {frame_index + 1}") from error
     edited_rows = pixels_to_rows(data, pixels)
-    left_rows = edited_rows if role == "left" else mirror_rows(edited_rows)
-    right_rows = mirror_rows(left_rows)
+    mirrored = animation["flip"] != "none"
+    left_rows = (
+        edited_rows
+        if role == "left" or not mirrored
+        else mirror_rows(edited_rows)
+    )
+    right_rows = mirror_rows(left_rows) if mirrored else left_rows
     left_sprite = f"{state}_left_{frame_index:02d}_edited"
     right_sprite = f"{state}_right_{frame_index:02d}_mirrored"
     data["sprites"][left_sprite] = {"rows": left_rows}
@@ -448,6 +458,33 @@ def set_animation_frame_ms(state: str, frame_ms: int) -> None:
     write_asset_pack(data)
 
 
+def set_animation_flip(state: str, flip: str, source_role: str = "left") -> None:
+    if flip not in FLIP_MODES:
+        raise ValueError(f"flip must be one of {FLIP_MODES}")
+    if source_role not in ROLES:
+        raise ValueError(f"source role must be one of {ROLES}")
+    data = load_assets()
+    animation = animation_for(data, state)
+    animation["flip"] = flip
+    for index, frame in enumerate(animation["frames"]):
+        if flip == "right":
+            source_rows = data["sprites"][frame["left"]]["rows"]
+            sprite = f"{state}_right_{index:02d}_flipped"
+            data["sprites"][sprite] = {"rows": mirror_rows(source_rows)}
+            frame["right"] = sprite
+        elif flip == "left":
+            source_rows = data["sprites"][frame["right"]]["rows"]
+            sprite = f"{state}_left_{index:02d}_flipped"
+            data["sprites"][sprite] = {"rows": mirror_rows(source_rows)}
+            frame["left"] = sprite
+        else:
+            source = frame[source_role]
+            frame["left"] = source
+            frame["right"] = source
+    prune_unreferenced_sprites(data)
+    write_asset_pack(data)
+
+
 def sync_animation_frames(
     state: str, role: str, sources: list[pathlib.Path],
 ) -> int:
@@ -461,8 +498,13 @@ def sync_animation_frames(
         if (width, height) != (240, 240):
             raise ValueError(f"{source.name} must be 240x240")
         edited_rows = pixels_to_rows(data, pixels)
-        left_rows = edited_rows if role == "left" else mirror_rows(edited_rows)
-        right_rows = mirror_rows(left_rows)
+        mirrored = animation["flip"] != "none"
+        left_rows = (
+            edited_rows
+            if role == "left" or not mirrored
+            else mirror_rows(edited_rows)
+        )
+        right_rows = mirror_rows(left_rows) if mirrored else left_rows
         left_sprite = f"{state}_left_{index:02d}_edited"
         right_sprite = f"{state}_right_{index:02d}_mirrored"
         data["sprites"][left_sprite] = {"rows": left_rows}

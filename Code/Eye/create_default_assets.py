@@ -509,6 +509,7 @@ def create_pack() -> dict:
         animations.append({
             "id": state_id,
             "name": name,
+            "flip": "right",
             "playback": playback,
             "frame_ms": frame_ms,
             "frames": frames,

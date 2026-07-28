@@ -49,11 +49,11 @@ geometry and per-eye pupils.
 | `party` | `^ *` | Asymmetric wink/star animation |
 | `error` | `X X` | Clear X/error eyes, without rapid flashing |
 | `battery_low` | `_ _` | Very low lids and reduced brightness |
-| `sunny` | `\o/ \o/` | Bright open eyes with an upbeat highlight |
-| `rainy` | `; ;` | Drooped lids or rain/tear accent |
-| `cloudy` | `- -` | Soft half-lidded neutral pose |
-| `stormy` | `! !` | Alert narrow pupils with sharp accent |
-| `snowy` | `* *` | Gentle sparkle or snowflake highlights |
+| `sunny` | `☀` | Full-screen animated sun; no eye is visible |
+| `rainy` | `🌧` | Full-screen cloud and falling rain; no eye is visible |
+| `cloudy` | `☁` | Full-screen drifting cloud; no eye is visible |
+| `stormy` | `🌩` | Full-screen cloud and lightning; no eye is visible |
+| `snowy` | `🌨` | Full-screen cloud and falling snow; no eye is visible |
 
 ## Direct hardware intents
 

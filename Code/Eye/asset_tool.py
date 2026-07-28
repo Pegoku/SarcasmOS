@@ -41,6 +41,11 @@ def decode_sprite(data: dict[str, Any], name: str) -> list[int]:
     return [int(character, 16) for row in rows for character in row]
 
 
+def mirror_rows(rows: list[str]) -> list[str]:
+    """Return a horizontal mirror of a 240x240 indexed sprite."""
+    return [row[::-1] for row in rows]
+
+
 def animation_for(data: dict[str, Any], state: str) -> dict[str, Any]:
     try:
         return next(
@@ -98,6 +103,12 @@ def validate_assets(data: dict[str, Any]) -> None:
                         f"{animation['name']}: missing {role} sprite "
                         f"{frame[role]!r}"
                     )
+            left = data["sprites"][frame["left"]]["rows"]
+            right = data["sprites"][frame["right"]]["rows"]
+            if right != mirror_rows(left):
+                raise ValueError(
+                    f"{animation['name']}: right eye must mirror left eye"
+                )
 
     valid_characters = set("0123456789ABCDEF"[:len(colors)])
     for name, sprite in data.get("sprites", {}).items():
@@ -376,9 +387,15 @@ def import_sprite(
         frame = animation["frames"][frame_index]
     except IndexError as error:
         raise ValueError(f"{state} has no frame {frame_index + 1}") from error
-    sprite = f"{state}_{role}_{frame_index:02d}_edited"
-    data["sprites"][sprite] = {"rows": pixels_to_rows(data, pixels)}
-    frame[role] = sprite
+    edited_rows = pixels_to_rows(data, pixels)
+    left_rows = edited_rows if role == "left" else mirror_rows(edited_rows)
+    right_rows = mirror_rows(left_rows)
+    left_sprite = f"{state}_left_{frame_index:02d}_edited"
+    right_sprite = f"{state}_right_{frame_index:02d}_mirrored"
+    data["sprites"][left_sprite] = {"rows": left_rows}
+    data["sprites"][right_sprite] = {"rows": right_rows}
+    frame["left"] = left_sprite
+    frame["right"] = right_sprite
     prune_unreferenced_sprites(data)
     write_asset_pack(data)
     print(f"Imported {source} -> {state} {role} frame {frame_index + 1}")
@@ -438,17 +455,19 @@ def sync_animation_frames(
         raise ValueError(f"{state} must keep 1..255 frames")
     data = load_assets()
     animation = animation_for(data, state)
-    old_frames = animation["frames"]
     new_frames = []
     for index, source in enumerate(sources):
         width, height, pixels = read_ppm(source)
         if (width, height) != (240, 240):
             raise ValueError(f"{source.name} must be 240x240")
-        counterpart = dict(old_frames[min(index, len(old_frames) - 1)])
-        sprite = f"{state}_{role}_{index:02d}_edited"
-        data["sprites"][sprite] = {"rows": pixels_to_rows(data, pixels)}
-        counterpart[role] = sprite
-        new_frames.append(counterpart)
+        edited_rows = pixels_to_rows(data, pixels)
+        left_rows = edited_rows if role == "left" else mirror_rows(edited_rows)
+        right_rows = mirror_rows(left_rows)
+        left_sprite = f"{state}_left_{index:02d}_edited"
+        right_sprite = f"{state}_right_{index:02d}_mirrored"
+        data["sprites"][left_sprite] = {"rows": left_rows}
+        data["sprites"][right_sprite] = {"rows": right_rows}
+        new_frames.append({"left": left_sprite, "right": right_sprite})
     animation["frames"] = new_frames
     prune_unreferenced_sprites(data)
     write_asset_pack(data)

@@ -157,7 +157,7 @@ def eye(
     pupil_scale: float = 1.0,
     no_pupil: bool = False,
     star_pupil: bool = False,
-    highlight: bool = True,
+    highlight: bool = False,
 ) -> Canvas:
     canvas = Canvas()
     cx, cy, rx, ry = 120.0, 120.0, 91.0, 80.0
@@ -192,8 +192,15 @@ def eye(
                 pupil_x, pupil_y, 30 * pupil_scale, 12 * pupil_scale, BLACK,
             )
         else:
-            canvas.ellipse(
-                pupil_x, pupil_y, 19 * pupil_scale, 31 * pupil_scale, BLACK,
+            half = 16 * pupil_scale
+            canvas.polygon(
+                [
+                    (pupil_x - half, pupil_y - half),
+                    (pupil_x + half, pupil_y - half + 2),
+                    (pupil_x + half - 2, pupil_y + half),
+                    (pupil_x - half + 1, pupil_y + half - 1),
+                ],
+                BLACK,
             )
         if highlight and pupil_scale >= 0.55:
             canvas.circle(
@@ -259,6 +266,20 @@ def add_snow(canvas: Canvas, phase: int) -> None:
         offset = (phase * 7 + index * 13) % 35
         canvas.line(x - 6, y + offset, x + 6, y + offset, 3, SNOW)
         canvas.line(x, y + offset - 6, x, y + offset + 6, 3, SNOW)
+
+
+def draw_cloud(
+    canvas: Canvas, x: float, y: float, color: int = CLOUD,
+    scale: float = 1.0,
+) -> None:
+    canvas.rect(
+        round(x - 72 * scale), round(y - 2 * scale),
+        round(144 * scale), round(52 * scale), color,
+    )
+    canvas.circle(x - 48 * scale, y, 35 * scale, color)
+    canvas.circle(x - 10 * scale, y - 26 * scale, 49 * scale, color)
+    canvas.circle(x + 39 * scale, y - 12 * scale, 42 * scale, color)
+    canvas.circle(x + 66 * scale, y + 7 * scale, 28 * scale, color)
 
 
 def render_state(name: str, frame: int, count: int, role: str) -> Canvas:
@@ -380,46 +401,51 @@ def render_state(name: str, frame: int, count: int, role: str) -> Canvas:
         canvas.rect(97, 114, 12 if frame else 7, 16, BLACK)
         return canvas
     if name == "sunny":
-        canvas = eye(
-            role, openness=0.78, curve=-8, pupil_scale=0.85,
-            eye_color=YELLOW,
-        )
-        canvas.circle(120, 25, 9 + frame * 2, ORANGE)
+        canvas = Canvas()
+        pulse = 2 if frame else 0
+        for angle_index in range(8):
+            angle = angle_index * math.tau / 8
+            canvas.line(
+                120 + math.cos(angle) * (74 + pulse),
+                120 + math.sin(angle) * (74 + pulse),
+                120 + math.cos(angle) * (103 + pulse),
+                120 + math.sin(angle) * (103 + pulse),
+                14, ORANGE,
+            )
+        canvas.circle(120, 120, 61 + pulse, AMBER)
         return canvas
     if name == "rainy":
-        canvas = eye(
-            role, gaze_y=15, openness=0.42, curve=10,
-            eye_color=CLOUD, pupil_scale=0.75, highlight=False,
-        )
-        add_tear(canvas, frame)
+        canvas = Canvas()
+        draw_cloud(canvas, 120 + wave * 4, 77, CLOUD, 0.82)
+        for index, x in enumerate((58, 92, 126, 160, 194)):
+            y = 139 + ((frame * 19 + index * 27) % 70)
+            canvas.line(x + 8, y - 10, x - 8, y + 17, 8, RAIN)
         return canvas
     if name == "cloudy":
-        canvas = eye(
-            role, gaze_y=8, openness=0.48 + 0.03 * wave,
-            eye_color=CLOUD, pupil_scale=0.8, highlight=False,
-        )
-        for x, y, radius in ((83, 35, 13), (105, 29, 18), (132, 34, 15)):
-            canvas.circle(x, y, radius, CLOUD)
+        canvas = Canvas()
+        draw_cloud(canvas, 120 + wave * 7, 112 + wave * 2, CLOUD, 1.0)
         return canvas
     if name == "stormy":
-        canvas = eye(
-            role, gaze_x=inward, openness=0.44,
-            tilt=20 if role == "left" else -20,
-            eye_color=AMBER, pupil_scale=0.68, highlight=False,
-        )
-        shift = (frame % 4) * 3
+        canvas = Canvas()
+        draw_cloud(canvas, 120 - wave * 4, 76, CLOUD, 0.86)
+        shift = ((frame % 4) - 2) * 3
         canvas.polygon(
-            [(111 + shift, 20), (137 + shift, 20), (124 + shift, 49),
-             (143 + shift, 49), (106 + shift, 92), (117 + shift, 58),
-             (98 + shift, 58)],
+            [(111 + shift, 119), (143 + shift, 119),
+             (126 + shift, 157), (151 + shift, 157),
+             (100 + shift, 224), (116 + shift, 174),
+             (91 + shift, 174)],
             ORANGE,
         )
         return canvas
     if name == "snowy":
-        canvas = eye(
-            role, openness=0.76, eye_color=SNOW, pupil_scale=0.8,
-        )
-        add_snow(canvas, frame)
+        canvas = Canvas()
+        draw_cloud(canvas, 120, 69, CLOUD, 0.78)
+        for index, x in enumerate((49, 84, 119, 154, 189)):
+            y = 137 + ((frame * 13 + index * 29) % 76)
+            canvas.line(x - 9, y, x + 9, y, 4, SNOW)
+            canvas.line(x, y - 9, x, y + 9, 4, SNOW)
+            canvas.line(x - 6, y - 6, x + 6, y + 6, 3, SNOW)
+            canvas.line(x + 6, y - 6, x - 6, y + 6, 3, SNOW)
         return canvas
     raise ValueError(f"no renderer for {name}")
 
@@ -467,8 +493,11 @@ def create_pack() -> dict:
         frames = []
         for frame in range(count):
             pair = {}
-            for role in asset_tool.ROLES:
-                rows = render_state(name, frame, count, role).rows()
+            left_rows = render_state(name, frame, count, "left").rows()
+            for role, rows in (
+                ("left", left_rows),
+                ("right", asset_tool.mirror_rows(left_rows)),
+            ):
                 digest = hashlib.sha256("".join(rows).encode()).hexdigest()
                 sprite_name = rows_to_name.get(digest)
                 if sprite_name is None:

@@ -30,6 +30,7 @@ Options:
   --port DEVICE          Serial device for --monitor (for example /dev/ttyACM0)
   --baud RATE            Monitor baud rate (default: 115200)
   --rtt-port PORT        Local RTT TCP port (default: 9090)
+  --assets PATH          Animation asset JSON for regular/demo firmware
   -h, --help             Show this help
 
 Environment overrides:
@@ -42,6 +43,7 @@ Examples:
   ./flash.sh --left --regular --build --upload --swd-monitor
   ./flash.sh --left --self-test --build --upload --swd-monitor
   ./flash.sh --right --demo --build --upload --swd-monitor
+  ./flash.sh --right --demo --assets "png animations/eye_assets.json" --build
 
 For convenience, --monitor--left and --monitor--right are also accepted.
 EOF
@@ -62,6 +64,8 @@ do_swd_monitor=false
 serial_port=""
 baud=115200
 rtt_port=9090
+assets_file="$script_dir/assets/eye_assets.json"
+assets_selected=false
 
 while (($#)); do
     case "$1" in
@@ -110,6 +114,12 @@ while (($#)); do
             rtt_port=$2
             shift
             ;;
+        --assets)
+            (($# >= 2)) || fail "--assets requires a JSON path"
+            assets_file=$2
+            assets_selected=true
+            shift
+            ;;
         -h|--help)
             show_help
             exit 0
@@ -126,6 +136,11 @@ $do_build || $do_upload || $do_monitor || $do_swd_monitor || \
 [[ "$rtt_port" =~ ^[0-9]+$ ]] && ((rtt_port > 0 && rtt_port <= 65535)) || \
     fail "invalid RTT port: $rtt_port"
 $do_monitor && $do_swd_monitor && fail "choose only one of --monitor and --swd-monitor"
+[[ -f "$assets_file" ]] || fail "asset pack not found: $assets_file"
+assets_file=$(realpath -- "$assets_file")
+if $assets_selected && [[ "$firmware" == self-test ]]; then
+    fail "--self-test does not use animation assets"
+fi
 
 if [[ "$eye" == left ]]; then
     role=0
@@ -176,17 +191,25 @@ if $do_build; then
     [[ -f "${PICO_SDK_PATH:-}/external/pico_sdk_import.cmake" ]] || \
         fail "Pico SDK not found; export PICO_SDK_PATH before building"
 
-    printf 'Configuring %s firmware for the %s eye...\n' "$firmware" "$eye"
+    printf 'Configuring %s firmware for the %s eye with %s...\n' \
+        "$firmware" "$eye" "$assets_file"
     cmake -S "$script_dir" -B "$build_dir" \
         -DDEVICE_ROLE="$role" \
         -DI2C_ADDRESS="$i2c_address" \
-        -DANIMATION_AUTOPLAY="$autoplay"
+        -DANIMATION_AUTOPLAY="$autoplay" \
+        -DEYE_ASSETS:FILEPATH="$assets_file"
     printf 'Building %s firmware for the %s eye...\n' "$firmware" "$eye"
     cmake --build "$build_dir" --target "$build_target"
 fi
 
 if $do_upload || $do_swd_monitor; then
     [[ -f "$image" ]] || fail "firmware not found at $image; run with --build first"
+    configured_assets=$(sed -n 's/^EYE_ASSETS:FILEPATH=//p' \
+        "$build_dir/CMakeCache.txt" 2>/dev/null | head -n 1)
+    if [[ -z "$configured_assets" ]] || \
+            [[ "$(realpath -- "$configured_assets")" != "$assets_file" ]]; then
+        fail "selected assets do not match $image; run with --build first"
+    fi
 
     openocd_bin=""
     openocd_scripts=""

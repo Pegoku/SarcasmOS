@@ -119,6 +119,7 @@ for either eye:
 ./flash.sh --left --regular --build --upload --swd-monitor
 ./flash.sh --left --self-test --build --upload --swd-monitor
 ./flash.sh --right --demo --build --upload --swd-monitor
+./flash.sh --right --demo --assets "png animations/eye_assets.json" --build --upload
 ```
 
 `--regular` is the default and receives animation commands over I2C.
@@ -132,6 +133,12 @@ monitor automatically uses the only connected `/dev/serial/by-id`,
 `/dev/ttyACM`, or `/dev/ttyUSB` device. If more than one is connected, select
 one with `--port /dev/ttyACM0` or set `EYE_LEFT_PORT` and `EYE_RIGHT_PORT`.
 Run `./flash.sh --help` for all options and environment overrides.
+
+Use `--assets PATH` to compile regular or demo firmware with another compatible
+asset pack. The generated header stays inside that firmware's build directory,
+so building an alternate pack does not overwrite `generated/eye_assets.hpp` or
+the production asset source. Upload-only commands verify that the selected pack
+path matches the image configuration and ask for a rebuild if it does not.
 
 All three firmware modes rotate the display output 180 degrees while retaining
 the correct mirrored orientation for each eye.

@@ -21,6 +21,8 @@ eye completely with a full-screen weather symbol.
 
 Main controls:
 
+Hover over any button to highlight it and show an explanation of its action.
+
 - Left/Right: select one of the 31 states.
 - Up/Down: select a frame and pause playback.
 - Left eye/Both eyes/Right eye buttons: choose the preview layout.

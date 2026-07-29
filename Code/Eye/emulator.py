@@ -43,6 +43,86 @@ class AnimationEditSession:
     changed_at_ms: int | None = None
 
 
+class HoverTooltip:
+    """Delayed explanatory tooltip plus a visible widget hover state."""
+
+    def __init__(self, tk: Any, widget: Any, text: str) -> None:
+        self.tk = tk
+        self.widget = widget
+        self.text = text
+        self.pending: str | None = None
+        self.window: Any | None = None
+        self.background = widget.cget("background")
+        self.foreground = widget.cget("foreground")
+        widget.configure(cursor="hand2")
+        widget.bind("<Enter>", self.enter, add="+")
+        widget.bind("<Leave>", self.leave, add="+")
+        widget.bind("<ButtonPress>", self.hide, add="+")
+        widget.bind("<Destroy>", self.hide, add="+")
+
+    def enter(self, _event: Any = None) -> None:
+        try:
+            self.widget.configure(
+                background="#b8d7ef", foreground="#111111",
+            )
+            self.pending = self.widget.after(450, self.show)
+        except self.tk.TclError:
+            pass
+
+    def leave(self, _event: Any = None) -> None:
+        try:
+            self.widget.configure(
+                background=self.background, foreground=self.foreground,
+            )
+        except self.tk.TclError:
+            pass
+        self.hide()
+
+    def show(self) -> None:
+        self.pending = None
+        if self.window is not None or not self.widget.winfo_exists():
+            return
+        window = self.tk.Toplevel(self.widget)
+        window.overrideredirect(True)
+        try:
+            window.attributes("-topmost", True)
+        except self.tk.TclError:
+            pass
+        label = self.tk.Label(
+            window, text=self.text, justify="left", wraplength=340,
+            background="#242b32", foreground="#f0f3f6",
+            relief="solid", borderwidth=1, padx=8, pady=6,
+            font=("sans", 9),
+        )
+        label.pack()
+        window.update_idletasks()
+        x = self.widget.winfo_rootx() + 12
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 7
+        x = min(x, self.widget.winfo_screenwidth() - window.winfo_width() - 8)
+        y = min(y, self.widget.winfo_screenheight() - window.winfo_height() - 8)
+        window.geometry(f"+{max(0, x)}+{max(0, y)}")
+        self.window = window
+
+    def hide(self, _event: Any = None) -> None:
+        if self.pending is not None:
+            try:
+                self.widget.after_cancel(self.pending)
+            except self.tk.TclError:
+                pass
+            self.pending = None
+        if self.window is not None:
+            try:
+                self.window.destroy()
+            except self.tk.TclError:
+                pass
+            self.window = None
+
+
+def explain_button(tk: Any, widget: Any, text: str) -> Any:
+    widget._hover_tooltip = HoverTooltip(tk, widget, text)
+    return widget
+
+
 def numbered_animation_files(
     directory: pathlib.Path, state: str, role: str,
 ) -> list[pathlib.Path]:
@@ -187,37 +267,75 @@ class EmulatorWindow:
 
         buttons = tk.Frame(self.root, background="#111111")
         buttons.pack(fill="x", padx=8, pady=(0, 5))
-        for label, view in (
-            ("Left eye", "left"),
-            ("Both eyes", "both"),
-            ("Right eye", "right"),
+        for label, view, explanation in (
+            ("Left eye", "left", "Show only the left-eye artwork."),
+            (
+                "Both eyes", "both",
+                "Show the paired left and right eyes side by side.",
+            ),
+            ("Right eye", "right", "Show only the right-eye artwork."),
         ):
-            tk.Button(
+            button = tk.Button(
                 buttons, text=label,
                 command=lambda selected=view: self.set_view(selected),
-            ).pack(side="left", padx=(0, 5))
-        for label, action in (
-            ("Open frame in GIMP (E)", self.open_in_gimp),
-            ("Open animation in GIMP (O)", self.open_animation_in_gimp),
-            ("Copy frame (C)", self.copy_frame),
-            ("Reload assets (R)", self.reload_assets),
-        ):
-            tk.Button(buttons, text=label, command=action).pack(
-                side="left", padx=(0, 5),
             )
+            explain_button(tk, button, explanation)
+            button.pack(side="left", padx=(0, 5))
+        for label, action, explanation in (
+            (
+                "Open frame in GIMP (E)", self.open_in_gimp,
+                "Export the current native frame and open it in GIMP. "
+                "Saving the file imports the edit automatically.",
+            ),
+            (
+                "Open animation in GIMP (O)", self.open_animation_in_gimp,
+                "Export every frame for the current eye and open the whole "
+                "animation in GIMP for batch editing.",
+            ),
+            (
+                "Copy frame (C)", self.copy_frame,
+                "Copy the current native 240x240 eye frame to the image "
+                "clipboard.",
+            ),
+            (
+                "Reload assets (R)", self.reload_assets,
+                "Reload this asset pack from disk and refresh the preview.",
+            ),
+        ):
+            button = tk.Button(buttons, text=label, command=action)
+            explain_button(tk, button, explanation)
+            button.pack(side="left", padx=(0, 5))
 
         frame_buttons = tk.Frame(self.root, background="#111111")
         frame_buttons.pack(fill="x", padx=8, pady=(0, 5))
-        for label, action in (
-            ("Frame timeline (F)", self.open_timeline_editor),
-            ("Add frame (Insert)", self.add_frame),
-            ("Remove frame (Delete)", self.remove_frame),
-            ("Set frame time (T)", self.change_frame_time),
-            ("Sync folder (S)", self.sync_current_animation_folder),
+        for label, action, explanation in (
+            (
+                "Frame timeline (F)", self.open_timeline_editor,
+                "Open the timeline editor to preview, reorder, repeat, "
+                "reverse, copy, or delete frame references.",
+            ),
+            (
+                "Add frame (Insert)", self.add_frame,
+                "Insert a new timeline entry after the current frame, "
+                "referencing the same stored left/right artwork.",
+            ),
+            (
+                "Remove frame (Delete)", self.remove_frame,
+                "Remove the current paired frame from this animation.",
+            ),
+            (
+                "Set frame time (T)", self.change_frame_time,
+                "Set the delay in milliseconds between animation frames.",
+            ),
+            (
+                "Sync folder (S)", self.sync_current_animation_folder,
+                "Import the numbered PPM files from the current animation's "
+                "existing edit folder.",
+            ),
         ):
-            tk.Button(frame_buttons, text=label, command=action).pack(
-                side="left", padx=(0, 5),
-            )
+            button = tk.Button(frame_buttons, text=label, command=action)
+            explain_button(tk, button, explanation)
+            button.pack(side="left", padx=(0, 5))
 
         flip_buttons = tk.Frame(self.root, background="#111111")
         flip_buttons.pack(fill="x", padx=8, pady=(0, 5))
@@ -225,14 +343,24 @@ class EmulatorWindow:
             flip_buttons, text="Preview orientation:",
             background="#111111", foreground="#aaaaaa",
         ).pack(side="left", padx=(0, 5))
-        for label, role in (
-            ("Flip left eye", "left"),
-            ("Flip right eye", "right"),
+        for label, role, explanation in (
+            (
+                "Flip left eye", "left",
+                "Swap the left display to the opposite eye orientation for "
+                "this animation.",
+            ),
+            (
+                "Flip right eye", "right",
+                "Swap the right display to the opposite eye orientation for "
+                "this animation.",
+            ),
         ):
-            tk.Button(
+            button = tk.Button(
                 flip_buttons, text=label,
                 command=lambda selected=role: self.toggle_flip(selected),
-            ).pack(side="left", padx=(0, 5))
+            )
+            explain_button(tk, button, explanation)
+            button.pack(side="left", padx=(0, 5))
 
         tk.Label(
             self.root,
@@ -887,43 +1015,100 @@ class EmulatorWindow:
             self.timeline_window = None
             window.destroy()
 
-        for label, command in (
-            ("Move earlier", lambda: move(-1)),
-            ("Move later", lambda: move(1)),
-            ("Copy references", copy_references),
-            ("Repeat selection…", repeat_selection),
-            ("Reverse selection", reverse_selection),
-            ("Append reverse exit", append_reverse_exit),
-            ("Delete selected", delete_selection),
+        for label, command, explanation in (
+            (
+                "Move earlier", lambda: move(-1),
+                "Move every selected timeline entry one position earlier.",
+            ),
+            (
+                "Move later", lambda: move(1),
+                "Move every selected timeline entry one position later.",
+            ),
+            (
+                "Copy references", copy_references,
+                "Insert one copy of each selected entry. Copies point to "
+                "the same stored sprites and use no extra bitmap storage.",
+            ),
+            (
+                "Repeat selection…", repeat_selection,
+                "Repeat the selected effect range a chosen number of times "
+                "using shared sprite references.",
+            ),
+            (
+                "Reverse selection", reverse_selection,
+                "Reverse the order of the selected timeline entries.",
+            ),
+            (
+                "Append reverse exit", append_reverse_exit,
+                "Append the timeline in reverse, without repeating its final "
+                "frame, to create a smooth return to the starting pose.",
+            ),
+            (
+                "Delete selected", delete_selection,
+                "Remove the selected timeline entries while keeping their "
+                "shared artwork when it is still referenced elsewhere.",
+            ),
         ):
-            tk.Button(
+            button = tk.Button(
                 controls, text=label, command=command, width=21,
-            ).pack(fill="x", pady=(0, 5))
+            )
+            explain_button(tk, button, explanation)
+            button.pack(fill="x", pady=(0, 5))
 
         tk.Label(
             controls, text="Playback after save:", anchor="w",
             background="#111111", foreground="#aaaaaa",
         ).pack(fill="x", pady=(10, 2))
-        for label, value in (("Loop", "loop"), ("Ping-pong", "ping_pong")):
-            tk.Radiobutton(
+        for label, value, explanation in (
+            (
+                "Loop", "loop",
+                "After the final frame, continue playback from frame one.",
+            ),
+            (
+                "Ping-pong", "ping_pong",
+                "Play forward to the final frame, then backward to the "
+                "first frame, repeating in both directions.",
+            ),
+        ):
+            radio = tk.Radiobutton(
                 controls, text=label, variable=playback, value=value,
                 command=refresh, anchor="w", background="#111111",
                 foreground="#eeeeee", selectcolor="#20252a",
                 activebackground="#111111", activeforeground="#eeeeee",
-            ).pack(fill="x")
+            )
+            explain_button(tk, radio, explanation)
+            radio.pack(fill="x")
 
-        tk.Button(
+        previous_button = tk.Button(
             preview_buttons, text="◀", width=4,
             command=lambda: step_preview(-1),
-        ).pack(side="left")
-        tk.Button(
+        )
+        explain_button(
+            tk, previous_button,
+            "Pause the timeline preview and show the previous frame. "
+            "The Left Arrow key does the same thing.",
+        )
+        previous_button.pack(side="left")
+        play_button = tk.Button(
             preview_buttons, textvariable=preview_button_text,
             command=toggle_preview,
-        ).pack(side="left", fill="x", expand=True, padx=5)
-        tk.Button(
+        )
+        explain_button(
+            tk, play_button,
+            "Play or pause the unsaved working timeline using its frame "
+            "timing and selected loop or ping-pong mode.",
+        )
+        play_button.pack(side="left", fill="x", expand=True, padx=5)
+        next_button = tk.Button(
             preview_buttons, text="▶", width=4,
             command=lambda: step_preview(1),
-        ).pack(side="left")
+        )
+        explain_button(
+            tk, next_button,
+            "Pause the timeline preview and show the next frame. The Right "
+            "Arrow key does the same thing.",
+        )
+        next_button.pack(side="left")
 
         footer = tk.Frame(window, background="#111111")
         footer.pack(fill="x", padx=10, pady=10)
@@ -931,10 +1116,20 @@ class EmulatorWindow:
             footer, textvariable=status, anchor="w",
             background="#111111", foreground="#aaaaaa",
         ).pack(side="left", fill="x", expand=True)
-        tk.Button(footer, text="Cancel", command=close).pack(
-            side="right", padx=(5, 0),
+        cancel_button = tk.Button(footer, text="Cancel", command=close)
+        explain_button(
+            tk, cancel_button,
+            "Close the timeline editor and discard all unsaved timeline "
+            "changes.",
         )
-        tk.Button(footer, text="Save timeline", command=save).pack(side="right")
+        cancel_button.pack(side="right", padx=(5, 0))
+        save_button = tk.Button(footer, text="Save timeline", command=save)
+        explain_button(
+            tk, save_button,
+            "Save the working entry order and playback mode to the current "
+            "asset pack, then reload the emulator preview.",
+        )
+        save_button.pack(side="right")
         window.protocol("WM_DELETE_WINDOW", close)
         window.bind("<Escape>", lambda _event: close())
         window.bind("<Left>", lambda _event: step_preview(-1))

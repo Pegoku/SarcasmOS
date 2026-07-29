@@ -89,17 +89,20 @@ microphone, `l`/`r` for the wired eyes, `o` for the wireless mouth, and `v` to
 test all three displays. The complete automatic sequence is `x`.
 
 Enter `f` for the interactive face display controller. It probes the left eye
-at `0x30` and right eye at `0x31`, validates each eye's protocol role, and
-requires an acknowledged ESP-NOW ping from the configured mouth. In the target
-screen, move with the arrow keys or `W`/`S`, toggle checkboxes with Space, and
-press Enter to continue. Unavailable displays cannot be selected; use `R` to
-repeat discovery.
+at `0x30` and right eye at `0x31`, validates each Eye protocol-v2 role/status,
+and requires an acknowledged ESP-NOW ping from the configured mouth. In the
+target screen, move with the arrow keys or `W`/`S`, toggle checkboxes with
+Space, and press Enter to continue. Unavailable displays cannot be selected;
+use `R` to repeat discovery.
 
 The state screen lists all shared Eye/Mouth animation IDs with descriptions,
 ten at a time. Move with the arrow keys or `W`/`S` and press Enter (or Space)
 to send the highlighted state to every selected target. The screen reports an
 individual acknowledgment result for each display and remains open for
-additional states. Press `Q` or Escape to return to the main test menu.
+additional states. For a combined selection, the tester sends the tokenized
+target to the selected eyes, waits for their matching active-token status,
+then sends the same target/token and five-tick (200 ms) blend duration to the
+mouth. Press `Q` or Escape to return to the main test menu.
 
 Enabling a buck only verifies the enable GPIO state. Measure the corresponding
 rail before treating it as electrically validated.

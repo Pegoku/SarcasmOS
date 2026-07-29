@@ -8,6 +8,8 @@ ESP-IDF firmware for the ESP32-S3 brain PCB.
 - Uses I2C on `IO8`/`IO9` at 400 kHz by default.
 - Controls the left eye at I2C `0x30`, the right eye at I2C `0x31`, and the
   mouth through acknowledged ESP-NOW unicast.
+- Coordinates animation transitions: both eyes receive a transition token and
+  finish their outgoing animation before the matching mouth blend is released.
 - Implements the packet protocol from `PCB/FIRMWARE_PLAN.md`, including CRC-8.
 - Starts Wi-Fi station mode when configured.
 - Serves `GET /api/status` and `POST /api/command`.
@@ -27,6 +29,20 @@ MAC printed by the mouth firmware into `ESP-NOW mouth station MAC`. If the
 Brain does not join an access point, configure both boards for the same fixed
 ESP-NOW channel. If it does join Wi-Fi, build the mouth for that access point's
 2.4 GHz channel.
+
+Normal face changes use a one-element overwrite queue. Rapid requests replace
+an obsolete pending target, Eye protocol-v2 status is polled every 20 ms, and
+the mouth receives the target only after both eyes report the matching active
+animation/token with no pending animation. The default barrier timeout is
+2500 ms and the mouth blend duration is 200 ms; both are configurable under
+`SarcasmOS Brain`. Error, sleep, and battery-critical animations explicitly
+bypass the graceful barrier.
+
+`GET /api/status` includes `face_transition`, detailed active/pending Eye
+status, and Mouth transition token/progress. Mouth application-v2 status is
+accepted during migration but does not provide blend progress. Eye protocol-v1
+status cannot satisfy the barrier and therefore produces a logged degraded
+transition after the timeout.
 
 Example API command:
 

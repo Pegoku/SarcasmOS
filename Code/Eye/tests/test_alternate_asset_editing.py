@@ -153,6 +153,31 @@ class AlternateAssetEditingTest(unittest.TestCase):
             [0, 1, 2, 3, 2, 1, 2, 3, 2],
         )
 
+    def test_frame_edits_keep_loop_range_valid(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            assets = pathlib.Path(directory) / "alternate.json"
+            data = sample_pack()
+            data["animations"][0]["loop_range"] = {
+                "start": 0, "end": 1, "mode": "loop",
+            }
+            asset_tool.save_asset_source(data, assets)
+            asset_tool.insert_animation_frame(
+                "sample", 0, assets_path=assets,
+            )
+            animation = asset_tool.load_assets(assets)["animations"][0]
+            self.assertEqual(
+                animation["loop_range"],
+                {"start": 0, "end": 2, "mode": "loop"},
+            )
+            asset_tool.remove_animation_frame(
+                "sample", 0, assets_path=assets,
+            )
+            animation = asset_tool.load_assets(assets)["animations"][0]
+            self.assertEqual(
+                animation["loop_range"],
+                {"start": 0, "end": 1, "mode": "loop"},
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

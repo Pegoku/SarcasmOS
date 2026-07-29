@@ -49,6 +49,14 @@ frames, and its Play button previews the unsaved working sequence without
 starting state auto-scroll. The editor also selects loop or ping-pong playback
 and supports the same production and alternate asset packs.
 
+`Repeat selection…` can either add a fixed number of shared-reference repeats
+or mark one contiguous range to repeat until the controller changes animation
+state. An until-end range has its own Regular/Ping-pong toggle: intro frames
+before the range play once, the selected effect then repeats indefinitely, and
+the next state command ends it. While that state remains active, timeline rows
+after the persistent range are intentionally unreachable. The timeline marks
+range rows with `↔`, and the side preview uses the same behavior as firmware.
+
 Saving an emulator-exported PPM over the same file makes the emulator import
 it automatically, update `assets/eye_assets.json`, regenerate
 `generated/eye_assets.hpp`, and reload the preview. New exact colors occupy

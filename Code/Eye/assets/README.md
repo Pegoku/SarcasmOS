@@ -35,6 +35,11 @@ ping-pong playback. The preview side panel shows the selected frame, steps with
 Left/Right, and plays the unsaved working timeline independently from emulator
 auto-scroll. Saving rewrites only the selected asset pack.
 
+The repeat dialog can also store an optional contiguous `loop_range`. Frames
+before it form a one-shot intro; the range then repeats in regular or ping-pong
+mode until a new animation state is selected. This range is compiled into the
+firmware rather than expanded into duplicate bitmap frames.
+
 `../create_default_assets.py --force` recreates the original procedural
 Bender-style artwork. It overwrites manual edits, so it is intended only as a
 reset/bootstrap tool.

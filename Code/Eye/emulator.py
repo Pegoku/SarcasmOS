@@ -179,16 +179,9 @@ class AssetPack:
         }
 
     def local_frame(self, state_id: int, elapsed_ms: int) -> int:
-        animation = self.animations[state_id]
-        count = len(animation["frames"])
-        if count <= 1:
-            return 0
-        step = elapsed_ms // animation["frame_ms"]
-        if animation["playback"] == "ping_pong":
-            final_frame = count - 1
-            phase = step % (final_frame * 2)
-            return phase if phase <= final_frame else final_frame * 2 - phase
-        return step % count
+        return asset_tool.animation_frame_index(
+            self.animations[state_id], elapsed_ms,
+        )
 
     def sprite_name(self, state_id: int, role: str, frame: int) -> str:
         animation = self.animations[state_id]
@@ -753,6 +746,10 @@ class EmulatorWindow:
         controls.pack(side="left", fill="y", padx=(10, 0))
         status = tk.StringVar()
         playback = tk.StringVar(value=animation["playback"])
+        loop_range = (
+            dict(animation["loop_range"])
+            if animation.get("loop_range") is not None else None
+        )
 
         preview_panel = tk.Frame(body, background="#171b1f")
         preview_panel.pack(side="left", fill="y", padx=(10, 0))
@@ -865,7 +862,28 @@ class EmulatorWindow:
                 for _ in range(steps):
                     if len(frames) <= 1:
                         break
-                    if playback.get() == "ping_pong":
+                    if loop_range is not None:
+                        start = loop_range["start"]
+                        end = loop_range["end"]
+                        if preview_index < start:
+                            next_index = preview_index + 1
+                        elif not start <= preview_index <= end:
+                            preview_direction = 1
+                            next_index = start
+                        elif loop_range["mode"] == "ping_pong" and end > start:
+                            next_index = preview_index + preview_direction
+                            if next_index > end:
+                                preview_direction = -1
+                                next_index = end - 1
+                            elif next_index < start:
+                                preview_direction = 1
+                                next_index = start + 1
+                        else:
+                            next_index = (
+                                start if preview_index >= end
+                                else preview_index + 1
+                            )
+                    elif playback.get() == "ping_pong":
                         next_index = preview_index + preview_direction
                         if next_index >= len(frames):
                             preview_direction = -1
@@ -889,9 +907,14 @@ class EmulatorWindow:
             timeline.delete(0, tk.END)
             for index, frame in enumerate(frames):
                 uses = pair_uses[(frame["left"], frame["right"])]
+                marker = (
+                    "↔" if loop_range is not None and
+                    loop_range["start"] <= index <= loop_range["end"]
+                    else " "
+                )
                 timeline.insert(
                     tk.END,
-                    f"{index + 1:03d}  L:{frame['left']}  "
+                    f"{marker} {index + 1:03d}  L:{frame['left']}  "
                     f"R:{frame['right']}  refs:{uses}",
                 )
             valid = [index for index in selected if index < len(frames)]
@@ -902,9 +925,14 @@ class EmulatorWindow:
                 show_preview(valid[0])
             else:
                 show_preview(min(preview_index, len(frames) - 1))
+            loop_status = (
+                f" · range {loop_range['start'] + 1}-"
+                f"{loop_range['end'] + 1} {loop_range['mode']} until end"
+                if loop_range is not None else ""
+            )
             status.set(
                 f"{len(frames)}/255 entries · {len(pair_uses)} unique "
-                f"art pairs · {playback.get()} playback"
+                f"art pairs · {playback.get()} playback{loop_status}"
             )
 
         def require_selection() -> list[int]:
@@ -913,11 +941,20 @@ class EmulatorWindow:
                 self.show_notice("Select one or more timeline rows first")
             return selected
 
+        def clear_loop_for_edit() -> None:
+            nonlocal loop_range
+            if loop_range is not None:
+                loop_range = None
+                self.show_notice(
+                    "Cleared the until-end loop after changing its timeline"
+                )
+
         def move(direction: int) -> None:
             selected = set(require_selection())
             if not selected:
                 return
             order = sorted(selected, reverse=direction > 0)
+            changed = False
             for index in order:
                 neighbor = index + direction
                 if (0 <= neighbor < len(frames) and
@@ -927,6 +964,9 @@ class EmulatorWindow:
                     )
                     selected.remove(index)
                     selected.add(neighbor)
+                    changed = True
+            if changed:
+                clear_loop_for_edit()
             refresh(sorted(selected))
 
         def copy_references(repeats: int = 1) -> None:
@@ -938,31 +978,198 @@ class EmulatorWindow:
             if len(frames) + len(additions) > 255:
                 self.show_notice("A timeline cannot exceed 255 entries")
                 return
+            clear_loop_for_edit()
             insert_at = selected[-1] + 1
             frames[insert_at:insert_at] = additions
             refresh(list(range(insert_at, insert_at + len(additions))))
 
         def repeat_selection() -> None:
+            nonlocal loop_range
             selected = require_selection()
             if not selected:
                 return
             maximum = (255 - len(frames)) // len(selected)
-            if maximum < 1:
-                self.show_notice("A timeline cannot exceed 255 entries")
-                return
-            repeats = self.simpledialog.askinteger(
-                "Repeat effect range",
-                "How many additional times should this selection play?",
-                parent=window, initialvalue=min(2, maximum),
-                minvalue=1, maxvalue=maximum,
+            dialog = tk.Toplevel(window)
+            dialog.title("Repeat selected effect range")
+            dialog.configure(background="#111111")
+            dialog.resizable(False, False)
+            dialog.transient(window)
+            kind = tk.StringVar(value="fixed")
+            count = tk.IntVar(value=min(2, max(1, maximum)))
+            loop_mode = tk.StringVar(
+                value=(
+                    loop_range["mode"]
+                    if loop_range is not None else "loop"
+                )
             )
-            if repeats is not None:
-                copy_references(repeats)
+            tk.Label(
+                dialog,
+                text=(
+                    f"Selected entries {selected[0] + 1}-"
+                    f"{selected[-1] + 1}"
+                ),
+                background="#111111", foreground="#eeeeee",
+                font=("sans", 11, "bold"),
+            ).pack(anchor="w", padx=12, pady=(12, 8))
+
+            fixed_radio = tk.Radiobutton(
+                dialog, text="Add a fixed number of repeats",
+                variable=kind, value="fixed", anchor="w",
+                background="#111111", foreground="#eeeeee",
+                selectcolor="#20252a", activebackground="#111111",
+                activeforeground="#eeeeee",
+            )
+            explain_button(
+                tk, fixed_radio,
+                "Insert additional lightweight references after the selected "
+                "range. Playback later continues through the timeline.",
+            )
+            fixed_radio.pack(fill="x", padx=12)
+            count_row = tk.Frame(dialog, background="#111111")
+            count_row.pack(fill="x", padx=32, pady=(3, 9))
+            tk.Label(
+                count_row, text="Additional repeats:",
+                background="#111111", foreground="#aaaaaa",
+            ).pack(side="left")
+            tk.Spinbox(
+                count_row, from_=1, to=max(1, maximum),
+                textvariable=count, width=5,
+            ).pack(side="left", padx=(6, 0))
+
+            until_radio = tk.Radiobutton(
+                dialog, text="Repeat until the effect/state ends",
+                variable=kind, value="until_end", anchor="w",
+                background="#111111", foreground="#eeeeee",
+                selectcolor="#20252a", activebackground="#111111",
+                activeforeground="#eeeeee",
+            )
+            explain_button(
+                tk, until_radio,
+                "Play intro entries once, then repeat this selected range "
+                "until the controller changes to another animation state.",
+            )
+            until_radio.pack(fill="x", padx=12)
+            tk.Label(
+                dialog,
+                text=(
+                    "The controller ends this loop by changing state; "
+                    "timeline rows after the range are not reached."
+                ),
+                justify="left", wraplength=410, anchor="w",
+                background="#111111", foreground="#aaaaaa",
+            ).pack(fill="x", padx=32, pady=(2, 0))
+            tk.Label(
+                dialog, text="Until-end loop behavior:", anchor="w",
+                background="#111111", foreground="#aaaaaa",
+            ).pack(fill="x", padx=32, pady=(7, 2))
+            for label, value, explanation in (
+                (
+                    "Regular loop", "loop",
+                    "After the range's last frame, return directly to its "
+                    "first frame.",
+                ),
+                (
+                    "Ping-pong loop", "ping_pong",
+                    "Play the range forward and backward repeatedly until "
+                    "the state changes.",
+                ),
+            ):
+                radio = tk.Radiobutton(
+                    dialog, text=label, variable=loop_mode, value=value,
+                    anchor="w", background="#111111",
+                    foreground="#eeeeee", selectcolor="#20252a",
+                    activebackground="#111111",
+                    activeforeground="#eeeeee",
+                )
+                explain_button(tk, radio, explanation)
+                radio.pack(fill="x", padx=32)
+
+            def close_repeat_dialog() -> None:
+                try:
+                    dialog.grab_release()
+                except tk.TclError:
+                    pass
+                dialog.destroy()
+
+            def apply_repeat() -> None:
+                nonlocal loop_range, preview_direction
+                if kind.get() == "fixed":
+                    if maximum < 1:
+                        self.show_notice(
+                            "A timeline cannot exceed 255 entries"
+                        )
+                        return
+                    repeats = count.get()
+                    if not 1 <= repeats <= maximum:
+                        self.show_notice(
+                            f"Choose between 1 and {maximum} repeats"
+                        )
+                        return
+                    close_repeat_dialog()
+                    copy_references(repeats)
+                    return
+                expected = list(range(selected[0], selected[-1] + 1))
+                if selected != expected:
+                    self.show_notice(
+                        "An until-end loop needs one contiguous selection"
+                    )
+                    return
+                loop_range = {
+                    "start": selected[0], "end": selected[-1],
+                    "mode": loop_mode.get(),
+                }
+                preview_direction = 1
+                refresh(selected)
+                self.show_notice(
+                    "Set a persistent loop until the animation state ends"
+                )
+                close_repeat_dialog()
+
+            def remove_until_loop() -> None:
+                nonlocal loop_range
+                loop_range = None
+                refresh(selected)
+                self.show_notice("Removed the persistent until-end loop")
+                close_repeat_dialog()
+
+            actions = tk.Frame(dialog, background="#111111")
+            actions.pack(fill="x", padx=12, pady=12)
+            remove_button = tk.Button(
+                actions, text="Remove until-end loop",
+                command=remove_until_loop,
+            )
+            explain_button(
+                tk, remove_button,
+                "Remove the persistent range loop and use normal whole-"
+                "animation playback.",
+            )
+            remove_button.pack(side="left")
+            cancel_button = tk.Button(
+                actions, text="Cancel", command=close_repeat_dialog,
+            )
+            explain_button(
+                tk, cancel_button,
+                "Close this dialog without changing repeat behavior.",
+            )
+            cancel_button.pack(side="right", padx=(5, 0))
+            apply_button = tk.Button(
+                actions, text="Apply repeat", command=apply_repeat,
+            )
+            explain_button(
+                tk, apply_button,
+                "Apply either the finite reference copies or the selected "
+                "until-end loop behavior.",
+            )
+            apply_button.pack(side="right")
+            dialog.protocol("WM_DELETE_WINDOW", close_repeat_dialog)
+            dialog.bind("<Escape>", lambda _event: close_repeat_dialog())
+            dialog.grab_set()
 
         def reverse_selection() -> None:
             selected = require_selection()
             if not selected:
                 return
+            clear_loop_for_edit()
             values = [frames[index] for index in selected][::-1]
             for index, value in zip(selected, values):
                 frames[index] = value
@@ -976,6 +1183,7 @@ class EmulatorWindow:
             if len(frames) + len(exit_frames) > 255:
                 self.show_notice("The reverse exit would exceed 255 entries")
                 return
+            clear_loop_for_edit()
             start = len(frames)
             frames.extend(exit_frames)
             refresh(list(range(start, len(frames))))
@@ -987,6 +1195,7 @@ class EmulatorWindow:
             if len(selected) >= len(frames):
                 self.show_notice("An animation must keep at least one entry")
                 return
+            clear_loop_for_edit()
             next_index = min(selected[0], len(frames) - len(selected) - 1)
             for index in reversed(selected):
                 del frames[index]
@@ -998,6 +1207,7 @@ class EmulatorWindow:
             try:
                 asset_tool.set_animation_timeline(
                     state, frames, playback.get(),
+                    loop_range=loop_range,
                     assets_path=self.assets.path,
                 )
                 self.reload_after_frame_change(
@@ -1031,8 +1241,8 @@ class EmulatorWindow:
             ),
             (
                 "Repeat selection…", repeat_selection,
-                "Repeat the selected effect range a chosen number of times "
-                "using shared sprite references.",
+                "Repeat the selected effect range a fixed number of times, "
+                "or loop it regularly/ping-pong until the state ends.",
             ),
             (
                 "Reverse selection", reverse_selection,
@@ -1096,7 +1306,7 @@ class EmulatorWindow:
         explain_button(
             tk, play_button,
             "Play or pause the unsaved working timeline using its frame "
-            "timing and selected loop or ping-pong mode.",
+            "timing, whole-animation mode, and any until-end range loop.",
         )
         play_button.pack(side="left", fill="x", expand=True, padx=5)
         next_button = tk.Button(
@@ -1126,8 +1336,8 @@ class EmulatorWindow:
         save_button = tk.Button(footer, text="Save timeline", command=save)
         explain_button(
             tk, save_button,
-            "Save the working entry order and playback mode to the current "
-            "asset pack, then reload the emulator preview.",
+            "Save the working entry order, playback mode, and optional "
+            "until-end range loop to the current asset pack.",
         )
         save_button.pack(side="right")
         window.protocol("WM_DELETE_WINDOW", close)

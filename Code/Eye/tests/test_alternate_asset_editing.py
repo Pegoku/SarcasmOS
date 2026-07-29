@@ -111,18 +111,47 @@ class AlternateAssetEditingTest(unittest.TestCase):
             sprite_count = len(data["sprites"])
             asset_tool.set_animation_timeline(
                 "sample", [frames[1], frames[0], frames[0]], "ping_pong",
+                loop_range={"start": 1, "end": 2, "mode": "loop"},
                 assets_path=assets,
             )
             data = asset_tool.load_assets(assets)
             timeline = data["animations"][0]
             self.assertEqual(timeline["playback"], "ping_pong")
+            self.assertEqual(
+                timeline["loop_range"],
+                {"start": 1, "end": 2, "mode": "loop"},
+            )
             self.assertEqual(len(timeline["frames"]), 3)
             self.assertEqual(timeline["frames"][1], timeline["frames"][2])
             self.assertLessEqual(len(data["sprites"]), sprite_count)
+            compiled = root / "compiled.hpp"
+            asset_tool.compile_assets(assets, compiled)
+            header = compiled.read_text()
+            self.assertIn("EYE_ASSETS_HAS_LOOP_RANGES", header)
+            self.assertIn("uint8_t loopStart;", header)
             self.assertFalse((root / "eye_assets.hpp").exists())
 
         self.assertEqual(asset_tool.DEFAULT_ASSETS.read_bytes(), production_assets)
         self.assertEqual(asset_tool.DEFAULT_HEADER.read_bytes(), production_header)
+
+    def test_loop_range_frame_resolution(self) -> None:
+        animation = {
+            "frames": list(range(5)),
+            "frame_ms": 10,
+            "playback": "loop",
+            "loop_range": {"start": 1, "end": 3, "mode": "loop"},
+        }
+        self.assertEqual(
+            [asset_tool.animation_frame_index(animation, step * 10)
+             for step in range(9)],
+            [0, 1, 2, 3, 1, 2, 3, 1, 2],
+        )
+        animation["loop_range"]["mode"] = "ping_pong"
+        self.assertEqual(
+            [asset_tool.animation_frame_index(animation, step * 10)
+             for step in range(9)],
+            [0, 1, 2, 3, 2, 1, 2, 3, 2],
+        )
 
 
 if __name__ == "__main__":

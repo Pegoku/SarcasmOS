@@ -143,6 +143,22 @@ static uint8_t animation_frame(
 ) {
     if (animation.frameCount <= 1) return 0;
     const uint32_t step = elapsed_ms / animation.frameMs;
+#ifdef EYE_ASSETS_HAS_LOOP_RANGES
+    if (animation.loopEnd > animation.loopStart &&
+        step >= animation.loopStart) {
+        const uint8_t loop_count = animation.loopEnd - animation.loopStart;
+        const uint32_t loop_step = step - animation.loopStart;
+        if (animation.loopPlayback == eye_assets::kPlaybackPingPong &&
+            loop_count > 1) {
+            const uint8_t final_frame = loop_count - 1;
+            const uint16_t phase = loop_step % (final_frame * 2);
+            const uint8_t local = phase <= final_frame
+                ? phase : final_frame * 2 - phase;
+            return animation.loopStart + local;
+        }
+        return animation.loopStart + loop_step % loop_count;
+    }
+#endif
     if (animation.playback == eye_assets::kPlaybackPingPong) {
         const uint8_t final_frame = animation.frameCount - 1;
         const uint16_t phase = step % (final_frame * 2);

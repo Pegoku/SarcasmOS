@@ -87,6 +87,72 @@ typedef struct {
     unsigned skip;
 } summary_t;
 
+typedef struct {
+    bool left_eye;
+    bool right_eye;
+    bool mouth;
+    esp_err_t left_eye_error;
+    esp_err_t right_eye_error;
+    esp_err_t mouth_error;
+} face_discovery_t;
+
+typedef struct {
+    bool left_eye;
+    bool right_eye;
+    bool mouth;
+} face_targets_t;
+
+typedef struct {
+    uint8_t id;
+    const char *name;
+    const char *description;
+} face_state_t;
+
+typedef enum {
+    TUI_KEY_NONE,
+    TUI_KEY_UP,
+    TUI_KEY_DOWN,
+    TUI_KEY_ENTER,
+    TUI_KEY_SPACE,
+    TUI_KEY_ESCAPE,
+    TUI_KEY_QUIT,
+    TUI_KEY_RESCAN,
+} tui_key_t;
+
+static const face_state_t FACE_STATES[] = {
+    { DISPLAY_ANIM_IDLE, "idle", "awake, ready, resting face" },
+    { DISPLAY_ANIM_LISTENING, "listening", "accepting voice input" },
+    { DISPLAY_ANIM_THINKING, "thinking", "processing a request" },
+    { DISPLAY_ANIM_THINKING_AUDIO, "thinking_audio", "processing recorded audio" },
+    { DISPLAY_ANIM_THINKING_LONG, "thinking_long", "extended processing" },
+    { DISPLAY_ANIM_SPEAKING, "speaking", "producing speech" },
+    { DISPLAY_ANIM_HAPPY, "happy_fake", "deliberately cheerful expression" },
+    { DISPLAY_ANIM_ANGRY, "angry", "angry or determined expression" },
+    { DISPLAY_ANIM_ERROR, "error", "operation or hardware fault" },
+    { DISPLAY_ANIM_SLEEP, "asleep", "face sleeping or display off" },
+    { DISPLAY_ANIM_TOOL, "tool", "external tool in progress" },
+    { DISPLAY_ANIM_LEFT, "left", "look left" },
+    { DISPLAY_ANIM_RIGHT, "right", "look right" },
+    { DISPLAY_ANIM_UP, "up", "look up" },
+    { DISPLAY_ANIM_DOWN, "down", "look down" },
+    { DISPLAY_ANIM_CENTER, "center", "return gaze to center" },
+    { DISPLAY_ANIM_NEUTRAL, "neutral", "neutral persistent expression" },
+    { DISPLAY_ANIM_SARCASTIC, "sarcastic", "sarcastic or smug expression" },
+    { DISPLAY_ANIM_SUSPICIOUS, "suspicious", "skeptical expression" },
+    { DISPLAY_ANIM_TIRED, "tired", "low-energy expression" },
+    { DISPLAY_ANIM_SURPRISED, "surprised", "surprised expression" },
+    { DISPLAY_ANIM_BORED, "bored", "disinterested expression" },
+    { DISPLAY_ANIM_DRAMATIC, "dramatic", "theatrical expression" },
+    { DISPLAY_ANIM_WATCH, "watch", "monitoring a live condition" },
+    { DISPLAY_ANIM_PARTY, "party", "celebration mode" },
+    { DISPLAY_ANIM_BATTERY_LOW, "battery_low", "low battery warning" },
+    { DISPLAY_ANIM_SUNNY, "sunny", "sunny weather state" },
+    { DISPLAY_ANIM_RAINY, "rainy", "rainy weather state" },
+    { DISPLAY_ANIM_CLOUDY, "cloudy", "cloudy weather state" },
+    { DISPLAY_ANIM_STORMY, "stormy", "storm warning state" },
+    { DISPLAY_ANIM_SNOWY, "snowy", "snowy weather state" },
+};
+
 static summary_t g_summary;
 static i2c_master_bus_handle_t g_i2c_bus;
 static esp_netif_t *g_wifi_netif;
@@ -95,6 +161,7 @@ static bool g_wifi_initialized;
 static bool g_wifi_connected;
 static bool g_usb_driver_ready;
 static bool g_mouth_initialized;
+static bool g_discard_line_feed;
 static uint8_t g_wifi_disconnect_reason;
 static uint8_t g_display_sequence = 1;
 static esp_err_t g_service_status = ESP_OK;
@@ -558,6 +625,45 @@ static esp_err_t mouth_espnow_ensure_started(void)
 #endif
 }
 
+static esp_err_t discover_eye(uint8_t address, uint8_t role)
+{
+    esp_err_t err = init_i2c();
+    if (err == ESP_OK && !i2c_present(address)) {
+        err = ESP_ERR_NOT_FOUND;
+    }
+    if (err == ESP_OK) {
+        err = display_command(address, role, DISPLAY_CMD_PING, NULL, 0);
+    }
+    return err;
+}
+
+static face_discovery_t discover_face_devices(void)
+{
+    face_discovery_t discovery = {
+        .left_eye_error = ESP_ERR_NOT_FOUND,
+        .right_eye_error = ESP_ERR_NOT_FOUND,
+        .mouth_error = ESP_ERR_NOT_FOUND,
+    };
+
+    discovery.left_eye_error = discover_eye(I2C_ADDR_LEFT_EYE, 0);
+    discovery.left_eye = discovery.left_eye_error == ESP_OK;
+    discovery.right_eye_error = discover_eye(I2C_ADDR_RIGHT_EYE, 1);
+    discovery.right_eye = discovery.right_eye_error == ESP_OK;
+
+#if CONFIG_BRAIN_SELF_TEST_MOUTH_ESPNOW
+    discovery.mouth_error = mouth_espnow_ensure_started();
+    if (discovery.mouth_error == ESP_OK) {
+        discovery.mouth_error =
+            mouth_espnow_send(DISPLAY_CMD_PING, NULL, 0, true);
+    }
+    discovery.mouth = discovery.mouth_error == ESP_OK;
+#else
+    discovery.mouth_error = ESP_ERR_NOT_SUPPORTED;
+#endif
+
+    return discovery;
+}
+
 static void test_mouth_espnow(void)
 {
 #if CONFIG_BRAIN_SELF_TEST_MOUTH_ESPNOW
@@ -1009,45 +1115,50 @@ static void run_self_test(void)
     print_summary();
 }
 
+static bool read_serial_byte(uint8_t *input, TickType_t timeout)
+{
+    if (g_usb_driver_ready) {
+        return usb_serial_jtag_read_bytes(input, 1, timeout) == 1;
+    }
+
+    int character = fgetc(stdin);
+    if (character == EOF) {
+        clearerr(stdin);
+        if (timeout > 0) {
+            vTaskDelay(timeout);
+        }
+        return false;
+    }
+    *input = (uint8_t)character;
+    return true;
+}
+
 static bool read_line(const char *prompt, char *buffer, size_t buffer_size)
 {
-    static bool discard_line_feed;
     size_t length = 0;
-
     if (buffer_size == 0) {
         return false;
     }
-
     buffer[0] = '\0';
     printf("%s", prompt);
     fflush(stdout);
 
     while (true) {
         uint8_t input;
-        int character;
-        if (g_usb_driver_ready) {
-            if (usb_serial_jtag_read_bytes(&input, 1, pdMS_TO_TICKS(20)) != 1) {
-                continue;
-            }
-            character = input;
-        } else {
-            character = fgetc(stdin);
-            if (character == EOF) {
-                clearerr(stdin);
-                vTaskDelay(pdMS_TO_TICKS(20));
-                continue;
-            }
+        if (!read_serial_byte(&input, pdMS_TO_TICKS(20))) {
+            continue;
         }
+        int character = input;
 
-        if (discard_line_feed) {
-            discard_line_feed = false;
+        if (g_discard_line_feed) {
+            g_discard_line_feed = false;
             if (character == '\n') {
                 continue;
             }
         }
 
         if (character == '\r' || character == '\n') {
-            discard_line_feed = character == '\r';
+            g_discard_line_feed = character == '\r';
             buffer[length] = '\0';
             printf("\n");
             fflush(stdout);
@@ -1070,6 +1181,64 @@ static bool read_line(const char *prompt, char *buffer, size_t buffer_size)
             putchar(character);
             fflush(stdout);
         }
+    }
+}
+
+static tui_key_t read_tui_key(void)
+{
+    while (true) {
+        uint8_t input;
+        if (!read_serial_byte(&input, pdMS_TO_TICKS(20))) {
+            continue;
+        }
+        if (g_discard_line_feed) {
+            g_discard_line_feed = false;
+            if (input == '\n') {
+                continue;
+            }
+        }
+
+        if (input == '\r' || input == '\n') {
+            g_discard_line_feed = input == '\r';
+            return TUI_KEY_ENTER;
+        }
+        if (input == ' ') {
+            return TUI_KEY_SPACE;
+        }
+        if (input == 'q' || input == 'Q') {
+            return TUI_KEY_QUIT;
+        }
+        if (input == 'r' || input == 'R') {
+            return TUI_KEY_RESCAN;
+        }
+        if (input == 'w' || input == 'W') {
+            return TUI_KEY_UP;
+        }
+        if (input == 's' || input == 'S') {
+            return TUI_KEY_DOWN;
+        }
+        if (input != 0x1B) {
+            continue;
+        }
+
+        uint8_t prefix;
+        if (!read_serial_byte(&prefix, pdMS_TO_TICKS(30))) {
+            return TUI_KEY_ESCAPE;
+        }
+        if (prefix != '[' && prefix != 'O') {
+            return TUI_KEY_ESCAPE;
+        }
+        uint8_t arrow;
+        if (!read_serial_byte(&arrow, pdMS_TO_TICKS(30))) {
+            return TUI_KEY_ESCAPE;
+        }
+        if (arrow == 'A') {
+            return TUI_KEY_UP;
+        }
+        if (arrow == 'B') {
+            return TUI_KEY_DOWN;
+        }
+        return TUI_KEY_NONE;
     }
 }
 
@@ -1268,6 +1437,222 @@ static void manual_wifi_disconnect(void)
 #endif
 }
 
+static void clear_tui_screen(void)
+{
+    printf("\033[2J\033[H");
+}
+
+static unsigned selected_target_count(const face_targets_t *targets)
+{
+    return (targets->left_eye ? 1U : 0U) +
+           (targets->right_eye ? 1U : 0U) +
+           (targets->mouth ? 1U : 0U);
+}
+
+static const char *discovery_label(bool present, esp_err_t error)
+{
+    return present ? "READY" : esp_err_to_name(error);
+}
+
+static void render_target_selector(const face_discovery_t *discovery,
+                                   const face_targets_t *targets,
+                                   unsigned cursor, const char *message)
+{
+    clear_tui_screen();
+    printf("Face display connection\n");
+    printf("=======================\n");
+    printf("I2C eyes are verified by protocol role; the mouth requires an ESP-NOW reply.\n\n");
+    printf("%c [%c] Left eye   I2C 0x30  %-20s\n",
+           cursor == 0 ? '>' : ' ', targets->left_eye ? 'x' : ' ',
+           discovery_label(discovery->left_eye, discovery->left_eye_error));
+    printf("%c [%c] Right eye  I2C 0x31  %-20s\n",
+           cursor == 1 ? '>' : ' ', targets->right_eye ? 'x' : ' ',
+           discovery_label(discovery->right_eye, discovery->right_eye_error));
+    printf("%c [%c] Mouth      ESP-NOW   %-20s\n",
+           cursor == 2 ? '>' : ' ', targets->mouth ? 'x' : ' ',
+           discovery_label(discovery->mouth, discovery->mouth_error));
+    printf("\nUp/Down or W/S: move   Space: toggle   Enter: continue\n");
+    printf("R: rescan              Q/Esc: cancel\n");
+    if (message != NULL && message[0] != '\0') {
+        printf("\n%s\n", message);
+    }
+    fflush(stdout);
+}
+
+static bool select_face_targets(face_discovery_t *discovery,
+                                face_targets_t *targets)
+{
+    unsigned cursor = 0;
+    char message[128] = "";
+    memset(targets, 0, sizeof(*targets));
+
+    while (true) {
+        render_target_selector(discovery, targets, cursor, message);
+        tui_key_t key = read_tui_key();
+        message[0] = '\0';
+        if (key == TUI_KEY_UP) {
+            cursor = cursor == 0 ? 2 : cursor - 1;
+        } else if (key == TUI_KEY_DOWN) {
+            cursor = (cursor + 1) % 3;
+        } else if (key == TUI_KEY_SPACE) {
+            bool available = cursor == 0 ? discovery->left_eye
+                             : cursor == 1 ? discovery->right_eye
+                                           : discovery->mouth;
+            if (!available) {
+                snprintf(message, sizeof(message),
+                         "That target did not answer discovery; press R to scan again.");
+            } else if (cursor == 0) {
+                targets->left_eye = !targets->left_eye;
+            } else if (cursor == 1) {
+                targets->right_eye = !targets->right_eye;
+            } else {
+                targets->mouth = !targets->mouth;
+            }
+        } else if (key == TUI_KEY_RESCAN) {
+            clear_tui_screen();
+            printf("Scanning I2C eyes and pinging the ESP-NOW mouth...\n");
+            fflush(stdout);
+            *discovery = discover_face_devices();
+            targets->left_eye &= discovery->left_eye;
+            targets->right_eye &= discovery->right_eye;
+            targets->mouth &= discovery->mouth;
+            snprintf(message, sizeof(message), "Discovery refreshed.");
+        } else if (key == TUI_KEY_ENTER) {
+            if (selected_target_count(targets) > 0) {
+                return true;
+            }
+            snprintf(message, sizeof(message),
+                     "Select at least one READY target with Space.");
+        } else if (key == TUI_KEY_QUIT || key == TUI_KEY_ESCAPE) {
+            return false;
+        }
+    }
+}
+
+static void append_send_result(char *status, size_t capacity, size_t *used,
+                               const char *target, esp_err_t result)
+{
+    if (*used >= capacity) {
+        return;
+    }
+    int written = snprintf(
+        status + *used, capacity - *used, "%s%s=%s",
+        *used > 0 ? "  " : "", target,
+        result == ESP_OK ? "OK" : esp_err_to_name(result));
+    if (written > 0) {
+        size_t available = capacity - *used;
+        *used += (size_t)written < available ? (size_t)written : available;
+    }
+}
+
+static void send_face_state(const face_targets_t *targets,
+                            const face_state_t *state,
+                            char *status, size_t status_capacity)
+{
+    size_t used = 0;
+    status[0] = '\0';
+    if (targets->left_eye) {
+        esp_err_t err = display_command(
+            I2C_ADDR_LEFT_EYE, 0, DISPLAY_CMD_SET_ANIMATION, &state->id, 1);
+        append_send_result(status, status_capacity, &used, "left", err);
+    }
+    if (targets->right_eye) {
+        esp_err_t err = display_command(
+            I2C_ADDR_RIGHT_EYE, 1, DISPLAY_CMD_SET_ANIMATION, &state->id, 1);
+        append_send_result(status, status_capacity, &used, "right", err);
+    }
+    if (targets->mouth) {
+        esp_err_t err = mouth_espnow_send(
+            DISPLAY_CMD_SET_ANIMATION, &state->id, 1, true);
+        append_send_result(status, status_capacity, &used, "mouth", err);
+    }
+}
+
+static void print_selected_targets(const face_targets_t *targets)
+{
+    bool separator = false;
+    if (targets->left_eye) {
+        printf("left eye");
+        separator = true;
+    }
+    if (targets->right_eye) {
+        printf("%sright eye", separator ? ", " : "");
+        separator = true;
+    }
+    if (targets->mouth) {
+        printf("%smouth", separator ? ", " : "");
+    }
+}
+
+static void render_state_selector(const face_targets_t *targets,
+                                  size_t cursor, const char *status)
+{
+    const size_t state_count = sizeof(FACE_STATES) / sizeof(FACE_STATES[0]);
+    const size_t page_size = 10;
+    size_t page_start = (cursor / page_size) * page_size;
+    size_t page_end = page_start + page_size;
+    if (page_end > state_count) {
+        page_end = state_count;
+    }
+
+    clear_tui_screen();
+    printf("Face state sender\n");
+    printf("=================\n");
+    printf("Targets: ");
+    print_selected_targets(targets);
+    printf("\nStates %u-%u of %u\n\n", (unsigned)(page_start + 1),
+           (unsigned)page_end, (unsigned)state_count);
+    for (size_t i = page_start; i < page_end; ++i) {
+        printf("%c 0x%02X  %-16s %s\n", i == cursor ? '>' : ' ',
+               FACE_STATES[i].id, FACE_STATES[i].name,
+               FACE_STATES[i].description);
+    }
+    printf("\nUp/Down or W/S: move   Enter: send state\n");
+    printf("Q/Esc: return to the main test menu\n");
+    if (status != NULL && status[0] != '\0') {
+        printf("\n%s\n", status);
+    }
+    fflush(stdout);
+}
+
+static void run_face_control(void)
+{
+    clear_tui_screen();
+    printf("Scanning I2C eyes and pinging the ESP-NOW mouth...\n");
+    fflush(stdout);
+    face_discovery_t discovery = discover_face_devices();
+    face_targets_t targets;
+    if (!select_face_targets(&discovery, &targets)) {
+        clear_tui_screen();
+        printf("Face display connection cancelled.\n");
+        return;
+    }
+
+    const size_t state_count = sizeof(FACE_STATES) / sizeof(FACE_STATES[0]);
+    size_t cursor = 0;
+    char status[192] = "";
+    while (true) {
+        render_state_selector(&targets, cursor, status);
+        tui_key_t key = read_tui_key();
+        if (key == TUI_KEY_UP) {
+            cursor = cursor == 0 ? state_count - 1 : cursor - 1;
+        } else if (key == TUI_KEY_DOWN) {
+            cursor = (cursor + 1) % state_count;
+        } else if (key == TUI_KEY_ENTER || key == TUI_KEY_SPACE) {
+            send_face_state(&targets, &FACE_STATES[cursor],
+                            status, sizeof(status));
+            char results[128];
+            strlcpy(results, status, sizeof(results));
+            snprintf(status, sizeof(status), "Sent 0x%02X %.16s: %.127s",
+                     FACE_STATES[cursor].id, FACE_STATES[cursor].name, results);
+        } else if (key == TUI_KEY_QUIT || key == TUI_KEY_ESCAPE) {
+            clear_tui_screen();
+            printf("Face state sender closed.\n");
+            return;
+        }
+    }
+}
+
 static void print_tui_menu(void)
 {
     printf("\n");
@@ -1284,6 +1669,7 @@ static void print_tui_menu(void)
     printf(" Displays                            a  combined I2S audio\n");
     printf("  l  left eye (I2C)                  v  all displays\n");
     printf("  r  right eye (I2C)                 o  mouth (ESP-NOW)\n");
+    printf("  f  connect/select face displays and send states\n");
     printf(" Other\n");
     printf("  g  GPIO status     x  rerun all     h  show menu\n");
     printf("==================================================\n");
@@ -1371,6 +1757,10 @@ static void run_tui(void)
         case 'V':
             test_all_displays();
             test_mouth_espnow();
+            break;
+        case 'f':
+        case 'F':
+            run_face_control();
             break;
         case 'g':
         case 'G':

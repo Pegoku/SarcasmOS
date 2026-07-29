@@ -112,9 +112,16 @@ static void receive_task(void *argument)
         display_protocol_packet_t packet;
         if (!display_protocol_decode(
                 message.data, message.length, DISPLAY_PROTOCOL_TYPE_STATUS,
-                DISPLAY_PROTOCOL_ROLE_MOUTH, &packet) ||
-            packet.payload_length != DISPLAY_PROTOCOL_STATUS_PAYLOAD_SIZE ||
-            packet.payload[0] != DISPLAY_PROTOCOL_APPLICATION_VERSION ||
+                DISPLAY_PROTOCOL_ROLE_MOUTH, &packet)) {
+            continue;
+        }
+        bool current_status =
+            packet.payload_length == DISPLAY_PROTOCOL_STATUS_PAYLOAD_SIZE &&
+            packet.payload[0] == DISPLAY_PROTOCOL_APPLICATION_VERSION;
+        bool legacy_status =
+            packet.payload_length == DISPLAY_PROTOCOL_STATUS_PAYLOAD_LEGACY_SIZE &&
+            packet.payload[0] == DISPLAY_PROTOCOL_APPLICATION_VERSION_LEGACY;
+        if ((!current_status && !legacy_status) ||
             packet.payload[1] != DISPLAY_PROTOCOL_ROLE_MOUTH ||
             packet.payload[5] != packet.sequence) {
             continue;
@@ -132,6 +139,15 @@ static void receive_task(void *argument)
         g_status.brightness = packet.payload[7];
         g_status.speaking_intensity = packet.payload[8];
         g_status.channel = packet.payload[9];
+        if (packet.payload_length == DISPLAY_PROTOCOL_STATUS_PAYLOAD_SIZE) {
+            g_status.transition_token = packet.payload[10];
+            g_status.transition_active = packet.payload[11] != 0;
+            g_status.transition_progress = packet.payload[12];
+        } else {
+            g_status.transition_token = 0;
+            g_status.transition_active = false;
+            g_status.transition_progress = 255;
+        }
         g_status.consecutive_failures = 0;
         g_status.last_ack_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
         xSemaphoreGive(g_status_mutex);

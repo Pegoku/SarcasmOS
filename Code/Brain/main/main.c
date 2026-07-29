@@ -9,6 +9,7 @@
 #include "driver/i2c_master.h"
 #include "driver/i2s_std.h"
 #include "display_protocol.h"
+#include "eye_protocol.h"
 #include "esp_check.h"
 #include "esp_event.h"
 #include "esp_eth.h"
@@ -23,6 +24,8 @@
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
+#include "freertos/queue.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "mouth_espnow.h"
 #include "nvs_flash.h"
@@ -58,7 +61,7 @@
 #define ADDR_LEFT_EYE 0x30
 #define ADDR_RIGHT_EYE 0x31
 
-#define PROTO_VERSION 0x01
+#define PROTO_VERSION EYE_PROTOCOL_VERSION_TRANSITIONS
 #define CMD_PING DISPLAY_CMD_PING
 #define CMD_GET_INFO DISPLAY_CMD_GET_INFO
 #define CMD_SET_BRIGHTNESS DISPLAY_CMD_SET_BRIGHTNESS
@@ -81,6 +84,13 @@
 #define ANIM_ERROR DISPLAY_ANIM_ERROR
 #define ANIM_SLEEP DISPLAY_ANIM_SLEEP
 
+#define EYE_COUNT 2
+#define EYE_LEFT_INDEX 0
+#define EYE_RIGHT_INDEX 1
+#define EYE_LEFT_MASK (1U << EYE_LEFT_INDEX)
+#define EYE_RIGHT_MASK (1U << EYE_RIGHT_INDEX)
+#define EYE_BOTH_MASK (EYE_LEFT_MASK | EYE_RIGHT_MASK)
+
 typedef enum {
     STATE_BOOTING,
     STATE_IDLE,
@@ -100,14 +110,46 @@ typedef struct {
     uint8_t role;
     uint8_t fw_major;
     uint8_t fw_minor;
+    uint8_t active_animation;
+    uint8_t pending_animation;
+    uint8_t active_transition_token;
+    uint8_t pending_transition_token;
+    uint8_t playback_flags;
+    uint8_t current_frame;
+    uint8_t last_error;
     uint32_t last_seen_ms;
+    uint32_t status_read_ms;
     i2c_master_dev_handle_t i2c_handle;
 } display_device_t;
 
+typedef struct {
+    uint8_t animation;
+    bool emergency;
+} face_request_t;
+
+typedef struct {
+    uint8_t desired_animation;
+    uint8_t committed_animation;
+    uint8_t token;
+    uint8_t waiting_mask;
+    uint32_t started_ms;
+    bool degraded;
+} face_transition_status_t;
+
 static const char *TAG = "sarcasmos-brain";
 static display_device_t g_displays[] = {
-    { .name = "left_eye", .address = ADDR_LEFT_EYE },
-    { .name = "right_eye", .address = ADDR_RIGHT_EYE },
+    {
+        .name = "left_eye",
+        .address = ADDR_LEFT_EYE,
+        .role = EYE_LEFT_INDEX,
+        .pending_animation = EYE_PROTOCOL_NO_PENDING_ANIMATION,
+    },
+    {
+        .name = "right_eye",
+        .address = ADDR_RIGHT_EYE,
+        .role = EYE_RIGHT_INDEX,
+        .pending_animation = EYE_PROTOCOL_NO_PENDING_ANIMATION,
+    },
 };
 static assistant_state_t g_state = STATE_BOOTING;
 static uint8_t g_sequence = 1;
@@ -118,6 +160,13 @@ static bool g_ethernet_connected;
 static bool g_mouth_initialized;
 static EventGroupHandle_t g_wifi_events;
 static i2c_master_bus_handle_t g_i2c_bus;
+static QueueHandle_t g_face_queue;
+static SemaphoreHandle_t g_face_mutex;
+static SemaphoreHandle_t g_display_mutex;
+static face_transition_status_t g_face_transition = {
+    .desired_animation = ANIM_IDLE,
+    .committed_animation = ANIM_IDLE,
+};
 
 static uint8_t crc8(const uint8_t *data, size_t len)
 {
@@ -173,58 +222,160 @@ static assistant_state_t parse_state(const char *body)
     return STATE_IDLE;
 }
 
-static esp_err_t i2c_send(uint8_t addr, uint8_t command, const uint8_t *payload, uint8_t len)
+static uint32_t uptime_ms(void)
 {
-    i2c_master_dev_handle_t handle = NULL;
-    for (size_t i = 0; i < sizeof(g_displays) / sizeof(g_displays[0]); ++i) {
-        if (g_displays[i].address == addr) {
-            handle = g_displays[i].i2c_handle;
-            break;
-        }
-    }
-    if (!handle) return ESP_ERR_NOT_FOUND;
+    return (uint32_t)(esp_timer_get_time() / 1000ULL);
+}
 
+static esp_err_t eye_transmit_locked(display_device_t *eye, uint8_t command,
+                                     const uint8_t *payload, uint8_t len)
+{
+    if (eye == NULL || eye->i2c_handle == NULL) {
+        return ESP_ERR_NOT_FOUND;
+    }
     uint8_t frame[4 + 64 + 1];
-    if (len > 64) return ESP_ERR_INVALID_SIZE;
+    if (len > 64) {
+        return ESP_ERR_INVALID_SIZE;
+    }
     frame[0] = PROTO_VERSION;
     frame[1] = command;
     frame[2] = g_sequence++;
+    if (g_sequence == 0) {
+        g_sequence = 1;
+    }
     frame[3] = len;
-    if (len && payload) memcpy(&frame[4], payload, len);
+    if (len > 0 && payload != NULL) {
+        memcpy(&frame[4], payload, len);
+    }
     frame[4 + len] = crc8(frame, 4 + len);
-    return i2c_master_transmit(handle, frame, 5 + len, I2C_TIMEOUT_MS);
+    esp_err_t err =
+        i2c_master_transmit(eye->i2c_handle, frame, 5 + len, I2C_TIMEOUT_MS);
+    eye->present = err == ESP_OK;
+    if (err == ESP_OK) {
+        eye->last_sequence = frame[2];
+        eye->last_seen_ms = uptime_ms();
+    }
+    return err;
 }
 
-static esp_err_t display_command_all(uint8_t command, const uint8_t *payload, uint8_t len)
+static esp_err_t eye_command(display_device_t *eye, uint8_t command,
+                             const uint8_t *payload, uint8_t len)
+{
+    if (xSemaphoreTake(g_display_mutex, portMAX_DELAY) != pdTRUE) {
+        return ESP_FAIL;
+    }
+    esp_err_t err = eye_transmit_locked(eye, command, payload, len);
+    xSemaphoreGive(g_display_mutex);
+    return err;
+}
+
+static esp_err_t eye_command_both(uint8_t command, const uint8_t *payload,
+                                  uint8_t len)
 {
     esp_err_t result = ESP_OK;
-    for (size_t i = 0; i < sizeof(g_displays) / sizeof(g_displays[0]); ++i) {
-        esp_err_t err = i2c_send(g_displays[i].address, command, payload, len);
-        g_displays[i].present = (err == ESP_OK);
-        if (err == ESP_OK) {
-            g_displays[i].last_seen_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
-        } else {
-            result = err;
-        }
-    }
-#if CONFIG_SARCASMOS_MOUTH_ESPNOW
-    if (g_mouth_initialized) {
-        esp_err_t err = mouth_espnow_send(command, payload, len, true);
+    for (size_t i = 0; i < EYE_COUNT; ++i) {
+        esp_err_t err = eye_command(&g_displays[i], command, payload, len);
         if (err != ESP_OK) {
             result = err;
         }
     }
-#endif
     return result;
 }
 
-static void set_animation_all(uint8_t animation)
+static esp_err_t mouth_command(uint8_t command, const uint8_t *payload,
+                               uint8_t len)
 {
-    uint8_t payload[2] = { animation, 0 };
-    display_command_all(CMD_SET_ANIMATION, payload, sizeof(payload));
-    uint32_t now = (uint32_t)(esp_timer_get_time() / 1000ULL);
-    uint8_t sync_payload[4] = { now & 0xff, (now >> 8) & 0xff, (now >> 16) & 0xff, (now >> 24) & 0xff };
-    display_command_all(CMD_SYNC, sync_payload, sizeof(sync_payload));
+#if CONFIG_SARCASMOS_MOUTH_ESPNOW
+    if (g_mouth_initialized) {
+        return mouth_espnow_send(command, payload, len, true);
+    }
+    return ESP_ERR_INVALID_STATE;
+#else
+    (void)command;
+    (void)payload;
+    (void)len;
+    return ESP_ERR_NOT_SUPPORTED;
+#endif
+}
+
+static esp_err_t display_command_non_animation_all(
+    uint8_t command, const uint8_t *payload, uint8_t len)
+{
+    esp_err_t result = eye_command_both(command, payload, len);
+    esp_err_t mouth_err = mouth_command(command, payload, len);
+    if (mouth_err != ESP_OK && mouth_err != ESP_ERR_NOT_SUPPORTED &&
+        mouth_err != ESP_ERR_INVALID_STATE) {
+        result = mouth_err;
+    }
+    return result;
+}
+
+static esp_err_t eye_read_status(display_device_t *eye,
+                                 eye_protocol_status_t *status)
+{
+    if (eye == NULL || status == NULL ||
+        xSemaphoreTake(g_display_mutex, portMAX_DELAY) != pdTRUE) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t err = eye_transmit_locked(eye, CMD_PING, NULL, 0);
+    uint8_t response[EYE_PROTOCOL_STATUS_SIZE] = { 0 };
+    if (err == ESP_OK) {
+        vTaskDelay(pdMS_TO_TICKS(2));
+        err = i2c_master_receive(
+            eye->i2c_handle, response, sizeof(response), I2C_TIMEOUT_MS);
+    }
+    if (err == ESP_OK &&
+        !eye_protocol_decode_status(response, sizeof(response), eye->role,
+                                    status)) {
+        err = ESP_ERR_INVALID_RESPONSE;
+    }
+    if (err == ESP_OK &&
+        (status->active_animation >= DISPLAY_ANIM_COUNT ||
+         (status->pending_animation != EYE_PROTOCOL_NO_PENDING_ANIMATION &&
+          status->pending_animation >= DISPLAY_ANIM_COUNT))) {
+        err = ESP_ERR_INVALID_RESPONSE;
+    }
+    if (err == ESP_OK) {
+        eye->present = true;
+        eye->fw_major = status->firmware_major;
+        eye->fw_minor = status->firmware_minor;
+        eye->active_animation = status->active_animation;
+        eye->pending_animation = status->pending_animation;
+        eye->active_transition_token = status->active_transition_token;
+        eye->pending_transition_token = status->pending_transition_token;
+        eye->playback_flags = status->playback_flags;
+        eye->current_frame = status->current_frame;
+        eye->last_result = status->last_error;
+        eye->last_error = status->last_error;
+        eye->status_read_ms = uptime_ms();
+        eye->last_seen_ms = eye->status_read_ms;
+    }
+    xSemaphoreGive(g_display_mutex);
+    return err;
+}
+
+static bool emergency_animation(uint8_t animation)
+{
+    return animation == ANIM_ERROR || animation == ANIM_SLEEP ||
+           animation == DISPLAY_ANIM_BATTERY_LOW;
+}
+
+static esp_err_t request_face_state(uint8_t animation, bool emergency)
+{
+    if (animation >= DISPLAY_ANIM_COUNT || g_face_queue == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    face_request_t request = {
+        .animation = animation,
+        .emergency = emergency || emergency_animation(animation),
+    };
+    if (xSemaphoreTake(g_face_mutex, portMAX_DELAY) == pdTRUE) {
+        g_face_transition.desired_animation = animation;
+        xSemaphoreGive(g_face_mutex);
+    }
+    return xQueueOverwrite(g_face_queue, &request) == pdPASS
+               ? ESP_OK : ESP_FAIL;
 }
 
 static void configure_gpio(void)
@@ -460,28 +611,216 @@ static void start_ethernet(void)
 static void display_health_task(void *arg)
 {
     while (true) {
-        for (size_t i = 0; i < sizeof(g_displays) / sizeof(g_displays[0]); ++i) {
-            esp_err_t err = i2c_send(g_displays[i].address, CMD_PING, NULL, 0);
-            g_displays[i].present = (err == ESP_OK);
-            if (err == ESP_OK) g_displays[i].last_seen_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+        for (size_t i = 0; i < EYE_COUNT; ++i) {
+            eye_protocol_status_t status;
+            esp_err_t err = eye_read_status(&g_displays[i], &status);
+            if (err != ESP_OK && err != ESP_ERR_INVALID_RESPONSE) {
+                ESP_LOGW(TAG, "%s health check failed: %s",
+                         g_displays[i].name, esp_err_to_name(err));
+            }
         }
 #if CONFIG_SARCASMOS_MOUTH_ESPNOW
         if (g_mouth_initialized) {
-            mouth_espnow_send(CMD_PING, NULL, 0, true);
+            mouth_command(CMD_PING, NULL, 0);
         }
 #endif
         vTaskDelay(pdMS_TO_TICKS(3000));
     }
 }
 
-static void animation_task(void *arg)
+static uint8_t next_transition_token(uint8_t current)
 {
-    assistant_state_t last_state = STATE_BOOTING;
-    while (true) {
-        if (last_state != g_state) {
-            last_state = g_state;
-            set_animation_all(animation_for_state(g_state));
+    ++current;
+    return current == 0 ? 1 : current;
+}
+
+static void set_transition_runtime(uint8_t desired, uint8_t token,
+                                   uint8_t waiting_mask, bool degraded)
+{
+    if (xSemaphoreTake(g_face_mutex, portMAX_DELAY) != pdTRUE) {
+        return;
+    }
+    g_face_transition.desired_animation = desired;
+    g_face_transition.token = token;
+    g_face_transition.waiting_mask = waiting_mask;
+    g_face_transition.started_ms = uptime_ms();
+    g_face_transition.degraded = degraded;
+    xSemaphoreGive(g_face_mutex);
+}
+
+static void update_transition_waiting(uint8_t waiting_mask, bool degraded)
+{
+    if (xSemaphoreTake(g_face_mutex, portMAX_DELAY) != pdTRUE) {
+        return;
+    }
+    g_face_transition.waiting_mask = waiting_mask;
+    g_face_transition.degraded |= degraded;
+    xSemaphoreGive(g_face_mutex);
+}
+
+static void commit_transition(uint8_t animation, uint8_t token, bool degraded,
+                              bool mouth_acknowledged)
+{
+    if (xSemaphoreTake(g_face_mutex, portMAX_DELAY) != pdTRUE) {
+        return;
+    }
+    if (g_face_transition.token == token) {
+        if (mouth_acknowledged) {
+            g_face_transition.committed_animation = animation;
         }
+        g_face_transition.waiting_mask = 0;
+        g_face_transition.degraded |= degraded || !mouth_acknowledged;
+    }
+    xSemaphoreGive(g_face_mutex);
+}
+
+static void log_eye_timeout(size_t index, uint8_t animation, uint8_t token)
+{
+    display_device_t snapshot;
+    if (xSemaphoreTake(g_display_mutex, portMAX_DELAY) != pdTRUE) {
+        return;
+    }
+    snapshot = g_displays[index];
+    g_displays[index].present = false;
+    xSemaphoreGive(g_display_mutex);
+    ESP_LOGE(
+        TAG,
+        "%s transition timeout target=0x%02X token=%u active=0x%02X "
+        "active_token=%u pending=0x%02X pending_token=%u flags=0x%02X "
+        "frame=%u error=%u status_ms=%" PRIu32,
+        snapshot.name, animation, token, snapshot.active_animation,
+        snapshot.active_transition_token, snapshot.pending_animation,
+        snapshot.pending_transition_token, snapshot.playback_flags,
+        snapshot.current_frame, snapshot.last_error, snapshot.status_read_ms);
+}
+
+static void face_transition_task(void *arg)
+{
+    face_request_t request;
+    uint8_t token = 0;
+    while (true) {
+        if (xQueueReceive(g_face_queue, &request, portMAX_DELAY) != pdTRUE) {
+            continue;
+        }
+
+restart_transition:
+        token = next_transition_token(token);
+        uint8_t duration_ticks =
+            request.emergency
+                ? 1
+                : (uint8_t)((CONFIG_SARCASMOS_FACE_TRANSITION_MS +
+                             DISPLAY_TRANSITION_TICK_MS - 1) /
+                            DISPLAY_TRANSITION_TICK_MS);
+        uint8_t payload[3] = {
+            request.animation, token, duration_ticks
+        };
+        set_transition_runtime(
+            request.animation, token,
+            request.emergency ? 0 : EYE_BOTH_MASK, false);
+
+        ESP_LOGI(TAG, "face request target=0x%02X token=%u emergency=%s at %" PRIu32,
+                 request.animation, token, request.emergency ? "true" : "false",
+                 uptime_ms());
+
+        uint8_t eye_sent_mask = 0;
+        for (size_t i = 0; i < EYE_COUNT; ++i) {
+            esp_err_t err = eye_command(
+                &g_displays[i], CMD_SET_ANIMATION, payload, sizeof(payload));
+            if (err == ESP_OK) {
+                eye_sent_mask |= (1U << i);
+                ESP_LOGI(TAG, "%s request sent token=%u at %" PRIu32,
+                         g_displays[i].name, token, uptime_ms());
+            } else {
+                ESP_LOGE(TAG, "%s request failed: %s",
+                         g_displays[i].name, esp_err_to_name(err));
+            }
+        }
+
+        bool degraded = eye_sent_mask != EYE_BOTH_MASK;
+        if (request.emergency) {
+            esp_err_t mouth_err =
+                mouth_command(CMD_SET_ANIMATION, payload, sizeof(payload));
+            ESP_LOGW(TAG, "emergency mouth command token=%u at %" PRIu32 ": %s",
+                     token, uptime_ms(), esp_err_to_name(mouth_err));
+            commit_transition(
+                request.animation, token, degraded, mouth_err == ESP_OK);
+            continue;
+        }
+
+        uint8_t ready_mask = 0;
+        uint32_t started = uptime_ms();
+        uint32_t timeout_ms = eye_sent_mask == 0
+                                  ? CONFIG_SARCASMOS_NO_EYE_TIMEOUT_MS
+                                  : CONFIG_SARCASMOS_EYE_BARRIER_TIMEOUT_MS;
+        bool replaced = false;
+        while (ready_mask != EYE_BOTH_MASK &&
+               uptime_ms() - started < timeout_ms) {
+            face_request_t newer;
+            if (xQueueReceive(g_face_queue, &newer, 0) == pdTRUE) {
+                request = newer;
+                replaced = true;
+                ESP_LOGI(TAG, "face request replaced before barrier");
+                break;
+            }
+
+            for (size_t i = 0; i < EYE_COUNT; ++i) {
+                uint8_t mask = 1U << i;
+                if ((ready_mask & mask) != 0 || (eye_sent_mask & mask) == 0) {
+                    continue;
+                }
+                eye_protocol_status_t status;
+                esp_err_t err = eye_read_status(&g_displays[i], &status);
+                if (err == ESP_OK &&
+                    eye_protocol_transition_complete(
+                        &status, request.animation, token)) {
+                    ready_mask |= mask;
+                    ESP_LOGI(TAG, "%s activated target=0x%02X token=%u at %" PRIu32,
+                             g_displays[i].name, request.animation, token,
+                             uptime_ms());
+                }
+            }
+            update_transition_waiting(EYE_BOTH_MASK & ~ready_mask, degraded);
+            if (ready_mask != EYE_BOTH_MASK) {
+                vTaskDelay(pdMS_TO_TICKS(
+                    CONFIG_SARCASMOS_EYE_POLL_INTERVAL_MS));
+            }
+        }
+        if (replaced) {
+            goto restart_transition;
+        }
+
+        face_request_t newer;
+        if (xQueueReceive(g_face_queue, &newer, 0) == pdTRUE) {
+            request = newer;
+            ESP_LOGI(TAG, "face request replaced at barrier");
+            goto restart_transition;
+        }
+
+        uint8_t incomplete_mask = EYE_BOTH_MASK & ~ready_mask;
+        if (incomplete_mask != 0) {
+            degraded = true;
+            for (size_t i = 0; i < EYE_COUNT; ++i) {
+                if ((incomplete_mask & (1U << i)) != 0) {
+                    log_eye_timeout(i, request.animation, token);
+                }
+            }
+        }
+
+        ESP_LOGI(TAG, "eye barrier released target=0x%02X token=%u degraded=%s",
+                 request.animation, token, degraded ? "true" : "false");
+        esp_err_t mouth_err =
+            mouth_command(CMD_SET_ANIMATION, payload, sizeof(payload));
+        ESP_LOGI(TAG, "mouth command target=0x%02X token=%u at %" PRIu32 ": %s",
+                 request.animation, token, uptime_ms(),
+                 esp_err_to_name(mouth_err));
+        commit_transition(
+            request.animation, token, degraded, mouth_err == ESP_OK);
+    }
+}
+
+static void state_led_task(void *arg)
+{
+    while (true) {
         gpio_set_level(PIN_STATUS_LED, !gpio_get_level(PIN_STATUS_LED));
         vTaskDelay(pdMS_TO_TICKS(g_state == STATE_ERROR ? 150 : 500));
     }
@@ -489,16 +828,53 @@ static void animation_task(void *arg)
 
 static esp_err_t status_handler(httpd_req_t *req)
 {
-    char json[1024];
+    display_device_t eyes[EYE_COUNT];
+    face_transition_status_t face;
+    if (xSemaphoreTake(g_display_mutex, portMAX_DELAY) == pdTRUE) {
+        memcpy(eyes, g_displays, sizeof(eyes));
+        xSemaphoreGive(g_display_mutex);
+    } else {
+        memset(eyes, 0, sizeof(eyes));
+    }
+    if (xSemaphoreTake(g_face_mutex, portMAX_DELAY) == pdTRUE) {
+        face = g_face_transition;
+        xSemaphoreGive(g_face_mutex);
+    } else {
+        memset(&face, 0, sizeof(face));
+    }
+
+    const char *waiting =
+        face.waiting_mask == EYE_BOTH_MASK ? "\"left_eye\",\"right_eye\"" :
+        face.waiting_mask == EYE_LEFT_MASK ? "\"left_eye\"" :
+        face.waiting_mask == EYE_RIGHT_MASK ? "\"right_eye\"" : "";
+
+    char json[1536];
     int pos = snprintf(json, sizeof(json),
-        "{\"state\":\"%s\",\"uptime_ms\":%llu,\"wifi_connected\":%s,\"ethernet_connected\":%s,\"brightness\":%u,\"displays\":[",
+        "{\"state\":\"%s\",\"uptime_ms\":%llu,\"wifi_connected\":%s,"
+        "\"ethernet_connected\":%s,\"brightness\":%u,"
+        "\"face_transition\":{\"desired_animation\":%u,"
+        "\"committed_animation\":%u,\"token\":%u,\"waiting_for\":[%s],"
+        "\"started_ms\":%" PRIu32 ",\"degraded\":%s},\"displays\":[",
         state_name(g_state), esp_timer_get_time() / 1000ULL, g_wifi_connected ? "true" : "false",
-        g_ethernet_connected ? "true" : "false", g_brightness);
-    for (size_t i = 0; i < sizeof(g_displays) / sizeof(g_displays[0]); ++i) {
+        g_ethernet_connected ? "true" : "false", g_brightness,
+        face.desired_animation, face.committed_animation, face.token, waiting,
+        face.started_ms, face.degraded ? "true" : "false");
+    for (size_t i = 0; i < EYE_COUNT; ++i) {
         pos += snprintf(json + pos, sizeof(json) - pos,
-            "%s{\"name\":\"%s\",\"address\":%u,\"present\":%s,\"last_seen_ms\":%" PRIu32 "}",
-            i ? "," : "", g_displays[i].name, g_displays[i].address,
-            g_displays[i].present ? "true" : "false", g_displays[i].last_seen_ms);
+            "%s{\"name\":\"%s\",\"address\":%u,\"present\":%s,"
+            "\"firmware\":\"%u.%u\",\"active_animation\":%u,"
+            "\"pending_animation\":%u,\"active_token\":%u,"
+            "\"pending_token\":%u,\"playback_flags\":%u,"
+            "\"current_frame\":%u,\"last_error\":%u,"
+            "\"last_seen_ms\":%" PRIu32 ",\"status_read_ms\":%" PRIu32 "}",
+            i ? "," : "", eyes[i].name, eyes[i].address,
+            eyes[i].present ? "true" : "false",
+            eyes[i].fw_major, eyes[i].fw_minor,
+            eyes[i].active_animation, eyes[i].pending_animation,
+            eyes[i].active_transition_token,
+            eyes[i].pending_transition_token, eyes[i].playback_flags,
+            eyes[i].current_frame, eyes[i].last_error,
+            eyes[i].last_seen_ms, eyes[i].status_read_ms);
     }
     mouth_espnow_status_t mouth;
     mouth_espnow_get_status(&mouth);
@@ -507,6 +883,8 @@ static esp_err_t status_handler(httpd_req_t *req)
              "\"mac\":\"%02X:%02X:%02X:%02X:%02X:%02X\","
              "\"present\":%s,\"firmware\":\"%u.%u\",\"channel\":%u,"
              "\"animation\":%u,\"brightness\":%u,\"intensity\":%u,"
+             "\"transition_token\":%u,\"transition_active\":%s,"
+             "\"transition_progress\":%u,"
              "\"last_seen_ms\":%" PRIu32 ",\"retries\":%" PRIu32 ","
              "\"timeouts\":%" PRIu32 "}]}",
              sizeof(g_displays) > 0 ? "," : "",
@@ -515,7 +893,9 @@ static esp_err_t status_handler(httpd_req_t *req)
              mouth.present ? "true" : "false",
              mouth.firmware_major, mouth.firmware_minor, mouth.channel,
              mouth.current_animation, mouth.brightness,
-             mouth.speaking_intensity, mouth.last_ack_ms,
+             mouth.speaking_intensity, mouth.transition_token,
+             mouth.transition_active ? "true" : "false",
+             mouth.transition_progress, mouth.last_ack_ms,
              mouth.retry_count, mouth.timeout_count);
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, json);
@@ -536,18 +916,20 @@ static esp_err_t command_handler(httpd_req_t *req)
             if (value < 0) value = 0;
             if (value > 255) value = 255;
             g_brightness = (uint8_t)value;
-            display_command_all(CMD_SET_BRIGHTNESS, &g_brightness, 1);
+            display_command_non_animation_all(
+                CMD_SET_BRIGHTNESS, &g_brightness, 1);
         }
     } else if (strstr(body, "stop")) {
-        display_command_all(CMD_STOP, NULL, 0);
         g_state = STATE_SLEEP;
+        request_face_state(ANIM_SLEEP, true);
     } else {
         g_state = parse_state(body);
-        set_animation_all(animation_for_state(g_state));
+        request_face_state(
+            animation_for_state(g_state), g_state == STATE_ERROR);
     }
 
     httpd_resp_set_type(req, "application/json");
-    return httpd_resp_sendstr(req, "{\"ok\":true}");
+    return httpd_resp_sendstr(req, "{\"ok\":true,\"queued\":true}");
 }
 
 static void start_http_server(void)
@@ -569,6 +951,13 @@ void app_main(void)
         ESP_ERROR_CHECK(nvs_flash_erase());
         ESP_ERROR_CHECK(nvs_flash_init());
     }
+    g_face_queue = xQueueCreate(1, sizeof(face_request_t));
+    g_face_mutex = xSemaphoreCreateMutex();
+    g_display_mutex = xSemaphoreCreateMutex();
+    ESP_ERROR_CHECK(g_face_queue != NULL && g_face_mutex != NULL &&
+                            g_display_mutex != NULL
+                        ? ESP_OK : ESP_ERR_NO_MEM);
+
     configure_gpio();
     configure_i2c();
     configure_audio();
@@ -580,14 +969,24 @@ void app_main(void)
         start_mouth_espnow();
     }
     start_ethernet();
-    start_http_server();
 
     vTaskDelay(pdMS_TO_TICKS(250));
-    display_command_all(CMD_SET_BRIGHTNESS, &g_brightness, 1);
-    g_state = STATE_IDLE;
-    set_animation_all(ANIM_IDLE);
+    display_command_non_animation_all(
+        CMD_SET_BRIGHTNESS, &g_brightness, 1);
 
-    xTaskCreate(display_health_task, "display_health", 4096, NULL, 5, NULL);
-    xTaskCreate(animation_task, "animation", 4096, NULL, 5, NULL);
+    ESP_ERROR_CHECK(xTaskCreate(
+        face_transition_task, "face_transition", 6144, NULL, 6, NULL) == pdPASS
+                        ? ESP_OK : ESP_ERR_NO_MEM);
+    ESP_ERROR_CHECK(xTaskCreate(
+        display_health_task, "display_health", 4096, NULL, 5, NULL) == pdPASS
+                        ? ESP_OK : ESP_ERR_NO_MEM);
+    ESP_ERROR_CHECK(xTaskCreate(
+        state_led_task, "state_led", 2048, NULL, 4, NULL) == pdPASS
+                        ? ESP_OK : ESP_ERR_NO_MEM);
+
+    g_state = STATE_IDLE;
+    ESP_ERROR_CHECK(request_face_state(ANIM_IDLE, false));
+    start_http_server();
+
     ESP_LOGI(TAG, "SarcasmOS brain ready");
 }

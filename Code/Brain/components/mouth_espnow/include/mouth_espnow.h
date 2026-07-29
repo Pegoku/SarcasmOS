@@ -30,6 +30,9 @@ typedef struct {
     uint8_t brightness;
     uint8_t speaking_intensity;
     uint8_t channel;
+    uint8_t transition_token;
+    bool transition_active;
+    uint8_t transition_progress;
     uint8_t consecutive_failures;
     uint32_t retry_count;
     uint32_t timeout_count;

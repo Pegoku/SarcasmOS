@@ -43,6 +43,26 @@ config SARCASMOS_ESPNOW_RETRIES
     range 1 10
     default 3
 
+config SARCASMOS_EYE_POLL_INTERVAL_MS
+    int "Eye transition status poll interval (ms)"
+    range 10 500
+    default 20
+
+config SARCASMOS_EYE_BARRIER_TIMEOUT_MS
+    int "Eye transition barrier timeout (ms)"
+    range 100 10000
+    default 2500
+
+config SARCASMOS_NO_EYE_TIMEOUT_MS
+    int "No-eye degraded presence timeout (ms)"
+    range 20 2000
+    default 250
+
+config SARCASMOS_FACE_TRANSITION_MS
+    int "Mouth visual transition duration (ms)"
+    range 40 1000
+    default 200
+
 config SARCASMOS_W5500_SPI_FREQ_HZ
     int "W5500 SPI frequency"
     default 20000000

@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "display_protocol.h"
+#include "eye_protocol.h"
 
 static void round_trip(uint8_t command, const uint8_t *payload, uint8_t length)
 {
@@ -68,5 +69,50 @@ int main(void)
     assert(display_protocol_encode(
         packet, sizeof(packet), DISPLAY_PROTOCOL_TYPE_COMMAND,
         DISPLAY_PROTOCOL_ROLE_MOUTH, 1, DISPLAY_CMD_PING, payload, 65) == 0);
+
+    uint8_t eye_status[EYE_PROTOCOL_STATUS_SIZE] = {
+        EYE_PROTOCOL_VERSION_TRANSITIONS,
+        0,
+        EYE_PROTOCOL_SUPPORTED_FIRMWARE_MAJOR,
+        0,
+        DISPLAY_ANIM_SPEAKING,
+        19,
+        0,
+        160,
+        EYE_PROTOCOL_NO_PENDING_ANIMATION,
+        42,
+        0,
+        EYE_PLAYBACK_TARGET_ACTIVATED,
+        3,
+    };
+    eye_protocol_status_t eye;
+    assert(eye_protocol_decode_status(
+        eye_status, sizeof(eye_status), 0, &eye));
+    assert(eye_protocol_transition_complete(
+        &eye, DISPLAY_ANIM_SPEAKING, 42));
+
+    eye.active_transition_token = 41;
+    assert(!eye_protocol_transition_complete(
+        &eye, DISPLAY_ANIM_SPEAKING, 42));
+    eye.active_transition_token = 42;
+    eye.pending_animation = DISPLAY_ANIM_IDLE;
+    eye.playback_flags = EYE_PLAYBACK_PENDING | EYE_PLAYBACK_EXITING;
+    assert(!eye_protocol_transition_complete(
+        &eye, DISPLAY_ANIM_SPEAKING, 42));
+    eye.pending_animation = EYE_PROTOCOL_NO_PENDING_ANIMATION;
+    eye.playback_flags = 0;
+    eye.last_error = 1;
+    assert(!eye_protocol_transition_complete(
+        &eye, DISPLAY_ANIM_SPEAKING, 42));
+
+    eye_status[0] = EYE_PROTOCOL_VERSION_LEGACY;
+    assert(!eye_protocol_decode_status(
+        eye_status, sizeof(eye_status), 0, &eye));
+    eye_status[0] = EYE_PROTOCOL_VERSION_TRANSITIONS;
+    eye_status[1] = 1;
+    assert(!eye_protocol_decode_status(
+        eye_status, sizeof(eye_status), 0, &eye));
+    assert(!eye_protocol_decode_status(
+        eye_status, EYE_PROTOCOL_STATUS_LEGACY_SIZE, 1, &eye));
     return 0;
 }

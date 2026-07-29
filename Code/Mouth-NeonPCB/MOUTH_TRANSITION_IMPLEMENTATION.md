@@ -2,9 +2,20 @@
 
 ## Scope
 
-This document describes the changes required in `Code/Mouth-NeonPCB`. It is an
-implementation plan only; none of the changes below are implemented by this
-document.
+This document was the implementation plan for `Code/Mouth-NeonPCB`. The
+mouth-side work is now implemented:
+
+- the firmware captures the currently visible RGB565 image and performs an
+  interruptible 200 ms blend;
+- destination animation timing restarts at frame zero;
+- ESP-NOW animation commands accept a transition token and duration;
+- status protocol version 3 reports token, active state, and progress;
+- the local tester and desktop emulator use the same transition behavior;
+- `X` or `--no-transitions` disables emulator blending for sprite editing.
+
+The Eye completion reporting and Brain synchronization barrier remain separate
+codebase changes described by the linked documents. No firmware was uploaded
+as part of the mouth implementation.
 
 The mouth must not decide when the eyes have finished their outgoing
 animation. The Brain owns that synchronization barrier. The mouth receives its

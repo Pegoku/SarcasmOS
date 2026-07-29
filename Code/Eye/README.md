@@ -146,6 +146,37 @@ demo states remain active for at least three seconds and may take slightly
 longer while their graceful exit finishes. Regular I2C mode uses the identical
 transition logic.
 
+Animation and expression commands accept either the legacy one-byte payload
+`{animation}` or the synchronized payload
+`{animation, transition_token, mouth_duration_ticks}`. The eye ignores the
+mouth-duration byte, keeps playing the current animation through its legal
+exit, and associates the token with the destination only when that destination
+actually starts. Repeating an already queued animation/token pair does not
+restart playback; a newer queued request replaces the older destination.
+
+Eye protocol version `0x02` returns a 13-byte status response:
+
+| Offset | Field |
+| ---: | --- |
+| 0 | protocol version |
+| 1 | left/right device role |
+| 2–3 | firmware major/minor |
+| 4 | active animation |
+| 5 | last accepted command sequence |
+| 6 | last error |
+| 7 | brightness |
+| 8 | pending animation, or `0xFF` |
+| 9 | active transition token |
+| 10 | pending transition token, or `0` |
+| 11 | playback flags: pending, exiting, activated |
+| 12 | current local frame |
+
+The controller should treat an eye as complete only when one full response has
+the requested animation and token active, no pending animation/flag, and no
+error. Command sequence acknowledgement alone means only that the request was
+accepted. Protocol `0x01` controllers must be updated before using this
+firmware because they read only the former eight-byte response.
+
 Use `--assets PATH` to compile regular or demo firmware with another compatible
 asset pack. The generated header stays inside that firmware's build directory,
 so building an alternate pack does not overwrite `generated/eye_assets.hpp` or
@@ -196,6 +227,14 @@ This is the real eye firmware with automatic animation selection enabled. It
 shows each of the 31 animation states for three seconds, completing a cycle in
 93 seconds. Normal builds leave autoplay disabled and continue to select
 animations through I2C.
+
+Host playback and transition-token tests:
+
+```sh
+c++ -std=c++17 -Wall -Wextra -Werror -Iinclude \
+  tests/animation_playback_test.cpp -o /tmp/eye-animation-playback-test
+/tmp/eye-animation-playback-test
+```
 
 ## Upload with J-LinkOB
 

@@ -98,6 +98,10 @@ pose or animation, including directional gaze, Bender-style angry and laugh
 expressions, activity states, status states, and weather accents. Unknown
 future expressions render as `neutral`.
 
-The current byte-sized animation command still selects one state at a time.
+The animation command still selects one state at a time. It accepts a legacy
+animation-only payload or an animation plus transition token; status reports
+that token only after the requested state has finished the previous state's
+graceful exit and actually activated. The extended status also exposes the
+pending animation/token, exit flag, and current frame.
 Independent persistent expression, transient activity, gaze composition, and
 continuous target coordinates remain future protocol work.

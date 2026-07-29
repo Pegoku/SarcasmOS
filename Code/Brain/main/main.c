@@ -318,13 +318,9 @@ static esp_err_t eye_read_status(display_device_t *eye,
         return ESP_ERR_INVALID_ARG;
     }
 
-    esp_err_t err = eye_transmit_locked(eye, CMD_PING, NULL, 0);
     uint8_t response[EYE_PROTOCOL_STATUS_SIZE] = { 0 };
-    if (err == ESP_OK) {
-        vTaskDelay(pdMS_TO_TICKS(2));
-        err = i2c_master_receive(
-            eye->i2c_handle, response, sizeof(response), I2C_TIMEOUT_MS);
-    }
+    esp_err_t err = i2c_master_receive(
+        eye->i2c_handle, response, sizeof(response), I2C_TIMEOUT_MS);
     if (err == ESP_OK &&
         !eye_protocol_decode_status(response, sizeof(response), eye->role,
                                     status)) {

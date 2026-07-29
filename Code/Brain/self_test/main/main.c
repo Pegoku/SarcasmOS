@@ -428,28 +428,15 @@ static esp_err_t read_eye_status(uint8_t address, uint8_t role,
     };
     i2c_master_dev_handle_t device = NULL;
     esp_err_t err = i2c_master_bus_add_device(g_i2c_bus, &config, &device);
-    uint8_t sequence = g_display_sequence++;
-    if (g_display_sequence == 0) {
-        g_display_sequence = 1;
-    }
-    uint8_t ping[5] = {
-        EYE_PROTOCOL_VERSION, DISPLAY_CMD_PING, sequence, 0, 0
-    };
-    ping[4] = crc8(ping, 4);
     uint8_t data[EYE_PROTOCOL_STATUS_SIZE] = { 0 };
     if (err == ESP_OK) {
-        err = i2c_master_transmit(device, ping, sizeof(ping), 80);
-    }
-    if (err == ESP_OK) {
-        vTaskDelay(pdMS_TO_TICKS(2));
         err = i2c_master_receive(device, data, sizeof(data), 80);
     }
     if (device != NULL) {
         i2c_master_bus_rm_device(device);
     }
     if (err == ESP_OK &&
-        (!eye_protocol_decode_status(data, sizeof(data), role, status) ||
-         status->last_sequence != sequence)) {
+        !eye_protocol_decode_status(data, sizeof(data), role, status)) {
         err = ESP_ERR_INVALID_RESPONSE;
     }
     return err;

@@ -507,6 +507,38 @@ def set_animation_frame_ms(
     write_asset_pack(data, assets_path, header_path)
 
 
+def set_animation_timeline(
+    state: str,
+    frames: list[dict[str, str]],
+    playback: str,
+    *,
+    assets_path: pathlib.Path = DEFAULT_ASSETS,
+    header_path: pathlib.Path | None = None,
+) -> None:
+    if not 1 <= len(frames) <= 255:
+        raise ValueError(f"{state} must keep 1..255 timeline entries")
+    if playback not in PLAYBACK_IDS:
+        raise ValueError(f"invalid playback mode {playback!r}")
+    data = load_assets(assets_path)
+    timeline = []
+    for index, frame in enumerate(frames):
+        if not isinstance(frame, dict) or set(frame) != set(ROLES):
+            raise ValueError(
+                f"{state} timeline entry {index + 1} needs left/right art"
+            )
+        missing = [role for role in ROLES if frame[role] not in data["sprites"]]
+        if missing:
+            raise ValueError(
+                f"{state} timeline entry {index + 1} references missing art"
+            )
+        timeline.append(dict(frame))
+    animation = animation_for(data, state)
+    animation["frames"] = timeline
+    animation["playback"] = playback
+    prune_unreferenced_sprites(data)
+    write_asset_pack(data, assets_path, header_path)
+
+
 def save_asset_source(
     data: dict[str, Any], assets_path: pathlib.Path = DEFAULT_ASSETS,
 ) -> None:

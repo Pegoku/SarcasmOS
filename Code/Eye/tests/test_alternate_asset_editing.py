@@ -107,6 +107,18 @@ class AlternateAssetEditingTest(unittest.TestCase):
             self.assertTrue(all(
                 frame["left"].endswith("_edited") for frame in frames
             ))
+            data = asset_tool.load_assets(assets)
+            sprite_count = len(data["sprites"])
+            asset_tool.set_animation_timeline(
+                "sample", [frames[1], frames[0], frames[0]], "ping_pong",
+                assets_path=assets,
+            )
+            data = asset_tool.load_assets(assets)
+            timeline = data["animations"][0]
+            self.assertEqual(timeline["playback"], "ping_pong")
+            self.assertEqual(len(timeline["frames"]), 3)
+            self.assertEqual(timeline["frames"][1], timeline["frames"][2])
+            self.assertLessEqual(len(data["sprites"]), sprite_count)
             self.assertFalse((root / "eye_assets.hpp").exists())
 
         self.assertEqual(asset_tool.DEFAULT_ASSETS.read_bytes(), production_assets)

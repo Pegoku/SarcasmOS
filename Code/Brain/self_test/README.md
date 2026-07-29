@@ -90,11 +90,14 @@ microphone, `l`/`r` for the wired eyes, `o` for the wireless mouth, and `v` to
 test all three displays. The complete automatic sequence is `x`.
 
 The speaker screen generates a 440 Hz sine wave. Use Up/Down or `W`/`S` to
-select approximately 0.05 W, 0.20 W, 0.80 W, or 1.5 W, then press Space or
-Enter to play it. These estimates assume a 4-ohm speaker, `AMP_VDD` selected to
-5 V with JP1, and the PCB's floating `GAIN_SLOT` pin (9 dB gain). The default is
-the approximately 0.80 W setting. Do not select the 1.5 W level for a
-lower-rated speaker, and do not connect two 4-ohm speakers in parallel.
+select levels from approximately 0.05 W through 3.2 W, then press Space or
+Enter to play it. Levels above 1.5 W require a second confirmation. These
+estimates assume a 4-ohm speaker, `AMP_VDD` selected to 5 V with JP1, and the
+PCB's floating `GAIN_SLOT` pin (9 dB gain). The default is approximately
+0.80 W. The 2.5 W setting is near the MAX98357A's 1% THD output limit; the
+3.0 W and 3.2 W settings approach or enter clipping and are intended only for
+brief hardware tests with suitably rated speakers. Do not exceed a speaker's
+continuous rating, and do not connect two 4-ohm speakers in parallel.
 
 Enter `f` for the interactive face display controller. It probes the left eye
 at `0x30` and right eye at `0x31`, validates each Eye protocol-v2 role/status,

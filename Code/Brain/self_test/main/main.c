@@ -74,6 +74,7 @@
 #define AUDIO_MANUAL_BLOCKS 250
 #define AUDIO_IO_TIMEOUT_MS 100
 #define AUDIO_TONE_FREQUENCY_HZ 440
+#define SPEAKER_1_5W_LEVEL 3
 #define WIFI_SCAN_RECORDS 20
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAILED_BIT BIT1
@@ -134,7 +135,11 @@ static const speaker_level_t SPEAKER_LEVELS[] = {
     { 0x10000000, "quiet (12.5%, -18 dBFS)", "~0.05 W" },
     { 0x20000000, "low (25%, -12 dBFS)", "~0.20 W" },
     { 0x40000000, "normal (50%, -6 dBFS)", "~0.80 W" },
-    { 0x58000000, "maximum for 1.5 W speaker (69%, -3.3 dBFS)", "~1.5 W" },
+    { 0x58000000, "1.5 W speaker limit (69%, -3.3 dBFS)", "~1.5 W" },
+    { 0x653160EB, "high (79%, -2.0 dBFS)", "~2.0 W" },
+    { 0x71231800, "very high (88%, -1.1 dBFS)", "~2.5 W" },
+    { 0x7BEF7AC4, "near clipping (97%, -0.3 dBFS)", "~3.0 W" },
+    { 0x7FFFFFFF, "amplifier limit (100%, 0 dBFS)", "~3.2 W, clipped" },
 };
 
 static const face_state_t FACE_STATES[] = {
@@ -1146,7 +1151,9 @@ static void manual_test_speaker(void)
                SPEAKER_LEVELS[g_speaker_level].power);
         printf("\nW/Up: louder   S/Down: quieter   Space/Enter: play\n");
         printf("Q/Esc: return to the main test menu\n");
-        if (g_speaker_level + 1 == level_count) {
+        if (g_speaker_level > SPEAKER_1_5W_LEVEL) {
+            printf("\nDANGER: This exceeds a 1.5 W speaker's continuous rating.\n");
+        } else if (g_speaker_level == SPEAKER_1_5W_LEVEL) {
             printf("\nWARNING: Do not use this level with speakers rated below 1.5 W.\n");
         }
 
@@ -1156,6 +1163,15 @@ static void manual_test_speaker(void)
         } else if (key == TUI_KEY_DOWN && g_speaker_level > 0) {
             --g_speaker_level;
         } else if (key == TUI_KEY_ENTER || key == TUI_KEY_SPACE) {
+            if (g_speaker_level > SPEAKER_1_5W_LEVEL) {
+                printf("\nThis level can permanently damage a 1.5 W speaker.\n");
+                printf("Press Space or Enter again to confirm; any other key cancels.\n");
+                tui_key_t confirmation = read_tui_key();
+                if (confirmation != TUI_KEY_ENTER &&
+                    confirmation != TUI_KEY_SPACE) {
+                    continue;
+                }
+            }
             printf("\nPlaying a %d Hz sine tone for one second at %s...\n",
                    AUDIO_TONE_FREQUENCY_HZ,
                    SPEAKER_LEVELS[g_speaker_level].label);

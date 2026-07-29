@@ -593,8 +593,8 @@ class EmulatorWindow:
         self.timeline_window = window
         window.title(f"Frame timeline — {state}")
         window.configure(background="#111111")
-        window.geometry("980x560")
-        window.minsize(760, 440)
+        window.geometry("1280x560")
+        window.minsize(1080, 440)
         window.transient(self.root)
 
         tk.Label(
@@ -615,7 +615,7 @@ class EmulatorWindow:
             list_frame, selectmode=tk.EXTENDED, exportselection=False,
             yscrollcommand=scrollbar.set, font=("monospace", 10),
             background="#20252a", foreground="#eeeeee",
-            selectbackground="#315b7d", activestyle="none",
+            selectbackground="#315b7d", activestyle="dotbox",
         )
         scrollbar.configure(command=timeline.yview)
         scrollbar.pack(side="right", fill="y")
@@ -625,6 +625,130 @@ class EmulatorWindow:
         controls.pack(side="left", fill="y", padx=(10, 0))
         status = tk.StringVar()
         playback = tk.StringVar(value=animation["playback"])
+
+        preview_panel = tk.Frame(body, background="#171b1f")
+        preview_panel.pack(side="left", fill="y", padx=(10, 0))
+        tk.Label(
+            preview_panel, text="Animation preview", anchor="w",
+            background="#171b1f", foreground="#eeeeee",
+            font=("sans", 11, "bold"),
+        ).pack(fill="x", padx=8, pady=(8, 4))
+        preview_canvas = tk.Canvas(
+            preview_panel, width=264, height=136,
+            background="#20252a", highlightthickness=0,
+        )
+        preview_canvas.pack(padx=8)
+        preview_status = tk.StringVar()
+        tk.Label(
+            preview_panel, textvariable=preview_status, anchor="center",
+            background="#171b1f", foreground="#aaaaaa",
+            font=("monospace", 9),
+        ).pack(fill="x", padx=8, pady=(4, 2))
+        preview_buttons = tk.Frame(preview_panel, background="#171b1f")
+        preview_buttons.pack(fill="x", padx=8, pady=(2, 8))
+        preview_button_text = tk.StringVar(value="Play")
+        preview_index = min(self.current_local_frame, len(frames) - 1)
+        preview_direction = 1
+        preview_playing = False
+        preview_last_ms = time.monotonic_ns() // 1_000_000
+        selecting_from_preview = False
+        preview_photos: list[Any] = []
+
+        def render_preview() -> None:
+            preview_canvas.delete("preview")
+            preview_photos.clear()
+            frame = frames[preview_index]
+            factor = math.sqrt(self.brightness / 255)
+            for eye_index, role in enumerate(asset_tool.ROLES):
+                source_role = (
+                    "right" if role == "left" else "left"
+                ) if animation[f"flip_{role}"] else role
+                sprite = frame[source_role]
+                pixels = [
+                    tuple(round(channel * factor) for channel in color)
+                    for color in (
+                        self.assets.palette[value]
+                        for value in self.assets.sprite_cache[sprite]
+                    )
+                ]
+                body = bytearray(
+                    channel for color in pixels for channel in color
+                )
+                ppm = (
+                    f"P6\n{self.assets.width} {self.assets.height}\n255\n"
+                    .encode() + body
+                )
+                native = tk.PhotoImage(data=ppm, format="PPM")
+                photo = native.subsample(2, 2)
+                x = 8 + eye_index * 128
+                preview_canvas.create_image(
+                    x, 8, anchor="nw", image=photo, tags="preview",
+                )
+                preview_canvas.create_oval(
+                    x, 8, x + 120, 128, outline="#8b949e",
+                    tags="preview",
+                )
+                preview_photos.extend((native, photo))
+            preview_status.set(
+                f"frame {preview_index + 1}/{len(frames)} · "
+                f"{animation['frame_ms']} ms"
+            )
+
+        def show_preview(index: int, select_row: bool = False) -> None:
+            nonlocal preview_index, selecting_from_preview
+            preview_index = index % len(frames)
+            timeline.activate(preview_index)
+            timeline.see(preview_index)
+            if select_row:
+                selecting_from_preview = True
+                timeline.selection_clear(0, tk.END)
+                timeline.selection_set(preview_index)
+                selecting_from_preview = False
+            render_preview()
+
+        def stop_preview() -> None:
+            nonlocal preview_playing
+            preview_playing = False
+            preview_button_text.set("Play")
+
+        def step_preview(delta: int) -> str:
+            nonlocal preview_direction
+            stop_preview()
+            preview_direction = 1 if delta > 0 else -1
+            show_preview(preview_index + delta, select_row=True)
+            return "break"
+
+        def toggle_preview() -> str:
+            nonlocal preview_playing, preview_last_ms
+            preview_playing = not preview_playing
+            preview_button_text.set("Pause" if preview_playing else "Play")
+            preview_last_ms = time.monotonic_ns() // 1_000_000
+            return "break"
+
+        def preview_tick() -> None:
+            nonlocal preview_direction, preview_last_ms
+            if not window.winfo_exists():
+                return
+            now_ms = time.monotonic_ns() // 1_000_000
+            elapsed_ms = now_ms - preview_last_ms
+            if preview_playing and elapsed_ms >= animation["frame_ms"]:
+                steps = elapsed_ms // animation["frame_ms"]
+                preview_last_ms += steps * animation["frame_ms"]
+                for _ in range(steps):
+                    if len(frames) <= 1:
+                        break
+                    if playback.get() == "ping_pong":
+                        next_index = preview_index + preview_direction
+                        if next_index >= len(frames):
+                            preview_direction = -1
+                            next_index = len(frames) - 2
+                        elif next_index < 0:
+                            preview_direction = 1
+                            next_index = 1
+                    else:
+                        next_index = (preview_index + 1) % len(frames)
+                    show_preview(next_index)
+            window.after(20, preview_tick)
 
         def selection() -> list[int]:
             return [int(index) for index in timeline.curselection()]
@@ -647,6 +771,9 @@ class EmulatorWindow:
                 timeline.selection_set(index)
             if valid:
                 timeline.see(valid[0])
+                show_preview(valid[0])
+            else:
+                show_preview(min(preview_index, len(frames) - 1))
             status.set(
                 f"{len(frames)}/255 entries · {len(pair_uses)} unique "
                 f"art pairs · {playback.get()} playback"
@@ -756,6 +883,7 @@ class EmulatorWindow:
                 self.show_notice(f"Could not save timeline: {error}")
 
         def close() -> None:
+            stop_preview()
             self.timeline_window = None
             window.destroy()
 
@@ -784,6 +912,19 @@ class EmulatorWindow:
                 activebackground="#111111", activeforeground="#eeeeee",
             ).pack(fill="x")
 
+        tk.Button(
+            preview_buttons, text="◀", width=4,
+            command=lambda: step_preview(-1),
+        ).pack(side="left")
+        tk.Button(
+            preview_buttons, textvariable=preview_button_text,
+            command=toggle_preview,
+        ).pack(side="left", fill="x", expand=True, padx=5)
+        tk.Button(
+            preview_buttons, text="▶", width=4,
+            command=lambda: step_preview(1),
+        ).pack(side="left")
+
         footer = tk.Frame(window, background="#111111")
         footer.pack(fill="x", padx=10, pady=10)
         tk.Label(
@@ -796,9 +937,25 @@ class EmulatorWindow:
         tk.Button(footer, text="Save timeline", command=save).pack(side="right")
         window.protocol("WM_DELETE_WINDOW", close)
         window.bind("<Escape>", lambda _event: close())
+        window.bind("<Left>", lambda _event: step_preview(-1))
+        window.bind("<Right>", lambda _event: step_preview(1))
         timeline.bind("<Delete>", lambda _event: delete_selection())
         timeline.bind("<Control-d>", lambda _event: copy_references())
+        timeline.bind("<Left>", lambda _event: step_preview(-1))
+        timeline.bind("<Right>", lambda _event: step_preview(1))
+
+        def preview_selected(_event: Any) -> None:
+            if selecting_from_preview:
+                return
+            selected = selection()
+            if selected:
+                stop_preview()
+                active = int(timeline.index(tk.ACTIVE))
+                show_preview(active if active in selected else selected[0])
+
+        timeline.bind("<<ListboxSelect>>", preview_selected)
         refresh([self.current_local_frame])
+        window.after(20, preview_tick)
         timeline.focus_set()
 
     def sync_current_animation_folder(self) -> None:

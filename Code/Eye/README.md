@@ -42,8 +42,10 @@ The frame timeline editor can reorder a multi-frame selection, copy entries,
 repeat an effect range, reverse a selection, or append the existing sequence
 in reverse as an exit. Copied and repeated entries point to the same stored
 left/right sprites, so they add playback steps without duplicating bitmap
-data. The editor also selects loop or ping-pong playback and supports the same
-production and alternate asset packs.
+data. Its side-panel preview follows the selected row; Left/Right step through
+frames, and its Play button previews the unsaved working sequence without
+starting state auto-scroll. The editor also selects loop or ping-pong playback
+and supports the same production and alternate asset packs.
 
 Saving an emulator-exported PPM over the same file makes the emulator import
 it automatically, update `assets/eye_assets.json`, regenerate

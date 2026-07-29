@@ -30,11 +30,19 @@ Main controls:
 - Space or A: play/pause.
 - E: open the current native 240x240 frame in GIMP.
 - O: open every frame of the current eye/animation in GIMP.
+- F: open the frame timeline editor.
 - Insert/Delete: add or remove a paired animation frame.
 - T: change the current animation's frame time.
 - S: synchronize an existing animation edit folder.
 - C: copy the current native frame to the image clipboard.
 - R: reload the asset pack.
+
+The frame timeline editor can reorder a multi-frame selection, copy entries,
+repeat an effect range, reverse a selection, or append the existing sequence
+in reverse as an exit. Copied and repeated entries point to the same stored
+left/right sprites, so they add playback steps without duplicating bitmap
+data. The editor also selects loop or ping-pong playback and supports the same
+production and alternate asset packs.
 
 Saving an emulator-exported PPM over the same file makes the emulator import
 it automatically, update `assets/eye_assets.json`, regenerate
@@ -64,11 +72,12 @@ and order. It can be previewed without replacing the production assets:
 python emulator.py --assets "new animations/eye_assets.json" --view both
 ```
 
-Alternate packs support the same frame editing, GIMP auto-import, add/remove,
-timing, folder synchronization, and orientation controls as the production
-pack. Changes are written only to the path passed through `--assets`; editing an
-alternate pack does not regenerate the production firmware header. Independent
-left/right artwork is preserved when only one alternate-pack eye is edited.
+Alternate packs support the same frame and timeline editing, GIMP auto-import,
+add/remove, timing, folder synchronization, and orientation controls as the
+production pack. Changes are written only to the path passed through
+`--assets`; editing an alternate pack does not regenerate the production
+firmware header. Independent left/right artwork is preserved when only one
+alternate-pack eye is edited.
 
 The ready-made PNG animation set is also available as a lossless converted
 31-state pack:

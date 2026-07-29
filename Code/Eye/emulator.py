@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from dataclasses import dataclass
 import hashlib
 import math
@@ -156,6 +157,7 @@ class EmulatorWindow:
         self.last_render_key: tuple[Any, ...] | None = None
         self.photo_native: list[Any] = []
         self.photo_scaled: list[Any] = []
+        self.timeline_window: Any | None = None
 
         self.root = tk.Tk()
         self.root.title(
@@ -206,6 +208,7 @@ class EmulatorWindow:
         frame_buttons = tk.Frame(self.root, background="#111111")
         frame_buttons.pack(fill="x", padx=8, pady=(0, 5))
         for label, action in (
+            ("Frame timeline (F)", self.open_timeline_editor),
             ("Add frame (Insert)", self.add_frame),
             ("Remove frame (Delete)", self.remove_frame),
             ("Set frame time (T)", self.change_frame_time),
@@ -235,7 +238,8 @@ class EmulatorWindow:
             text=(
                 "←/→ state   ↑/↓ frame   Tab left/both/right view   "
                 "Space/A play/pause\n"
-                "Insert/Delete frame   T frame time   S sync folder   "
+                "F frame timeline   Insert/Delete frame   T frame time   "
+                "S sync folder   "
                 "+/- brightness   Q quit"
             ),
             background="#111111", foreground="#aaaaaa",
@@ -571,6 +575,229 @@ class EmulatorWindow:
         except (OSError, ValueError, KeyError) as error:
             self.show_notice(f"Could not set frame time: {error}")
 
+    def open_timeline_editor(self) -> None:
+        if (self.timeline_window is not None and
+                self.timeline_window.winfo_exists()):
+            self.timeline_window.lift()
+            self.timeline_window.focus_force()
+            return
+
+        state = self.state_name
+        animation = self.assets.animations[self.state_id]
+        frames = [dict(frame) for frame in animation["frames"]]
+        tk = self.tk
+        window = tk.Toplevel(self.root)
+        self.timeline_window = window
+        window.title(f"Frame timeline — {state}")
+        window.configure(background="#111111")
+        window.geometry("980x560")
+        window.minsize(760, 440)
+        window.transient(self.root)
+
+        tk.Label(
+            window,
+            text=(
+                "Each row is a lightweight reference to stored left/right "
+                "art. Select one or more rows to reorder or repeat them."
+            ),
+            anchor="w", background="#111111", foreground="#eeeeee",
+        ).pack(fill="x", padx=10, pady=(10, 5))
+
+        body = tk.Frame(window, background="#111111")
+        body.pack(fill="both", expand=True, padx=10)
+        list_frame = tk.Frame(body, background="#111111")
+        list_frame.pack(side="left", fill="both", expand=True)
+        scrollbar = tk.Scrollbar(list_frame, orient="vertical")
+        timeline = tk.Listbox(
+            list_frame, selectmode=tk.EXTENDED, exportselection=False,
+            yscrollcommand=scrollbar.set, font=("monospace", 10),
+            background="#20252a", foreground="#eeeeee",
+            selectbackground="#315b7d", activestyle="none",
+        )
+        scrollbar.configure(command=timeline.yview)
+        scrollbar.pack(side="right", fill="y")
+        timeline.pack(side="left", fill="both", expand=True)
+
+        controls = tk.Frame(body, background="#111111")
+        controls.pack(side="left", fill="y", padx=(10, 0))
+        status = tk.StringVar()
+        playback = tk.StringVar(value=animation["playback"])
+
+        def selection() -> list[int]:
+            return [int(index) for index in timeline.curselection()]
+
+        def refresh(selected: list[int] | None = None) -> None:
+            selected = selection() if selected is None else selected
+            pair_uses = Counter(
+                (frame["left"], frame["right"]) for frame in frames
+            )
+            timeline.delete(0, tk.END)
+            for index, frame in enumerate(frames):
+                uses = pair_uses[(frame["left"], frame["right"])]
+                timeline.insert(
+                    tk.END,
+                    f"{index + 1:03d}  L:{frame['left']}  "
+                    f"R:{frame['right']}  refs:{uses}",
+                )
+            valid = [index for index in selected if index < len(frames)]
+            for index in valid:
+                timeline.selection_set(index)
+            if valid:
+                timeline.see(valid[0])
+            status.set(
+                f"{len(frames)}/255 entries · {len(pair_uses)} unique "
+                f"art pairs · {playback.get()} playback"
+            )
+
+        def require_selection() -> list[int]:
+            selected = selection()
+            if not selected:
+                self.show_notice("Select one or more timeline rows first")
+            return selected
+
+        def move(direction: int) -> None:
+            selected = set(require_selection())
+            if not selected:
+                return
+            order = sorted(selected, reverse=direction > 0)
+            for index in order:
+                neighbor = index + direction
+                if (0 <= neighbor < len(frames) and
+                        neighbor not in selected):
+                    frames[index], frames[neighbor] = (
+                        frames[neighbor], frames[index]
+                    )
+                    selected.remove(index)
+                    selected.add(neighbor)
+            refresh(sorted(selected))
+
+        def copy_references(repeats: int = 1) -> None:
+            selected = require_selection()
+            if not selected:
+                return
+            block = [dict(frames[index]) for index in selected]
+            additions = block * repeats
+            if len(frames) + len(additions) > 255:
+                self.show_notice("A timeline cannot exceed 255 entries")
+                return
+            insert_at = selected[-1] + 1
+            frames[insert_at:insert_at] = additions
+            refresh(list(range(insert_at, insert_at + len(additions))))
+
+        def repeat_selection() -> None:
+            selected = require_selection()
+            if not selected:
+                return
+            maximum = (255 - len(frames)) // len(selected)
+            if maximum < 1:
+                self.show_notice("A timeline cannot exceed 255 entries")
+                return
+            repeats = self.simpledialog.askinteger(
+                "Repeat effect range",
+                "How many additional times should this selection play?",
+                parent=window, initialvalue=min(2, maximum),
+                minvalue=1, maxvalue=maximum,
+            )
+            if repeats is not None:
+                copy_references(repeats)
+
+        def reverse_selection() -> None:
+            selected = require_selection()
+            if not selected:
+                return
+            values = [frames[index] for index in selected][::-1]
+            for index, value in zip(selected, values):
+                frames[index] = value
+            refresh(selected)
+
+        def append_reverse_exit() -> None:
+            exit_frames = [dict(frame) for frame in frames[-2::-1]]
+            if not exit_frames:
+                self.show_notice("A one-frame animation has no reverse exit")
+                return
+            if len(frames) + len(exit_frames) > 255:
+                self.show_notice("The reverse exit would exceed 255 entries")
+                return
+            start = len(frames)
+            frames.extend(exit_frames)
+            refresh(list(range(start, len(frames))))
+
+        def delete_selection() -> None:
+            selected = require_selection()
+            if not selected:
+                return
+            if len(selected) >= len(frames):
+                self.show_notice("An animation must keep at least one entry")
+                return
+            next_index = min(selected[0], len(frames) - len(selected) - 1)
+            for index in reversed(selected):
+                del frames[index]
+            refresh([next_index])
+
+        def save() -> None:
+            selected = selection()
+            selected_index = selected[0] if selected else 0
+            try:
+                asset_tool.set_animation_timeline(
+                    state, frames, playback.get(),
+                    assets_path=self.assets.path,
+                )
+                self.reload_after_frame_change(
+                    state, min(selected_index, len(frames) - 1),
+                )
+                self.show_notice(
+                    f"Saved {len(frames)} timeline entries for {state}"
+                )
+                close()
+            except (OSError, ValueError, KeyError) as error:
+                self.show_notice(f"Could not save timeline: {error}")
+
+        def close() -> None:
+            self.timeline_window = None
+            window.destroy()
+
+        for label, command in (
+            ("Move earlier", lambda: move(-1)),
+            ("Move later", lambda: move(1)),
+            ("Copy references", copy_references),
+            ("Repeat selection…", repeat_selection),
+            ("Reverse selection", reverse_selection),
+            ("Append reverse exit", append_reverse_exit),
+            ("Delete selected", delete_selection),
+        ):
+            tk.Button(
+                controls, text=label, command=command, width=21,
+            ).pack(fill="x", pady=(0, 5))
+
+        tk.Label(
+            controls, text="Playback after save:", anchor="w",
+            background="#111111", foreground="#aaaaaa",
+        ).pack(fill="x", pady=(10, 2))
+        for label, value in (("Loop", "loop"), ("Ping-pong", "ping_pong")):
+            tk.Radiobutton(
+                controls, text=label, variable=playback, value=value,
+                command=refresh, anchor="w", background="#111111",
+                foreground="#eeeeee", selectcolor="#20252a",
+                activebackground="#111111", activeforeground="#eeeeee",
+            ).pack(fill="x")
+
+        footer = tk.Frame(window, background="#111111")
+        footer.pack(fill="x", padx=10, pady=10)
+        tk.Label(
+            footer, textvariable=status, anchor="w",
+            background="#111111", foreground="#aaaaaa",
+        ).pack(side="left", fill="x", expand=True)
+        tk.Button(footer, text="Cancel", command=close).pack(
+            side="right", padx=(5, 0),
+        )
+        tk.Button(footer, text="Save timeline", command=save).pack(side="right")
+        window.protocol("WM_DELETE_WINDOW", close)
+        window.bind("<Escape>", lambda _event: close())
+        timeline.bind("<Delete>", lambda _event: delete_selection())
+        timeline.bind("<Control-d>", lambda _event: copy_references())
+        refresh([self.current_local_frame])
+        timeline.focus_set()
+
     def sync_current_animation_folder(self) -> None:
         state, role = self.state_name, self.edit_role
         directory = self.edit_root() / "animations" / state / role
@@ -588,6 +815,10 @@ class EmulatorWindow:
         self.sync_animation_session(session, automatic=False)
 
     def on_key(self, event: Any) -> None:
+        if (self.timeline_window is not None and
+                self.timeline_window.winfo_exists() and
+                event.widget.winfo_toplevel() == self.timeline_window):
+            return
         key = event.keysym
         if key == "Left":
             self.select(self.state_id - 1)
@@ -617,6 +848,8 @@ class EmulatorWindow:
             self.remove_frame()
         elif key in ("t", "T"):
             self.change_frame_time()
+        elif key in ("f", "F"):
+            self.open_timeline_editor()
         elif key in ("s", "S"):
             self.sync_current_animation_folder()
         elif key in ("e", "E"):

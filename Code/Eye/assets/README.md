@@ -27,6 +27,12 @@ The pack supports `loop` and `ping_pong` playback. Frame timing is stored per
 animation. Adding or removing a frame always changes the paired sequence, so
 the two eye boards remain synchronized.
 
+Press `F` to edit the animation's frame timeline. Timeline rows are references
+to stored sprite pairs: copying a row or repeating a selected effect range does
+not copy its bitmap data. Rows can be reordered, reversed, deleted, or expanded
+with a reverse exit, and the editor can switch the animation between loop and
+ping-pong playback. Saving rewrites only the selected asset pack.
+
 `../create_default_assets.py --force` recreates the original procedural
 Bender-style artwork. It overwrites manual edits, so it is intended only as a
 reset/bootstrap tool.

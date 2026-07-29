@@ -70,6 +70,16 @@ pack. Changes are written only to the path passed through `--assets`; editing an
 alternate pack does not regenerate the production firmware header. Independent
 left/right artwork is preserved when only one alternate-pack eye is edited.
 
+The ready-made PNG animation set is also available as a lossless converted
+31-state pack:
+
+```sh
+python emulator.py --assets "png animations/eye_assets.json" --view both
+```
+
+Its original PNG sources and reproducible converter are kept together under
+`png animations/`.
+
 `create_default_assets.py --force` recreates the initial procedural artwork
 and destroys manual sprite edits. Normal CMake builds regenerate only the C++
 header when the editable JSON or compiler changes.

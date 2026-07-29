@@ -27,7 +27,8 @@ Main controls:
 - Tab: cycle through left, both side by side, and right views.
 - Flip left eye: toggle horizontal flipping for the left display.
 - Flip right eye: toggle horizontal flipping for the right display.
-- Space or A: play/pause.
+- Space: play or pause the current animation without changing states.
+- A: toggle full automatic playback and scrolling through animation states.
 - E: open the current native 240x240 frame in GIMP.
 - O: open every frame of the current eye/animation in GIMP.
 - F: open the frame timeline editor.

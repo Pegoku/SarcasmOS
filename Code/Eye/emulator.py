@@ -140,6 +140,7 @@ class EmulatorWindow:
         self.gap = args.gap
         self.interval_ms = round(args.interval * 1000)
         self.auto_play = not args.paused
+        self.auto_scroll = False
         self.brightness = args.brightness
         now_ms = time.monotonic_ns() // 1_000_000
         self.last_step_ms = now_ms
@@ -237,7 +238,7 @@ class EmulatorWindow:
             self.root,
             text=(
                 "←/→ state   ↑/↓ frame   Tab left/both/right view   "
-                "Space/A play/pause\n"
+                "Space frames only   A full auto-scroll\n"
                 "F frame timeline   Insert/Delete frame   T frame time   "
                 "S sync folder   "
                 "+/- brightness   Q quit"
@@ -260,6 +261,7 @@ class EmulatorWindow:
         self.state_id = state_id % len(self.assets.animations)
         if pause:
             self.auto_play = False
+            self.auto_scroll = False
         self.current_local_frame = 0
         self.animation_elapsed_ms = 0
         self.last_step_ms = time.monotonic_ns() // 1_000_000
@@ -525,6 +527,7 @@ class EmulatorWindow:
         self.assets.reload()
         self.state_id = self.assets.state_ids[state]
         self.auto_play = False
+        self.auto_scroll = False
         self.current_local_frame = selected
         self.animation_elapsed_ms = (
             selected * self.assets.animations[self.state_id]["frame_ms"]
@@ -826,6 +829,7 @@ class EmulatorWindow:
             self.select(self.state_id + 1)
         elif key in ("Up", "Down"):
             self.auto_play = False
+            self.auto_scroll = False
             frames = self.assets.animations[self.state_id]["frames"]
             direction = 1 if key == "Up" else -1
             self.current_local_frame = (
@@ -834,8 +838,14 @@ class EmulatorWindow:
             self.last_render_key = None
         elif key in ("Tab", "ISO_Left_Tab"):
             self.switch_view()
-        elif key in ("space", "a", "A"):
+        elif key == "space":
+            self.auto_scroll = False
             self.auto_play = not self.auto_play
+        elif key in ("a", "A"):
+            enable = not (self.auto_play and self.auto_scroll)
+            self.auto_play = enable
+            self.auto_scroll = enable
+            self.last_step_ms = time.monotonic_ns() // 1_000_000
         elif key in ("plus", "equal", "KP_Add"):
             self.brightness = min(255, self.brightness + 16)
             self.last_render_key = None
@@ -904,7 +914,7 @@ class EmulatorWindow:
         self.watch_edits(now_ms)
         if self.auto_play:
             self.animation_elapsed_ms += delta_ms
-        if self.auto_play and now_ms - self.last_step_ms >= self.interval_ms:
+        if self.auto_scroll and now_ms - self.last_step_ms >= self.interval_ms:
             self.select(self.state_id + 1, pause=False)
         if self.auto_play:
             self.current_local_frame = self.assets.local_frame(
@@ -918,7 +928,8 @@ class EmulatorWindow:
             self.last_render_key = render_key
 
         animation = self.assets.animations[self.state_id]
-        mode = "AUTO" if self.auto_play else "PAUSED"
+        frame_mode = "PLAY" if self.auto_play else "PAUSED"
+        scroll_mode = "SCROLL" if self.auto_scroll else "MANUAL"
         status = (
             f"0x{self.state_id:02x}  {self.state_name:<16} "
             f"{self.view.upper():<5} view  "
@@ -926,7 +937,8 @@ class EmulatorWindow:
             f"R:{'flip' if animation['flip_right'] else 'normal'}  "
             f"frame {self.current_local_frame + 1}/"
             f"{len(animation['frames'])}   "
-            f"delay {animation['frame_ms']} ms   {mode}   "
+            f"delay {animation['frame_ms']} ms   {frame_mode}   "
+            f"{scroll_mode}   "
             f"brightness {self.brightness:3}/255"
         )
         if now_ms < self.notice_until_ms:

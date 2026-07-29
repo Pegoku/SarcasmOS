@@ -1607,7 +1607,7 @@ static void render_state_selector(const face_targets_t *targets,
                FACE_STATES[i].id, FACE_STATES[i].name,
                FACE_STATES[i].description);
     }
-    printf("\nUp/Down or W/S: move   Enter: send state\n");
+    printf("\nUp/Down or W/S: move   Enter/Space: send state\n");
     printf("Q/Esc: return to the main test menu\n");
     if (status != NULL && status[0] != '\0') {
         printf("\n%s\n", status);

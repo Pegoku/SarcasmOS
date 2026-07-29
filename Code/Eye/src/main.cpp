@@ -32,6 +32,10 @@ static_assert(eye_assets::kWidth == WIDTH, "asset width mismatch");
 static_assert(eye_assets::kHeight == HEIGHT, "asset height mismatch");
 static_assert(eye_assets::kAnimationCount == kAnimCount,
               "asset animation count mismatch");
+static_assert(eye_playback::kLoop == eye_assets::kPlaybackLoop,
+              "loop playback IDs must match");
+static_assert(eye_playback::kPingPong == eye_assets::kPlaybackPingPong,
+              "ping-pong playback IDs must match");
 
 static volatile uint8_t rx_buf[80];
 static volatile uint8_t rx_len;

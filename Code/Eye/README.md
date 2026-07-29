@@ -53,9 +53,10 @@ and supports the same production and alternate asset packs.
 or mark one contiguous range to repeat until the controller changes animation
 state. An until-end range has its own Regular/Ping-pong toggle: intro frames
 before the range play once, the selected effect then repeats indefinitely, and
-the next state command ends it. While that state remains active, timeline rows
-after the persistent range are intentionally unreachable. The timeline marks
-range rows with `↔`, and the side preview uses the same behavior as firmware.
+the next state command requests its exit. Timeline rows after the persistent
+range then play once as an outro before the pending state begins. When a loop
+occupies the final pose of a whole-animation ping-pong, its entry frames become
+the automatic return outro. The timeline marks range rows with `↔`.
 The left-side Animation actions panel lists each persistent loop. Its Delete
 button removes the action without deleting frames or artwork; double-clicking
 the action text opens it in edit mode so its range and loop direction can be
@@ -133,6 +134,17 @@ monitor automatically uses the only connected `/dev/serial/by-id`,
 `/dev/ttyACM`, or `/dev/ttyUSB` device. If more than one is connected, select
 one with `--port /dev/ttyACM0` or set `EYE_LEFT_PORT` and `EYE_RIGHT_PORT`.
 Run `./flash.sh --help` for all options and environment overrides.
+
+Every activated animation now starts at frame one on its own local clock; the
+I2C sync timestamp is never added to its frame index. A request for another
+state becomes the current animation's end signal. Regular playback completes
+its forward pass, whole-animation ping-pong completes its return to frame one,
+and a persistent range loop runs its stored outro before the pending state is
+activated. If a range occupies the final frames and the animation itself is
+ping-pong, firmware automatically returns through the entry frames. Therefore
+demo states remain active for at least three seconds and may take slightly
+longer while their graceful exit finishes. Regular I2C mode uses the identical
+transition logic.
 
 Use `--assets PATH` to compile regular or demo firmware with another compatible
 asset pack. The generated header stays inside that firmware's build directory,

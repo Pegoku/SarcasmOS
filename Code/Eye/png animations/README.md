@@ -21,6 +21,10 @@ python emulator.py --assets "png animations/eye_assets.json" --view both
 
 The alternate pack supports the emulator's normal GIMP auto-import, frame
 insertion/removal, timing, folder synchronization, and orientation controls.
+Firmware starts every selected PNG animation at its first frame. A later state
+request is queued until the current animation finishes its forward outro or
+ping-pong return; persistent final-pose loops therefore return smoothly through
+their entry frames before animations such as `left` and `right` switch.
 
 ## Rebuild
 

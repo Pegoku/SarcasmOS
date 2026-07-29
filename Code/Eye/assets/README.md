@@ -37,8 +37,11 @@ auto-scroll. Saving rewrites only the selected asset pack.
 
 The repeat dialog can also store an optional contiguous `loop_range`. Frames
 before it form a one-shot intro; the range then repeats in regular or ping-pong
-mode until a new animation state is selected. This range is compiled into the
-firmware rather than expanded into duplicate bitmap frames.
+mode until a new animation state is requested. That request acts as an end
+signal: the range completes cleanly, stored frames after it play as the outro,
+and only then does firmware activate the pending state. A final-pose range in a
+whole-animation ping-pong automatically returns through the intro frames. This
+range is compiled into firmware rather than expanded into duplicate bitmaps.
 Persistent loops appear in the timeline editor's Animation actions panel.
 Double-click an action to edit it, or use the row's Delete button to remove the
 loop metadata while preserving every frame and sprite reference.

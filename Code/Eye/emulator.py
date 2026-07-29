@@ -1153,8 +1153,8 @@ class EmulatorWindow:
             tk.Label(
                 dialog,
                 text=(
-                    "The controller ends this loop by changing state; "
-                    "timeline rows after the range are not reached."
+                    "A state change ends this loop; timeline rows after the "
+                    "range then play once as its graceful outro."
                 ),
                 justify="left", wraplength=410, anchor="w",
                 background="#111111", foreground="#aaaaaa",

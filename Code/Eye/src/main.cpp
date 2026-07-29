@@ -9,6 +9,7 @@
 #include "pico/stdlib.h"
 
 #include "gc9a01.hpp"
+#include "animation_playback.hpp"
 #include "generated/eye_assets.hpp"
 #include "protocol.hpp"
 #include "swd_rtt.hpp"
@@ -39,10 +40,15 @@ static volatile uint8_t tx_len = 8;
 static volatile uint8_t tx_pos;
 static volatile bool command_ready;
 static uint8_t current_animation = kAnimIdle;
+static uint8_t pending_animation = kAnimCount;
 static uint8_t brightness = 180;
 static uint8_t last_sequence;
 static uint8_t last_error;
-static uint32_t sync_phase_ms;
+static eye_playback::State playback_state;
+static uint32_t frame_started_ms;
+static uint32_t animation_started_ms;
+
+static void request_animation(uint8_t animation);
 
 static const char *const kAnimationNames[] = {
     "idle", "listening", "thinking", "thinking_audio",
@@ -75,12 +81,9 @@ static void report_animation(const char *label) {
 #ifdef ANIMATION_AUTOPLAY
 static void update_animation_autoplay(uint32_t now_ms) {
     constexpr uint32_t kStateDurationMs = 3000;
-    static uint8_t previous_animation = kAnimCount;
-    const uint8_t next_animation = (now_ms / kStateDurationMs) % kAnimCount;
-    if (next_animation != previous_animation) {
-        current_animation = next_animation;
-        previous_animation = next_animation;
-        report_animation("Demo");
+    if (pending_animation == kAnimCount &&
+        now_ms - animation_started_ms >= kStateDurationMs) {
+        request_animation((current_animation + 1) % kAnimCount);
     }
 }
 #endif
@@ -138,33 +141,53 @@ static void display_init() {
     eye_display::init(brightness, madctl);
 }
 
-static uint8_t animation_frame(
-    const eye_assets::Animation &animation, uint32_t elapsed_ms
+static eye_playback::Spec playback_spec(
+    const eye_assets::Animation &animation
 ) {
-    if (animation.frameCount <= 1) return 0;
-    const uint32_t step = elapsed_ms / animation.frameMs;
+    eye_playback::Spec spec{
+        animation.frameCount, animation.playback, 0, 0, 0,
+    };
 #ifdef EYE_ASSETS_HAS_LOOP_RANGES
-    if (animation.loopEnd > animation.loopStart &&
-        step >= animation.loopStart) {
-        const uint8_t loop_count = animation.loopEnd - animation.loopStart;
-        const uint32_t loop_step = step - animation.loopStart;
-        if (animation.loopPlayback == eye_assets::kPlaybackPingPong &&
-            loop_count > 1) {
-            const uint8_t final_frame = loop_count - 1;
-            const uint16_t phase = loop_step % (final_frame * 2);
-            const uint8_t local = phase <= final_frame
-                ? phase : final_frame * 2 - phase;
-            return animation.loopStart + local;
-        }
-        return animation.loopStart + loop_step % loop_count;
-    }
+    spec.loop_start = animation.loopStart;
+    spec.loop_end = animation.loopEnd;
+    spec.loop_playback = animation.loopPlayback;
 #endif
-    if (animation.playback == eye_assets::kPlaybackPingPong) {
-        const uint8_t final_frame = animation.frameCount - 1;
-        const uint16_t phase = step % (final_frame * 2);
-        return phase <= final_frame ? phase : final_frame * 2 - phase;
+    return spec;
+}
+
+static void activate_animation(uint8_t animation, uint32_t now_ms) {
+    current_animation = animation;
+    pending_animation = kAnimCount;
+    eye_playback::start(playback_state);
+    frame_started_ms = now_ms;
+    animation_started_ms = now_ms;
+    prepare_status_response();
+    report_animation("Current");
+}
+
+static void request_animation(uint8_t animation) {
+    if (!isValidAnimation(animation)) return;
+    if (animation == current_animation && pending_animation == kAnimCount) {
+        return;
     }
-    return step % animation.frameCount;
+    pending_animation = animation;
+    const eye_assets::Animation &current =
+        eye_assets::kAnimations[current_animation];
+    eye_playback::request_exit(playback_spec(current), playback_state);
+}
+
+static void update_animation_playback(uint32_t now_ms) {
+    while (true) {
+        const eye_assets::Animation &animation =
+            eye_assets::kAnimations[current_animation];
+        if (now_ms - frame_started_ms < animation.frameMs) return;
+        frame_started_ms += animation.frameMs;
+        if (eye_playback::advance(
+                playback_spec(animation), playback_state)) {
+            if (!isValidAnimation(pending_animation)) return;
+            activate_animation(pending_animation, frame_started_ms);
+        }
+    }
 }
 
 static void draw_asset_frame(uint16_t sprite_id) {
@@ -204,12 +227,12 @@ static void draw_asset_frame(uint16_t sprite_id) {
     }
 }
 
-static void draw_eye(uint32_t elapsed_ms) {
+static void draw_eye() {
     const uint8_t animation_id =
         isValidAnimation(current_animation) ? current_animation : kAnimNeutral;
     const eye_assets::Animation &animation =
         eye_assets::kAnimations[animation_id];
-    const uint8_t local_frame = animation_frame(animation, elapsed_ms);
+    const uint8_t local_frame = playback_state.frame;
     const eye_assets::FramePair &pair = eye_assets::kFramePairs[
         animation.firstFramePair + local_frame];
     const uint16_t sprite_id =
@@ -232,7 +255,6 @@ static void parse_command() {
         prepare_status_response();
         return;
     }
-    const uint8_t previous_animation = current_animation;
     uint8_t command = local[1];
     last_sequence = local[2];
     const uint8_t *payload = &local[4];
@@ -247,16 +269,18 @@ static void parse_command() {
     case kCmdSetAnimation:
     case kCmdSetExpression:
         if (local[3] >= 1 && isValidAnimation(payload[0])) {
-            current_animation = payload[0];
+            request_animation(payload[0]);
         } else {
             last_error = 1;
         }
         break;
     case kCmdSync:
-        if (local[3] >= 4) sync_phase_ms = payload[0] | (payload[1] << 8) | (payload[2] << 16) | (payload[3] << 24);
+        // Animation commands reset their own local timeline. Both eye boards
+        // receive the same command sequence, so an absolute remote uptime must
+        // not be added to the new animation's frame index.
         break;
     case kCmdStop:
-        current_animation = kAnimSleep;
+        request_animation(kAnimSleep);
         break;
     case kCmdReset:
         watchdog_reboot(0, 0, 10);
@@ -266,9 +290,6 @@ static void parse_command() {
         break;
     }
     prepare_status_response();
-    if (current_animation != previous_animation) {
-        report_animation("Current");
-    }
 }
 
 int main() {
@@ -280,22 +301,22 @@ int main() {
     printf("SarcasmOS eye role=%d addr=0x%02x\n", DEVICE_ROLE, I2C_ADDRESS);
     swd_rtt_printf("SarcasmOS eye role=%d addr=0x%02x\n",
                    DEVICE_ROLE, I2C_ADDRESS);
-#ifndef ANIMATION_AUTOPLAY
-    report_animation("Current");
-#endif
+    uint32_t now = to_ms_since_boot(get_absolute_time());
+    activate_animation(kAnimIdle, now);
 
     uint32_t last_draw = 0;
     while (true) {
         watchdog_update();
+        now = to_ms_since_boot(get_absolute_time());
         if (command_ready) parse_command();
-        uint32_t now = to_ms_since_boot(get_absolute_time());
 #ifdef ANIMATION_AUTOPLAY
         update_animation_autoplay(now);
 #endif
+        update_animation_playback(now);
         gpio_put(LED_PIN, (now / 500) & 1);
         if (now - last_draw >= FRAME_INTERVAL_MS) {
             last_draw = now;
-            draw_eye(now + sync_phase_ms);
+            draw_eye();
         }
         tight_loop_contents();
     }

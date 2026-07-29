@@ -17,7 +17,7 @@ namespace {
 using namespace mouth_protocol;
 
 constexpr uint8_t kFirmwareMajor = 3;
-constexpr uint8_t kFirmwareMinor = 1;
+constexpr uint8_t kFirmwareMinor = 2;
 
 struct PendingPacket {
     uint8_t source[6];
@@ -73,6 +73,9 @@ void sendStatus(const uint8_t *destination, uint8_t command) {
         mouth_display::brightness(),
         mouth_display::mouthIntensity(),
         ESPNOW_CHANNEL,
+        mouth_display::transitionToken(),
+        static_cast<uint8_t>(mouth_display::transitionActive() ? 1 : 0),
+        mouth_display::transitionProgress(),
     };
     uint8_t response[kMaxPacketSize];
     const size_t length = encodePacket(
@@ -134,7 +137,14 @@ bool processCommand(const PacketView &packet) {
             lastError = kErrorInvalidPayload;
             return false;
         }
-        mouth_display::setAnimation(packet.payload[0]);
+        mouth_display::requestAnimation(
+            packet.payload[0],
+            packet.payloadLength >= 2 ? packet.payload[1] : 0,
+            packet.payloadLength >= 3 && packet.payload[2] != 0
+                ? static_cast<uint16_t>(packet.payload[2]) *
+                      mouth_display::kRendererFrameIntervalMs
+                : mouth_display::kDefaultTransitionDurationMs
+        );
         return true;
     case kCmdSync:
         if (!requirePayload(packet, 4)) return false;
@@ -145,7 +155,7 @@ bool processCommand(const PacketView &packet) {
             (static_cast<uint32_t>(packet.payload[3]) << 24));
         return true;
     case kCmdStop:
-        mouth_display::setAnimation(kAnimSleep);
+        mouth_display::requestAnimation(kAnimSleep);
         return true;
     case kCmdSetParam:
         if (!requirePayload(packet, 2)) return false;
@@ -230,7 +240,7 @@ void setup() {
     }
     if (!initializeEspNow()) {
         Serial.println("ERROR: ESP-NOW initialization failed");
-        mouth_display::setAnimation(kAnimError);
+        mouth_display::requestAnimation(kAnimError);
     } else {
         Serial.print("ESP-NOW mouth MAC ");
         Serial.print(WiFi.macAddress());

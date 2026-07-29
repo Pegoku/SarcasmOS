@@ -8,7 +8,7 @@ namespace mouth_protocol {
 constexpr uint8_t kMagic0 = 'S';
 constexpr uint8_t kMagic1 = 'M';
 constexpr uint8_t kTransportVersion = 0x01;
-constexpr uint8_t kApplicationVersion = 0x02;
+constexpr uint8_t kApplicationVersion = 0x03;
 constexpr uint8_t kRoleMouth = 0x02;
 constexpr uint8_t kRoleAny = 0xff;
 
@@ -76,7 +76,7 @@ constexpr uint8_t kErrorInvalidPayload = 0x03;
 constexpr size_t kHeaderSize = 8;
 constexpr size_t kMaxPayloadSize = 64;
 constexpr size_t kMaxPacketSize = kHeaderSize + kMaxPayloadSize + 1;
-constexpr size_t kStatusPayloadSize = 10;
+constexpr size_t kStatusPayloadSize = 13;
 
 struct PacketView {
     uint8_t type;

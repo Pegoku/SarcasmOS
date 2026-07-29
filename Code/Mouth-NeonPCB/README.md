@@ -12,6 +12,11 @@ animation phase sync, stop, speaking intensity, weather temperature, and
 reset. Every valid command gets a status response carrying its sequence
 number and result.
 
+Animation changes use a 200 ms RGB blend by default. The regular firmware
+accepts an optional Brain-assigned transition token and duration so the Brain
+can wait for both eyes before starting the mouth transition. The local tester
+uses the same blend when selecting or automatically advancing states.
+
 ## Firmware variants
 
 The project produces two separate firmware images that share the same panel
@@ -223,6 +228,18 @@ Send key `2` before selecting a weather animation. The value persists across
 `sunny`, `rainy`, `cloudy`, `stormy`, and `snowy` until it is replaced or
 cleared with `-128`.
 
+`SET_ANIMATION` and `SET_EXPRESSION` accept these payloads:
+
+| Offset | Meaning |
+| ---: | --- |
+| 0 | Destination animation ID |
+| 1 | Optional transition token; omitted commands use `0` |
+| 2 | Optional duration in 40 ms ticks; `0` selects the 200 ms default |
+
+One-byte and existing two-byte commands remain accepted. The destination
+timeline starts at frame zero. A new command received during a blend captures
+the currently visible result and transitions from there.
+
 The status payload is:
 
 | Offset | Meaning |
@@ -236,6 +253,9 @@ The status payload is:
 | 7 | brightness |
 | 8 | speaking intensity |
 | 9 | ESP-NOW channel |
+| 10 | last activated transition token |
+| 11 | transition active: `0` or `1` |
+| 12 | transition progress: `0..255` |
 
 The mouth learns the sender MAC from an incoming broadcast or unicast command,
 adds it as an unencrypted peer, and returns status by unicast. A repeated

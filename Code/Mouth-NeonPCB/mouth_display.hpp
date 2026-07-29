@@ -6,13 +6,23 @@ namespace mouth_display {
 
 constexpr uint8_t kDefaultBrightness = 64;
 constexpr uint8_t kDefaultMouthIntensity = 120;
+constexpr uint16_t kDefaultTransitionDurationMs = 200;
+constexpr uint16_t kRendererFrameIntervalMs = 40;
 
 bool begin();
 void update();
 void showNow();
 
+bool requestAnimation(
+    uint8_t animation, uint8_t transitionToken = 0,
+    uint16_t transitionDurationMs = kDefaultTransitionDurationMs
+);
+// Immediate state selection for diagnostics and initialization.
 void setAnimation(uint8_t animation);
 uint8_t animation();
+bool transitionActive();
+uint8_t transitionToken();
+uint8_t transitionProgress();
 
 void setBrightness(uint8_t brightness);
 uint8_t brightness();

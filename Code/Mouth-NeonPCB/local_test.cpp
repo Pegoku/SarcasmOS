@@ -31,6 +31,7 @@ bool autoPlay = true;
 bool showingDiagnostic = false;
 uint8_t autoAnimation = kAnimIdle;
 uint8_t diagnostic = 0;
+uint8_t transitionToken = 0;
 uint32_t lastAutoStepMs = 0;
 uint8_t escapeSequenceState = 0;
 
@@ -52,7 +53,9 @@ void selectAnimation(uint8_t animation) {
     if (!isValidAnimation(animation)) return;
     autoAnimation = animation;
     showingDiagnostic = false;
-    mouth_display::setAnimation(animation);
+    ++transitionToken;
+    if (transitionToken == 0) ++transitionToken;
+    mouth_display::requestAnimation(animation, transitionToken);
     mouth_display::showNow();
     lastAutoStepMs = millis();
     Serial.printf("Animation %u: %s\n", animation, kAnimationNames[animation]);

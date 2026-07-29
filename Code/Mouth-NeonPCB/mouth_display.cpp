@@ -4,9 +4,11 @@
 
 #include <Arduino.h>
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
+#include <array>
 #include <cstdio>
 #include <cstring>
 
+#include "color_transition.hpp"
 #include "generated/mouth_assets.hpp"
 #include "generated/temperature_font.hpp"
 #include "protocol.hpp"
@@ -20,7 +22,8 @@ using namespace mouth_temperature_font;
 constexpr int kPanelWidth = 64;
 constexpr int kPanelHeight = 32;
 constexpr int kPanelChain = 1;
-constexpr uint32_t kFrameIntervalMs = 40;
+constexpr size_t kPixelCount = kPanelWidth * kPanelHeight;
+using Canvas = std::array<uint16_t, kPixelCount>;
 
 // Custom driver PCB pin mapping, traced through U5/U1 to HUB75.
 constexpr int kR1Pin = 1;
@@ -50,6 +53,19 @@ uint8_t currentMouthIntensity = kDefaultMouthIntensity;
 int8_t currentTemperatureCelsius = kTemperatureUnavailable;
 uint32_t syncPhaseMs = 0;
 uint32_t lastFrameMs = 0;
+uint32_t animationStartedMs = 0;
+Canvas transitionSource = {};
+Canvas destinationCanvas = {};
+
+struct TransitionState {
+    bool active = false;
+    uint8_t destinationAnimation = kAnimIdle;
+    uint8_t token = 0;
+    uint32_t startedMs = 0;
+    uint16_t durationMs = kDefaultTransitionDurationMs;
+};
+
+TransitionState transition = {};
 
 uint16_t rgb(uint8_t red, uint8_t green, uint8_t blue) {
     return matrix->color565(red, green, blue);
@@ -80,7 +96,7 @@ uint8_t animationFrame(const mouth_assets::Animation &animation,
     return step % animation.frameCount;
 }
 
-void drawAssetFrame(uint8_t spriteId) {
+void decodeAssetFrame(uint8_t spriteId, Canvas &canvas) {
     const mouth_assets::Frame &frame = mouth_assets::kFrames[spriteId];
     uint32_t pixel = 0;
     for (uint32_t offset = frame.offset;
@@ -88,17 +104,14 @@ void drawAssetFrame(uint8_t spriteId) {
         uint16_t run = mouth_assets::kRleData[offset];
         const uint8_t paletteIndex = mouth_assets::kRleData[offset + 1];
         const uint8_t *color = mouth_assets::kPalette[paletteIndex];
-        const uint16_t packed = rgb(color[0], color[1], color[2]);
-        while (run > 0 && pixel < kPanelWidth * kPanelHeight) {
-            const uint8_t x = pixel % kPanelWidth;
-            const uint8_t y = pixel / kPanelWidth;
-            const uint8_t chunk =
-                min(static_cast<int>(run), kPanelWidth - x);
-            matrix->drawFastHLine(x, y, chunk, packed);
-            pixel += chunk;
-            run -= chunk;
+        const uint16_t packed =
+            mouth_transition::packRgb565(color[0], color[1], color[2]);
+        while (run > 0 && pixel < kPixelCount) {
+            canvas[pixel++] = packed;
+            --run;
         }
     }
+    while (pixel < kPixelCount) canvas[pixel++] = 0;
 }
 
 bool isWeatherAnimation(uint8_t animationId) {
@@ -114,18 +127,17 @@ const uint8_t *glyphFor(char character) {
     return kDegreeGlyph;
 }
 
-void drawGlyph(int x, int y, const uint8_t *rows) {
-    const uint16_t black = rgb(0, 0, 0);
+void drawGlyph(Canvas &canvas, int x, int y, const uint8_t *rows) {
     for (uint8_t row = 0; row < kGlyphHeight; ++row) {
         for (uint8_t column = 0; column < kGlyphWidth; ++column) {
             if ((rows[row] & (1u << (kGlyphWidth - column - 1))) != 0) {
-                matrix->drawPixel(x + column, y + row, black);
+                canvas[(y + row) * kPanelWidth + x + column] = 0;
             }
         }
     }
 }
 
-void drawTemperatureOverlay(uint8_t animationId) {
+void drawTemperatureOverlay(uint8_t animationId, Canvas &canvas) {
     if (!isWeatherAnimation(animationId) ||
         currentTemperatureCelsius == kTemperatureUnavailable) {
         return;
@@ -142,26 +154,101 @@ void drawTemperatureOverlay(uint8_t animationId) {
     constexpr int y = (kPanelHeight - kGlyphHeight) / 2;
 
     for (size_t index = 0; index < digitCount; ++index) {
-        drawGlyph(x, y, glyphFor(digits[index]));
+        drawGlyph(canvas, x, y, glyphFor(digits[index]));
         x += kGlyphWidth + kGlyphSpacing;
     }
-    drawGlyph(x, y, kDegreeGlyph);
+    drawGlyph(canvas, x, y, kDegreeGlyph);
     x += kGlyphWidth + kGlyphSpacing;
-    drawGlyph(x, y, kCelsiusGlyph);
+    drawGlyph(canvas, x, y, kCelsiusGlyph);
 }
 
-void drawMouth(uint32_t elapsedMs) {
-    matrix->clearScreen();
-    const uint8_t animationId =
-        isValidAnimation(currentAnimation) ? currentAnimation : kAnimNeutral;
+void renderAnimation(
+    uint8_t animationId, uint32_t now, Canvas &canvas
+) {
+    if (!isValidAnimation(animationId)) animationId = kAnimNeutral;
     const mouth_assets::Animation &animation =
         mouth_assets::kAnimations[animationId];
+    const uint32_t elapsedMs =
+        now - animationStartedMs + syncPhaseMs;
     const uint8_t localFrame = animationFrame(animation, elapsedMs);
     const uint8_t spriteId = mouth_assets::kFrameReferences[
         animation.firstFrameReference + localFrame];
-    drawAssetFrame(spriteId);
-    drawTemperatureOverlay(animationId);
+    decodeAssetFrame(spriteId, canvas);
+    drawTemperatureOverlay(animationId, canvas);
+}
+
+uint8_t transitionProgressAt(uint32_t now) {
+    if (!transition.active) return 255;
+    const uint32_t elapsed = now - transition.startedMs;
+    if (elapsed >= transition.durationMs) return 255;
+    return static_cast<uint8_t>(
+        (elapsed * 255U) / transition.durationMs
+    );
+}
+
+void presentCanvas(const Canvas &canvas) {
+    for (int y = 0; y < kPanelHeight; ++y) {
+        int x = 0;
+        while (x < kPanelWidth) {
+            const uint16_t color = canvas[y * kPanelWidth + x];
+            int end = x + 1;
+            while (end < kPanelWidth &&
+                   canvas[y * kPanelWidth + end] == color) {
+                ++end;
+            }
+            matrix->drawFastHLine(x, y, end - x, color);
+            x = end;
+        }
+    }
     present();
+}
+
+void presentBlend(
+    const Canvas &from, const Canvas &to, uint8_t amount
+) {
+    for (int y = 0; y < kPanelHeight; ++y) {
+        for (int x = 0; x < kPanelWidth; ++x) {
+            const size_t pixel = y * kPanelWidth + x;
+            matrix->drawPixel(
+                x, y,
+                mouth_transition::blendRgb565(
+                    from[pixel], to[pixel], amount
+                )
+            );
+        }
+    }
+    present();
+}
+
+void captureVisible(uint32_t now) {
+    renderAnimation(currentAnimation, now, destinationCanvas);
+    if (!transition.active) {
+        transitionSource = destinationCanvas;
+        return;
+    }
+    const uint8_t amount = transitionProgressAt(now);
+    for (size_t pixel = 0; pixel < kPixelCount; ++pixel) {
+        transitionSource[pixel] = mouth_transition::blendRgb565(
+            transitionSource[pixel], destinationCanvas[pixel], amount
+        );
+    }
+}
+
+void drawMouth(uint32_t now) {
+    renderAnimation(currentAnimation, now, destinationCanvas);
+    if (transition.active) {
+        const uint8_t amount = transitionProgressAt(now);
+        if (amount < 255) {
+            presentBlend(transitionSource, destinationCanvas, amount);
+            return;
+        }
+        transition.active = false;
+    }
+    presentCanvas(destinationCanvas);
+}
+
+void cancelTransition() {
+    transition.active = false;
 }
 
 }  // namespace
@@ -182,28 +269,67 @@ bool begin() {
     matrix->setBrightness8(currentBrightness);
     matrix->clearScreen();
     present();
+    animationStartedMs = millis();
     showNow();
     return true;
 }
 
 void update() {
     const uint32_t now = millis();
-    if (now - lastFrameMs >= kFrameIntervalMs) {
+    if (now - lastFrameMs >= kRendererFrameIntervalMs) {
         lastFrameMs = now;
-        drawMouth(now + syncPhaseMs);
+        drawMouth(now);
     }
 }
 
 void showNow() {
-    if (matrix != nullptr) drawMouth(millis() + syncPhaseMs);
+    if (matrix != nullptr) drawMouth(millis());
+}
+
+bool requestAnimation(
+    uint8_t animationValue, uint8_t token, uint16_t durationMs
+) {
+    if (!isValidAnimation(animationValue)) return false;
+    if (animationValue == currentAnimation && token == transition.token) {
+        return true;
+    }
+
+    const uint32_t now = millis();
+    captureVisible(now);
+    currentAnimation = animationValue;
+    animationStartedMs = now;
+    syncPhaseMs = 0;
+    transition.destinationAnimation = animationValue;
+    transition.token = token;
+    transition.startedMs = now;
+    transition.durationMs =
+        durationMs == 0 ? kDefaultTransitionDurationMs : durationMs;
+    transition.active = transition.durationMs > 0;
+    return true;
 }
 
 void setAnimation(uint8_t animationValue) {
-    currentAnimation = animationValue;
+    currentAnimation =
+        isValidAnimation(animationValue) ? animationValue : kAnimNeutral;
+    animationStartedMs = millis();
+    syncPhaseMs = 0;
+    cancelTransition();
 }
 
 uint8_t animation() {
     return currentAnimation;
+}
+
+bool transitionActive() {
+    return transition.active && transitionProgressAt(millis()) < 255;
+}
+
+uint8_t transitionToken() {
+    return transition.token;
+}
+
+uint8_t transitionProgress() {
+    return transitionProgressAt(millis());
 }
 
 void setBrightness(uint8_t brightnessValue) {
@@ -237,12 +363,14 @@ void setSyncPhase(uint32_t phaseMs) {
 
 void showSolid(uint8_t red, uint8_t green, uint8_t blue) {
     if (matrix == nullptr) return;
+    cancelTransition();
     matrix->fillScreen(rgb(red, green, blue));
     present();
 }
 
 void showColorBars() {
     if (matrix == nullptr) return;
+    cancelTransition();
     constexpr uint8_t colors[][3] = {
         {255, 0, 0},   {0, 255, 0},     {0, 0, 255},   {255, 255, 0},
         {0, 255, 255}, {255, 0, 255},   {255, 255, 255}, {0, 0, 0},
@@ -258,6 +386,7 @@ void showColorBars() {
 
 void showRgbRows() {
     if (matrix == nullptr) return;
+    cancelTransition();
     matrix->clearScreen();
     matrix->fillRect(0, 0, kPanelWidth, 10, rgb(255, 0, 0));
     matrix->fillRect(0, 10, kPanelWidth, 11, rgb(0, 255, 0));
@@ -267,6 +396,7 @@ void showRgbRows() {
 
 void showGeometryTest() {
     if (matrix == nullptr) return;
+    cancelTransition();
     matrix->clearScreen();
     matrix->drawRect(0, 0, kPanelWidth, kPanelHeight, rgb(255, 255, 255));
     matrix->drawLine(0, 0, kPanelWidth - 1, kPanelHeight - 1,

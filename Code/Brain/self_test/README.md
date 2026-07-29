@@ -29,6 +29,9 @@ on the same USB serial connection. It can:
 - run separate one-second speaker-tone and microphone-capture tests
 - address the I2C left eye, I2C right eye, or ESP-NOW mouth and visually cycle it
   through happy, error, and idle animations while checking its protocol status
+- discover the two eyes by I2C protocol/role and the mouth by acknowledged
+  ESP-NOW, select any combination with checkboxes, and repeatedly send any of
+  the shared face states `0x00` through `0x1E`
 - repeat the I2C, W5500, combined audio, and GPIO tests independently
 - rerun the complete automatic test sequence
 
@@ -84,6 +87,19 @@ it again, `c` to select and connect to a Wi-Fi network, and `s` to show its
 connection status and IP address. Use `p` for the speaker, `m` for the
 microphone, `l`/`r` for the wired eyes, `o` for the wireless mouth, and `v` to
 test all three displays. The complete automatic sequence is `x`.
+
+Enter `f` for the interactive face display controller. It probes the left eye
+at `0x30` and right eye at `0x31`, validates each eye's protocol role, and
+requires an acknowledged ESP-NOW ping from the configured mouth. In the target
+screen, move with the arrow keys or `W`/`S`, toggle checkboxes with Space, and
+press Enter to continue. Unavailable displays cannot be selected; use `R` to
+repeat discovery.
+
+The state screen lists all shared Eye/Mouth animation IDs with descriptions,
+ten at a time. Move with the arrow keys or `W`/`S` and press Enter (or Space)
+to send the highlighted state to every selected target. The screen reports an
+individual acknowledgment result for each display and remains open for
+additional states. Press `Q` or Escape to return to the main test menu.
 
 Enabling a buck only verifies the enable GPIO state. Measure the corresponding
 rail before treating it as electrically validated.

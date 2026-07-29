@@ -173,12 +173,17 @@ class MouthAssets:
 
 
 class FaceAssets:
-    def __init__(self) -> None:
+    def __init__(
+        self, eye_path: pathlib.Path = EYE_TOOL.DEFAULT_ASSETS,
+        mouth_path: pathlib.Path = MOUTH_TOOL.DEFAULT_ASSETS,
+    ) -> None:
+        self.eye_path = eye_path.resolve()
+        self.mouth_path = mouth_path.resolve()
         self.reload()
 
     def reload(self) -> None:
-        eye = EyeAssets(EYE_TOOL.load_assets())
-        mouth = MouthAssets(MOUTH_TOOL.load_assets())
+        eye = EyeAssets(EYE_TOOL.load_assets(self.eye_path))
+        mouth = MouthAssets(MOUTH_TOOL.load_assets(self.mouth_path))
         eye_states = tuple(animation["name"] for animation in eye.animations)
         mouth_states = tuple(
             animation["name"] for animation in mouth.animations
@@ -196,7 +201,7 @@ class EmulatorWindow:
         import tkinter as tk
 
         self.tk = tk
-        self.assets = FaceAssets()
+        self.assets = FaceAssets(args.eye_assets, args.mouth_assets)
         self.state_id = self.assets.state_ids[args.state]
         self.eye_scale = args.eye_scale
         self.mouth_scale = args.mouth_scale
@@ -374,7 +379,10 @@ class EmulatorWindow:
                     self.assets.mouth.animations[self.state_id]["frames"]
                 )
             self.last_render_key = None
-            self.show_notice("Reloaded eye and mouth assets")
+            self.show_notice(
+                f"Reloaded {self.assets.eye_path.name} and "
+                f"{self.assets.mouth_path.name}"
+            )
         except (OSError, ValueError, KeyError) as error:
             self.show_notice(f"Reload failed: {error}")
 
@@ -562,9 +570,17 @@ def self_test(assets: FaceAssets) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    assets = FaceAssets()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--state", choices=assets.states, default="idle")
+    parser.add_argument(
+        "--eye-assets", type=pathlib.Path, default=EYE_TOOL.DEFAULT_ASSETS,
+        help="alternate sarcasmos-eye-assets JSON pack to preview",
+    )
+    parser.add_argument(
+        "--mouth-assets", type=pathlib.Path,
+        default=MOUTH_TOOL.DEFAULT_ASSETS,
+        help="alternate sarcasmos-mouth-assets JSON pack to preview",
+    )
+    parser.add_argument("--state", default=None)
     parser.add_argument("--eye-scale", type=int, default=2)
     parser.add_argument("--mouth-scale", type=int, default=12)
     parser.add_argument(
@@ -585,6 +601,16 @@ def parse_args() -> argparse.Namespace:
         help="validate combined rendering without opening a window",
     )
     args = parser.parse_args()
+    try:
+        assets = FaceAssets(args.eye_assets, args.mouth_assets)
+    except (OSError, ValueError, KeyError) as error:
+        parser.error(f"cannot load asset packs: {error}")
+    if args.state is None:
+        args.state = assets.states[0]
+    elif args.state not in assets.state_ids:
+        parser.error(
+            f"--state must be one of: {', '.join(assets.states)}"
+        )
     for option in ("eye_scale", "mouth_scale"):
         if getattr(args, option) < 1:
             parser.error(f"--{option.replace('_', '-')} must be at least 1")
@@ -606,7 +632,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     try:
         args = parse_args()
-        assets = FaceAssets()
+        assets = FaceAssets(args.eye_assets, args.mouth_assets)
         if args.self_test:
             self_test(assets)
             return 0

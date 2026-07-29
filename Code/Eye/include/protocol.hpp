@@ -2,7 +2,8 @@
 
 #include <cstdint>
 
-constexpr uint8_t kProtocolVersion = 0x01;
+constexpr uint8_t kProtocolVersion = 0x02;
+constexpr uint8_t kEyeStatusSize = 13;
 constexpr uint8_t kCmdPing = 0x01;
 constexpr uint8_t kCmdGetInfo = 0x02;
 constexpr uint8_t kCmdSetBrightness = 0x10;

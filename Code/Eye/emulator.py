@@ -714,8 +714,8 @@ class EmulatorWindow:
         self.timeline_window = window
         window.title(f"Frame timeline — {state}")
         window.configure(background="#111111")
-        window.geometry("1280x560")
-        window.minsize(1080, 440)
+        window.geometry("1480x560")
+        window.minsize(1220, 440)
         window.transient(self.root)
 
         tk.Label(
@@ -729,6 +729,25 @@ class EmulatorWindow:
 
         body = tk.Frame(window, background="#111111")
         body.pack(fill="both", expand=True, padx=10)
+        action_panel = tk.Frame(
+            body, width=255, background="#171b1f",
+        )
+        action_panel.pack(side="left", fill="y", padx=(0, 10))
+        action_panel.pack_propagate(False)
+        tk.Label(
+            action_panel, text="Animation actions", anchor="w",
+            background="#171b1f", foreground="#eeeeee",
+            font=("sans", 11, "bold"),
+        ).pack(fill="x", padx=8, pady=(8, 2))
+        tk.Label(
+            action_panel,
+            text="Double-click an action to edit it.", anchor="w",
+            background="#171b1f", foreground="#8b949e",
+            font=("sans", 9),
+        ).pack(fill="x", padx=8, pady=(0, 7))
+        action_rows = tk.Frame(action_panel, background="#171b1f")
+        action_rows.pack(fill="both", expand=True, padx=6)
+
         list_frame = tk.Frame(body, background="#111111")
         list_frame.pack(side="left", fill="both", expand=True)
         scrollbar = tk.Scrollbar(list_frame, orient="vertical")
@@ -899,6 +918,76 @@ class EmulatorWindow:
         def selection() -> list[int]:
             return [int(index) for index in timeline.curselection()]
 
+        def delete_loop_action() -> None:
+            nonlocal loop_range
+            selected = selection()
+            loop_range = None
+            refresh(selected)
+            self.show_notice("Deleted the persistent frame-loop action")
+
+        def edit_loop_action() -> None:
+            if loop_range is None:
+                return
+            selected = list(range(
+                loop_range["start"], loop_range["end"] + 1,
+            ))
+            timeline.selection_clear(0, tk.END)
+            for index in selected:
+                timeline.selection_set(index)
+            timeline.activate(selected[0])
+            timeline.see(selected[0])
+            repeat_selection(selected, edit_until=True)
+
+        def refresh_actions() -> None:
+            for child in action_rows.winfo_children():
+                child.destroy()
+            if loop_range is None:
+                tk.Label(
+                    action_rows,
+                    text="No editable animation actions.",
+                    justify="left", wraplength=225, anchor="nw",
+                    background="#171b1f", foreground="#8b949e",
+                ).pack(fill="x", padx=3, pady=4)
+                return
+            row = tk.Frame(
+                action_rows, background="#20252a",
+                highlightthickness=1, highlightbackground="#3d444d",
+            )
+            row.pack(fill="x", pady=(0, 6))
+            mode = (
+                "Ping-pong" if loop_range["mode"] == "ping_pong"
+                else "Regular"
+            )
+            action_text = (
+                "Loop until state ends\n"
+                f"Frames {loop_range['start'] + 1}-"
+                f"{loop_range['end'] + 1} · {mode}"
+            )
+            label = tk.Label(
+                row, text=action_text, justify="left", anchor="w",
+                wraplength=165, background="#20252a",
+                foreground="#eeeeee", padx=7, pady=7,
+            )
+            explain_button(
+                tk, label,
+                "Double-click to edit this loop's frame range and switch "
+                "between Regular and Ping-pong behavior.",
+            )
+            label.bind(
+                "<Double-Button-1>",
+                lambda _event: edit_loop_action(), add="+",
+            )
+            label.pack(side="left", fill="both", expand=True)
+            delete_button = tk.Button(
+                row, text="Delete", command=delete_loop_action,
+            )
+            explain_button(
+                tk, delete_button,
+                "Delete this persistent frame-loop action. The timeline "
+                "frames and stored artwork remain intact.",
+            )
+            delete_button.pack(side="right", padx=(3, 6), pady=6)
+
         def refresh(selected: list[int] | None = None) -> None:
             selected = selection() if selected is None else selected
             pair_uses = Counter(
@@ -934,6 +1023,7 @@ class EmulatorWindow:
                 f"{len(frames)}/255 entries · {len(pair_uses)} unique "
                 f"art pairs · {playback.get()} playback{loop_status}"
             )
+            refresh_actions()
 
         def require_selection() -> list[int]:
             selected = selection()
@@ -983,18 +1073,29 @@ class EmulatorWindow:
             frames[insert_at:insert_at] = additions
             refresh(list(range(insert_at, insert_at + len(additions))))
 
-        def repeat_selection() -> None:
+        def repeat_selection(
+            selected_override: list[int] | None = None,
+            edit_until: bool = False,
+        ) -> None:
             nonlocal loop_range
-            selected = require_selection()
+            selected = (
+                selected_override
+                if selected_override is not None else require_selection()
+            )
             if not selected:
                 return
             maximum = (255 - len(frames)) // len(selected)
             dialog = tk.Toplevel(window)
-            dialog.title("Repeat selected effect range")
+            dialog.title(
+                "Edit until-end frame loop"
+                if edit_until else "Repeat selected effect range"
+            )
             dialog.configure(background="#111111")
             dialog.resizable(False, False)
             dialog.transient(window)
-            kind = tk.StringVar(value="fixed")
+            kind = tk.StringVar(
+                value="until_end" if edit_until else "fixed"
+            )
             count = tk.IntVar(value=min(2, max(1, maximum)))
             loop_mode = tk.StringVar(
                 value=(
@@ -1153,7 +1254,9 @@ class EmulatorWindow:
             )
             cancel_button.pack(side="right", padx=(5, 0))
             apply_button = tk.Button(
-                actions, text="Apply repeat", command=apply_repeat,
+                actions,
+                text="Save action" if edit_until else "Apply repeat",
+                command=apply_repeat,
             )
             explain_button(
                 tk, apply_button,

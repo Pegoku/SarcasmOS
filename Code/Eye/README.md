@@ -56,6 +56,10 @@ before the range play once, the selected effect then repeats indefinitely, and
 the next state command ends it. While that state remains active, timeline rows
 after the persistent range are intentionally unreachable. The timeline marks
 range rows with `↔`, and the side preview uses the same behavior as firmware.
+The left-side Animation actions panel lists each persistent loop. Its Delete
+button removes the action without deleting frames or artwork; double-clicking
+the action text opens it in edit mode so its range and loop direction can be
+changed. Save the timeline to persist action edits or deletions.
 
 Saving an emulator-exported PPM over the same file makes the emulator import
 it automatically, update `assets/eye_assets.json`, regenerate

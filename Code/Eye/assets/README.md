@@ -39,6 +39,9 @@ The repeat dialog can also store an optional contiguous `loop_range`. Frames
 before it form a one-shot intro; the range then repeats in regular or ping-pong
 mode until a new animation state is selected. This range is compiled into the
 firmware rather than expanded into duplicate bitmap frames.
+Persistent loops appear in the timeline editor's Animation actions panel.
+Double-click an action to edit it, or use the row's Delete button to remove the
+loop metadata while preserving every frame and sprite reference.
 
 `../create_default_assets.py --force` recreates the original procedural
 Bender-style artwork. It overwrites manual edits, so it is intended only as a

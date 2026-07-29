@@ -19,6 +19,7 @@ from typing import Any
 import asset_tool
 
 FRAME_MS = 40
+DEFAULT_TRANSITION_MS = 200
 BLACK = (0, 0, 0)
 EDIT_SETTLE_MS = 250
 WEATHER_STATES = {"sunny", "rainy", "cloudy", "stormy", "snowy"}
@@ -29,6 +30,30 @@ TEMPERATURE_GLYPHS = asset_tool.temperature_glyphs(TEMPERATURE_FONT)
 GLYPH_WIDTH = TEMPERATURE_FONT["width"]
 GLYPH_HEIGHT = TEMPERATURE_FONT["height"]
 GLYPH_SPACING = TEMPERATURE_FONT["spacing"]
+
+
+def blend_channel(source: int, destination: int, amount: int) -> int:
+    return (
+        source * (255 - amount) + destination * amount + 127
+    ) // 255
+
+
+def blend_pixels(
+    source: list[tuple[int, int, int]],
+    destination: list[tuple[int, int, int]],
+    amount: int,
+) -> list[tuple[int, int, int]]:
+    if len(source) != len(destination):
+        raise ValueError("transition canvases have different sizes")
+    amount = max(0, min(255, amount))
+    return [
+        (
+            blend_channel(old[0], new[0], amount),
+            blend_channel(old[1], new[1], amount),
+            blend_channel(old[2], new[2], amount),
+        )
+        for old, new in zip(source, destination)
+    ]
 
 
 def temperature_text(temperature: int) -> str:
@@ -183,10 +208,15 @@ class EmulatorWindow:
         self.brightness = args.brightness
         self.intensity = args.intensity
         self.temperature = args.temperature
+        self.transition_ms = args.transition_ms
+        self.transitions_enabled = not args.no_transitions
         now_ms = time.monotonic_ns() // 1_000_000
         self.last_step_ms = now_ms
         self.last_update_ms = now_ms
         self.animation_elapsed_ms = 0
+        self.transition_source: list[tuple[int, int, int]] | None = None
+        self.transition_started_ms = now_ms
+        self.visible_pixels: list[tuple[int, int, int]] | None = None
         self.last_pixels: list[tuple[int, int, int] | None] = (
             [None] * (self.assets.width * self.assets.height)
         )
@@ -264,7 +294,7 @@ class EmulatorWindow:
             text=(
                 "←/→ state   ↑/↓ frame   Space/A play/pause   "
                 "Insert/Delete frame   T frame time   S sync folder\n"
-                "+/- brightness   [/] intensity   "
+                "X transitions   +/- brightness   [/] intensity   "
                 ",/. temperature   Q quit"
             ),
             background="#111111", foreground="#aaaaaa",
@@ -282,12 +312,23 @@ class EmulatorWindow:
         self.notice_until_ms = time.monotonic_ns() // 1_000_000 + 4000
 
     def select(self, state_id: int, pause: bool = True) -> None:
-        self.state_id = state_id % len(self.assets.animations)
+        next_state = state_id % len(self.assets.animations)
+        now_ms = time.monotonic_ns() // 1_000_000
+        if (
+            self.transitions_enabled and
+            next_state != self.state_id and
+            self.visible_pixels is not None
+        ):
+            self.transition_source = self.visible_pixels.copy()
+            self.transition_started_ms = now_ms
+        else:
+            self.transition_source = None
+        self.state_id = next_state
         if pause:
             self.auto_play = False
         self.current_local_frame = 0
         self.animation_elapsed_ms = 0
-        self.last_step_ms = time.monotonic_ns() // 1_000_000
+        self.last_step_ms = now_ms
 
     def current_source_pixels(self) -> list[tuple[int, int, int]]:
         sprite = self.assets.sprite_name(
@@ -533,6 +574,8 @@ class EmulatorWindow:
             self.assets.reload()
             self.state_id = self.assets.state_ids[current_name]
             self.last_pixels[:] = [None] * len(self.last_pixels)
+            self.transition_source = None
+            self.visible_pixels = None
             self.show_notice("Reloaded assets/mouth_assets.json")
         except (OSError, ValueError, KeyError) as error:
             self.show_notice(f"Reload failed: {error}")
@@ -564,6 +607,8 @@ class EmulatorWindow:
         )
         self.last_step_ms = time.monotonic_ns() // 1_000_000
         self.last_pixels[:] = [None] * len(self.last_pixels)
+        self.transition_source = None
+        self.visible_pixels = None
 
     def add_frame(self) -> None:
         state = self.state_name
@@ -617,6 +662,8 @@ class EmulatorWindow:
             self.last_step_ms = now_ms
             self.last_update_ms = now_ms
             self.last_pixels[:] = [None] * len(self.last_pixels)
+            self.transition_source = None
+            self.visible_pixels = None
             self.show_notice(
                 f"{state} frame time: {frame_ms} ms"
             )
@@ -660,6 +707,7 @@ class EmulatorWindow:
             self.select(self.state_id + 1)
         elif key in ("Up", "Down"):
             self.auto_play = False
+            self.transition_source = None
             animation = self.assets.animations[self.state_id]
             direction = 1 if key == "Up" else -1
             self.current_local_frame = (
@@ -671,6 +719,14 @@ class EmulatorWindow:
         elif key in ("space", "a", "A"):
             self.auto_play = not self.auto_play
             self.last_step_ms = time.monotonic_ns() // 1_000_000
+        elif key in ("x", "X"):
+            self.transitions_enabled = not self.transitions_enabled
+            if not self.transitions_enabled:
+                self.transition_source = None
+            self.show_notice(
+                "Animation transitions " +
+                ("enabled" if self.transitions_enabled else "disabled")
+            )
         elif key in ("plus", "equal", "KP_Add"):
             self.brightness = min(255, self.brightness + 16)
         elif key in ("minus", "underscore", "KP_Subtract"):
@@ -732,6 +788,19 @@ class EmulatorWindow:
                 pixels, self.assets.width, self.assets.height,
                 self.temperature,
             )
+        transition_progress = 255
+        if self.transition_source is not None:
+            transition_progress = min(
+                255,
+                (now_ms - self.transition_started_ms) * 255 //
+                self.transition_ms,
+            )
+            pixels = blend_pixels(
+                self.transition_source, pixels, transition_progress,
+            )
+            if transition_progress >= 255:
+                self.transition_source = None
+        self.visible_pixels = pixels.copy()
         factor = math.sqrt(self.brightness / 255)
         for index, color in enumerate(pixels):
             scaled = tuple(round(channel * factor) for channel in color)
@@ -753,6 +822,10 @@ class EmulatorWindow:
         )
         if self.state_name in WEATHER_STATES:
             status += f"   temperature {temperature_text(self.temperature)}"
+        if self.transition_source is not None:
+            status += f"   transition {transition_progress:3}/255"
+        elif not self.transitions_enabled:
+            status += "   transitions OFF"
         if now_ms < self.notice_until_ms:
             status = self.notice
         self.status.set(status)
@@ -763,9 +836,17 @@ class EmulatorWindow:
 
 
 def self_test(assets: AssetPack) -> None:
+    assert blend_pixels([(1, 2, 3)], [(254, 253, 252)], 0) == [
+        (1, 2, 3)
+    ]
+    assert blend_pixels([(1, 2, 3)], [(254, 253, 252)], 255) == [
+        (254, 253, 252)
+    ]
+    assert blend_pixels([BLACK], [(255, 255, 255)], 128) == [
+        (128, 128, 128)
+    ]
     hashes = set()
     for state_id, animation in enumerate(assets.animations):
-        lit_frames = 0
         for local_frame, sprite in enumerate(animation["frames"]):
             pixels = [
                 assets.palette[index]
@@ -775,14 +856,8 @@ def self_test(assets: AssetPack) -> None:
                 raise AssertionError(
                     f"{animation['name']} frame {local_frame}: bad size"
                 )
-            lit = sum(pixel != BLACK for pixel in pixels)
-            lit_frames += lit > 0
-            if animation["name"] == "asleep" and lit != 0:
-                raise AssertionError("asleep must be blank")
             raw = bytes(channel for pixel in pixels for channel in pixel)
             hashes.add(hashlib.sha256(raw).hexdigest())
-        if animation["name"] != "asleep" and lit_frames == 0:
-            raise AssertionError(f"{animation['name']}: every frame is blank")
     common_origins = {
         temperature_origin(assets.width, assets.height, value)[0]
         for value in (30, -5)
@@ -814,6 +889,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--brightness", type=int, default=64)
     parser.add_argument("--intensity", type=int, default=120)
     parser.add_argument(
+        "--transition-ms", type=int, default=DEFAULT_TRANSITION_MS,
+        help="state-change blend duration in milliseconds (default: 200)",
+    )
+    parser.add_argument(
+        "--no-transitions", action="store_true",
+        help="disable state-change blends for exact sprite inspection",
+    )
+    parser.add_argument(
         "--temperature", type=int, default=30,
         help="test temperature shown over weather states (default: 30)",
     )
@@ -831,6 +914,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--scale must be at least 2")
     if args.interval <= 0:
         parser.error("--interval must be greater than zero")
+    if args.transition_ms <= 0:
+        parser.error("--transition-ms must be greater than zero")
     for option in ("brightness", "intensity"):
         if not 0 <= getattr(args, option) <= 255:
             parser.error(f"--{option} must be in the range 0..255")

@@ -79,6 +79,9 @@ physical 64x32 panel:
 The emulator and firmware consume the same source-of-truth asset pack:
 [`assets/mouth_assets.json`](assets/mouth_assets.json). It contains every
 native 64x32 sprite, frame sequence, playback mode, and frame duration.
+State selection uses the same 200 ms blend as the physical firmware. Press
+`x` to disable transitions while inspecting or editing exact source frames,
+or launch with `--no-transitions`.
 The live temperature glyphs are likewise shared through
 [`assets/temperature_font.json`](assets/temperature_font.json). PlatformIO
 regenerates their C++ headers before building the firmware.

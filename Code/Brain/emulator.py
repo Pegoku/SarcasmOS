@@ -70,16 +70,9 @@ class EyeAssets:
         }
 
     def local_frame(self, state_id: int, elapsed_ms: int) -> int:
-        animation = self.animations[state_id]
-        count = len(animation["frames"])
-        if count <= 1:
-            return 0
-        step = elapsed_ms // animation["frame_ms"]
-        if animation["playback"] == "ping_pong":
-            final_frame = count - 1
-            phase = step % (final_frame * 2)
-            return phase if phase <= final_frame else final_frame * 2 - phase
-        return step % count
+        return EYE_TOOL.animation_frame_index(
+            self.animations[state_id], elapsed_ms,
+        )
 
     def pixels(
         self, state_id: int, role: str, elapsed_ms: int,
@@ -209,6 +202,7 @@ class EmulatorWindow:
         self.face_gap = args.face_gap
         self.interval_ms = round(args.interval * 1000)
         self.auto_play = not args.paused
+        self.auto_scroll = False
         self.brightness = args.brightness
         self.intensity = args.intensity
         self.temperature = args.temperature
@@ -263,6 +257,10 @@ class EmulatorWindow:
             controls, command=self.toggle_playback,
         )
         self.play_button.pack(side="left", padx=(0, 5))
+        self.auto_button = tk.Button(
+            controls, command=self.toggle_auto_scroll,
+        )
+        self.auto_button.pack(side="left", padx=(0, 5))
         tk.Button(controls, text="Next", command=self.next_state).pack(
             side="left", padx=(0, 5),
         )
@@ -284,7 +282,8 @@ class EmulatorWindow:
         tk.Label(
             self.root,
             text=(
-                "←/→ state   ↑/↓ frame   Space play/pause   "
+                "←/→ state   ↑/↓ frame   Space frames only   "
+                "A full auto-scroll   "
                 "+/- brightness   [/] intensity   ,/. temperature   "
                 "R reload   Q quit"
             ),
@@ -307,6 +306,7 @@ class EmulatorWindow:
         self.state_var.set(self.state_name)
         if pause:
             self.auto_play = False
+            self.auto_scroll = False
             self.manual_eye_frame = 0
             self.manual_mouth_frame = 0
         else:
@@ -329,17 +329,35 @@ class EmulatorWindow:
 
     def toggle_playback(self) -> None:
         if self.auto_play:
-            self.manual_eye_frame = self.assets.eye.local_frame(
-                self.state_id, self.elapsed_ms,
-            )
-            self.manual_mouth_frame = self.assets.mouth.local_frame(
-                self.state_id, self.elapsed_ms, self.intensity,
-            )
+            self.capture_current_frames()
             self.auto_play = False
         else:
             self.manual_eye_frame = None
             self.manual_mouth_frame = None
             self.auto_play = True
+        self.auto_scroll = False
+        self.reset_playback_clock()
+
+    def toggle_auto_scroll(self) -> None:
+        enable = not (self.auto_play and self.auto_scroll)
+        if enable:
+            self.manual_eye_frame = None
+            self.manual_mouth_frame = None
+        else:
+            self.capture_current_frames()
+        self.auto_play = enable
+        self.auto_scroll = enable
+        self.reset_playback_clock()
+
+    def capture_current_frames(self) -> None:
+        self.manual_eye_frame = self.assets.eye.local_frame(
+            self.state_id, self.elapsed_ms,
+        )
+        self.manual_mouth_frame = self.assets.mouth.local_frame(
+            self.state_id, self.elapsed_ms, self.intensity,
+        )
+
+    def reset_playback_clock(self) -> None:
         now_ms = time.monotonic_ns() // 1_000_000
         self.last_step_ms = now_ms
         self.last_update_ms = now_ms
@@ -356,6 +374,7 @@ class EmulatorWindow:
                 self.state_id, self.elapsed_ms, self.intensity,
             )
         self.auto_play = False
+        self.auto_scroll = False
         self.manual_eye_frame = (
             self.manual_eye_frame + direction
         ) % len(eye_animation["frames"])
@@ -471,8 +490,10 @@ class EmulatorWindow:
             self.step_frames(1)
         elif key == "Down":
             self.step_frames(-1)
-        elif key in ("space", "a", "A"):
+        elif key == "space":
             self.toggle_playback()
+        elif key in ("a", "A"):
+            self.toggle_auto_scroll()
         elif key in ("plus", "equal", "KP_Add"):
             self.brightness = min(255, self.brightness + 16)
             self.last_render_key = None
@@ -502,8 +523,8 @@ class EmulatorWindow:
         self.last_update_ms = now_ms
         if self.auto_play:
             self.elapsed_ms += delta_ms
-            if now_ms - self.last_step_ms >= self.interval_ms:
-                self.select(self.state_id + 1, pause=False)
+        if self.auto_scroll and now_ms - self.last_step_ms >= self.interval_ms:
+            self.select(self.state_id + 1, pause=False)
 
         render_key = (
             self.state_id, self.elapsed_ms // FRAME_MS, self.brightness,
@@ -529,12 +550,14 @@ class EmulatorWindow:
 
         eye_animation = self.assets.eye.animations[self.state_id]
         mouth_animation = self.assets.mouth.animations[self.state_id]
-        mode = "AUTO" if self.auto_play else "PAUSED"
+        frame_mode = "PLAY" if self.auto_play else "PAUSED"
+        scroll_mode = "SCROLL" if self.auto_scroll else "MANUAL"
         status = (
             f"0x{self.state_id:02x}  {self.state_name:<16} "
             f"eyes {eye_frame + 1}/{len(eye_animation['frames'])}  "
             f"mouth {mouth_frame + 1}/{len(mouth_animation['frames'])}  "
-            f"{mode}  brightness {self.brightness:3}/255  "
+            f"{frame_mode}  {scroll_mode}  "
+            f"brightness {self.brightness:3}/255  "
             f"intensity {self.intensity:3}/255"
         )
         if self.state_name in WEATHER_STATES:
@@ -543,7 +566,11 @@ class EmulatorWindow:
             status = self.notice
         self.status.set(status)
         self.play_button.configure(
-            text="Pause" if self.auto_play else "Play",
+            text="Pause frames" if self.auto_play else "Play frames",
+        )
+        self.auto_button.configure(
+            text="Stop auto-scroll"
+            if self.auto_scroll else "Start auto-scroll",
         )
         self.root.after(FRAME_MS, self.update)
 
@@ -591,7 +618,10 @@ def parse_args() -> argparse.Namespace:
         "--face-gap", type=int, default=24,
         help="window pixels between the eyes and mouth (default: 24)",
     )
-    parser.add_argument("--interval", type=float, default=3.0)
+    parser.add_argument(
+        "--interval", type=float, default=3.0,
+        help="seconds between states during full auto-scroll (default: 3.0)",
+    )
     parser.add_argument("--brightness", type=int, default=180)
     parser.add_argument("--intensity", type=int, default=120)
     parser.add_argument("--temperature", type=int, default=30)

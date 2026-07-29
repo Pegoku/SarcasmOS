@@ -73,6 +73,7 @@
 #define AUDIO_AUTO_BLOCKS 50
 #define AUDIO_MANUAL_BLOCKS 250
 #define AUDIO_IO_TIMEOUT_MS 100
+#define AUDIO_TONE_FREQUENCY_HZ 440
 #define WIFI_SCAN_RECORDS 20
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAILED_BIT BIT1
@@ -112,6 +113,12 @@ typedef struct {
     const char *description;
 } face_state_t;
 
+typedef struct {
+    int32_t peak;
+    const char *label;
+    const char *power;
+} speaker_level_t;
+
 typedef enum {
     TUI_KEY_NONE,
     TUI_KEY_UP,
@@ -122,6 +129,13 @@ typedef enum {
     TUI_KEY_QUIT,
     TUI_KEY_RESCAN,
 } tui_key_t;
+
+static const speaker_level_t SPEAKER_LEVELS[] = {
+    { 0x10000000, "quiet (12.5%, -18 dBFS)", "~0.05 W" },
+    { 0x20000000, "low (25%, -12 dBFS)", "~0.20 W" },
+    { 0x40000000, "normal (50%, -6 dBFS)", "~0.80 W" },
+    { 0x58000000, "maximum for 1.5 W speaker (69%, -3.3 dBFS)", "~1.5 W" },
+};
 
 static const face_state_t FACE_STATES[] = {
     { DISPLAY_ANIM_IDLE, "idle", "awake, ready, resting face" },
@@ -164,12 +178,16 @@ static EventGroupHandle_t g_wifi_events;
 static bool g_wifi_initialized;
 static bool g_wifi_connected;
 static bool g_usb_driver_ready;
+static size_t g_speaker_level = 2;
 static bool g_mouth_initialized;
 static bool g_discard_line_feed;
 static uint8_t g_wifi_disconnect_reason;
 static uint8_t g_display_sequence = 1;
 static uint8_t g_face_transition_token = 1;
 static esp_err_t g_service_status = ESP_OK;
+
+static tui_key_t read_tui_key(void);
+static void clear_tui_screen(void);
 
 static void print_result(result_t result, const char *test, const char *detail)
 {
@@ -955,10 +973,14 @@ static void test_w5500(void)
 
 static void fill_tone(int32_t *samples, size_t frames, uint32_t *phase)
 {
-    const uint32_t phase_step = (uint32_t)(((uint64_t)440 << 32) / AUDIO_SAMPLE_RATE);
+    const uint32_t phase_step =
+        (uint32_t)(((uint64_t)AUDIO_TONE_FREQUENCY_HZ << 32) / AUDIO_SAMPLE_RATE);
+    const double radians_per_phase =
+        6.28318530717958647692 / 4294967296.0;
+    const int32_t peak = SPEAKER_LEVELS[g_speaker_level].peak;
 
     for (size_t frame = 0; frame < frames; ++frame) {
-        int32_t value = (*phase & 0x80000000U) ? 0x01000000 : -0x01000000;
+        int32_t value = (int32_t)(sin((double)*phase * radians_per_phase) * peak);
         samples[frame * 2] = value;
         samples[frame * 2 + 1] = value;
         *phase += phase_step;
@@ -1114,8 +1136,44 @@ static void test_audio(void)
 
 static void manual_test_speaker(void)
 {
-    printf("\nPlaying a 440 Hz speaker tone for one second...\n");
-    test_audio_paths(true, false, AUDIO_MANUAL_BLOCKS);
+    const size_t level_count = sizeof(SPEAKER_LEVELS) / sizeof(SPEAKER_LEVELS[0]);
+
+    while (true) {
+        clear_tui_screen();
+        printf("Speaker tone control\n\n");
+        printf("Level: %s\n", SPEAKER_LEVELS[g_speaker_level].label);
+        printf("Estimated 4-ohm power at 5 V and 9 dB gain: %s\n",
+               SPEAKER_LEVELS[g_speaker_level].power);
+        printf("\nW/Up: louder   S/Down: quieter   Space/Enter: play\n");
+        printf("Q/Esc: return to the main test menu\n");
+        if (g_speaker_level + 1 == level_count) {
+            printf("\nWARNING: Do not use this level with speakers rated below 1.5 W.\n");
+        }
+
+        tui_key_t key = read_tui_key();
+        if (key == TUI_KEY_UP && g_speaker_level + 1 < level_count) {
+            ++g_speaker_level;
+        } else if (key == TUI_KEY_DOWN && g_speaker_level > 0) {
+            --g_speaker_level;
+        } else if (key == TUI_KEY_ENTER || key == TUI_KEY_SPACE) {
+            printf("\nPlaying a %d Hz sine tone for one second at %s...\n",
+                   AUDIO_TONE_FREQUENCY_HZ,
+                   SPEAKER_LEVELS[g_speaker_level].label);
+            test_audio_paths(true, false, AUDIO_MANUAL_BLOCKS);
+            printf("\nPress a key to continue.\n");
+            tui_key_t continue_key = read_tui_key();
+            if (continue_key == TUI_KEY_QUIT ||
+                continue_key == TUI_KEY_ESCAPE) {
+                clear_tui_screen();
+                printf("Speaker tone control closed.\n");
+                return;
+            }
+        } else if (key == TUI_KEY_QUIT || key == TUI_KEY_ESCAPE) {
+            clear_tui_screen();
+            printf("Speaker tone control closed.\n");
+            return;
+        }
+    }
 }
 
 static void manual_test_microphone(void)
@@ -1790,7 +1848,7 @@ static void print_tui_menu(void)
     printf("  4  5VHP buck OFF                   d  Wi-Fi disconnect\n");
     printf("  5  charger enable                  i  I2C scan/read\n");
     printf("  6  charger disable                 e  W5500 test\n");
-    printf("                                      p  speaker tone\n");
+    printf("                                      p  speaker tone/volume\n");
     printf("                                      m  microphone capture\n");
     printf(" Displays                            a  combined I2S audio\n");
     printf("  l  left eye (I2C)                  v  all displays\n");

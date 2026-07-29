@@ -26,7 +26,8 @@ on the same USB serial connection. It can:
 - scan for Wi-Fi networks, select one, enter its password, and connect
 - report the connected SSID, channel, RSSI, IP address, and disconnect reason
 - disconnect Wi-Fi
-- run separate one-second speaker-tone and microphone-capture tests
+- run separate one-second speaker-tone and microphone-capture tests, with an
+  interactive speaker level control
 - address the I2C left eye, I2C right eye, or ESP-NOW mouth and visually cycle it
   through happy, error, and idle animations while checking its protocol status
 - discover the two eyes by I2C protocol/role and the mouth by acknowledged
@@ -87,6 +88,13 @@ it again, `c` to select and connect to a Wi-Fi network, and `s` to show its
 connection status and IP address. Use `p` for the speaker, `m` for the
 microphone, `l`/`r` for the wired eyes, `o` for the wireless mouth, and `v` to
 test all three displays. The complete automatic sequence is `x`.
+
+The speaker screen generates a 440 Hz sine wave. Use Up/Down or `W`/`S` to
+select approximately 0.05 W, 0.20 W, 0.80 W, or 1.5 W, then press Space or
+Enter to play it. These estimates assume a 4-ohm speaker, `AMP_VDD` selected to
+5 V with JP1, and the PCB's floating `GAIN_SLOT` pin (9 dB gain). The default is
+the approximately 0.80 W setting. Do not select the 1.5 W level for a
+lower-rated speaker, and do not connect two 4-ohm speakers in parallel.
 
 Enter `f` for the interactive face display controller. It probes the left eye
 at `0x30` and right eye at `0x31`, validates each Eye protocol-v2 role/status,

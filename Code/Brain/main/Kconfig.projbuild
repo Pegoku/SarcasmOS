@@ -8,14 +8,6 @@ config SARCASMOS_WIFI_PASSWORD
     string "Wi-Fi password"
     default ""
 
-config SARCASMOS_WORKFLOW_URL
-    string "SarcasmOS Workflow backend URL"
-    default ""
-
-config SARCASMOS_WORKFLOW_TOKEN
-    string "Workflow bearer/device token"
-    default ""
-
 config SARCASMOS_AI_TOKEN
     string "Shared AI provider token"
     default ""

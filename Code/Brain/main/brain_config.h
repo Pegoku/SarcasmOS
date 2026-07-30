@@ -19,8 +19,6 @@
 typedef struct {
     char wifi_ssid[BRAIN_CONFIG_WIFI_SSID_SIZE];
     char wifi_password[BRAIN_CONFIG_WIFI_PASSWORD_SIZE];
-    char workflow_url[BRAIN_CONFIG_URL_SIZE];
-    char workflow_token[BRAIN_CONFIG_TOKEN_SIZE];
     char ai_token[BRAIN_CONFIG_TOKEN_SIZE];
     char llm_token[BRAIN_CONFIG_TOKEN_SIZE];
     char replicate_token[BRAIN_CONFIG_TOKEN_SIZE];
@@ -41,8 +39,6 @@ typedef struct {
 typedef enum {
     BRAIN_CONFIG_WIFI_SSID,
     BRAIN_CONFIG_WIFI_PASSWORD,
-    BRAIN_CONFIG_WORKFLOW_URL,
-    BRAIN_CONFIG_WORKFLOW_TOKEN,
     BRAIN_CONFIG_WAKE_PHRASE,
     BRAIN_CONFIG_AI_TOKEN,
     BRAIN_CONFIG_LLM_TOKEN,

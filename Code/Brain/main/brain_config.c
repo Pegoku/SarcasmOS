@@ -34,15 +34,6 @@ static config_string_t config_string(brain_config_t *config,
         return (config_string_t){
             "wifi_pass", config->wifi_password, sizeof(config->wifi_password)
         };
-    case BRAIN_CONFIG_WORKFLOW_URL:
-        return (config_string_t){
-            "workflow_url", config->workflow_url, sizeof(config->workflow_url)
-        };
-    case BRAIN_CONFIG_WORKFLOW_TOKEN:
-        return (config_string_t){
-            "workflow_tok", config->workflow_token,
-            sizeof(config->workflow_token)
-        };
     case BRAIN_CONFIG_WAKE_PHRASE:
         return (config_string_t){
             "wake_phrase", config->wake_phrase, sizeof(config->wake_phrase)
@@ -122,10 +113,6 @@ esp_err_t brain_config_load(brain_config_t *config)
                  CONFIG_SARCASMOS_WIFI_SSID);
     copy_default(config->wifi_password, sizeof(config->wifi_password),
                  CONFIG_SARCASMOS_WIFI_PASSWORD);
-    copy_default(config->workflow_url, sizeof(config->workflow_url),
-                 CONFIG_SARCASMOS_WORKFLOW_URL);
-    copy_default(config->workflow_token, sizeof(config->workflow_token),
-                 CONFIG_SARCASMOS_WORKFLOW_TOKEN);
     copy_default(config->wake_phrase, sizeof(config->wake_phrase),
                  CONFIG_SARCASMOS_WAKE_PHRASE);
     copy_default(config->ai_token, sizeof(config->ai_token),

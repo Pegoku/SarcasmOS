@@ -899,6 +899,8 @@ static void state_led_task(void *arg)
     }
 }
 
+static void workflow_status_json(char *output, size_t capacity);
+
 static esp_err_t status_handler(httpd_req_t *req)
 {
     display_device_t eyes[EYE_COUNT];
@@ -1005,16 +1007,202 @@ static esp_err_t command_handler(httpd_req_t *req)
     return httpd_resp_sendstr(req, "{\"ok\":true,\"queued\":true}");
 }
 
+static bool http_json_string(const char *json, const char *key,
+                             char *output, size_t capacity)
+{
+    char pattern[64];
+    if (snprintf(pattern, sizeof(pattern), "\"%s\"", key) >=
+        (int)sizeof(pattern)) {
+        return false;
+    }
+    const char *position = strstr(json, pattern);
+    if (position == NULL) return false;
+    position += strlen(pattern);
+    while (*position == ' ' || *position == '\t') ++position;
+    if (*position++ != ':') return false;
+    while (*position == ' ' || *position == '\t') ++position;
+    if (*position++ != '"' || capacity == 0) return false;
+    size_t length = 0;
+    while (*position && *position != '"') {
+        char value = *position++;
+        if (value == '\\' && *position) {
+            char escaped = *position++;
+            value = escaped == 'n' ? '\n' : escaped == 'r' ? '\r' :
+                    escaped == 't' ? '\t' : escaped;
+        }
+        if (length + 1 < capacity) output[length++] = value;
+    }
+    output[length] = '\0';
+    return *position == '"';
+}
+
+static char *http_json_escape(const char *value)
+{
+    size_t capacity = strlen(value) * 2 + 1;
+    char *escaped = malloc(capacity);
+    if (escaped == NULL) return NULL;
+    size_t length = 0;
+    for (const unsigned char *p = (const unsigned char *)value; *p; ++p) {
+        if (*p == '"' || *p == '\\') {
+            escaped[length++] = '\\';
+            escaped[length++] = (char)*p;
+        } else if (*p == '\n' || *p == '\r' || *p == '\t') {
+            escaped[length++] = '\\';
+            escaped[length++] =
+                *p == '\n' ? 'n' : *p == '\r' ? 'r' : 't';
+        } else if (*p >= 0x20) {
+            escaped[length++] = (char)*p;
+        }
+    }
+    escaped[length] = '\0';
+    return escaped;
+}
+
+static esp_err_t ai_text_handler(httpd_req_t *req)
+{
+    char body[2048];
+    int received = httpd_req_recv(req, body, sizeof(body) - 1);
+    if (received <= 0) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        return httpd_resp_sendstr(
+            req, "{\"ok\":false,\"error\":\"missing request body\"}");
+    }
+    body[received] = '\0';
+    char message[1536] = "";
+    if (!http_json_string(body, "message", message, sizeof(message))) {
+        strlcpy(message, body, sizeof(message));
+    }
+    const char *missing = NULL;
+    brain_config_t config = g_config;
+    if (!brain_workflow_config_ready(&config, &missing)) {
+        char response[192];
+        snprintf(response, sizeof(response),
+                 "{\"ok\":false,\"error\":\"missing %s\"}", missing);
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        httpd_resp_set_type(req, "application/json");
+        return httpd_resp_sendstr(req, response);
+    }
+    char status[320];
+    char answer[8192];
+    workflow_status_json(status, sizeof(status));
+    esp_err_t err = brain_workflow_run_text(
+        &config, message, status, answer, sizeof(answer));
+    if (err != ESP_OK) {
+        char response[160];
+        snprintf(response, sizeof(response),
+                 "{\"ok\":false,\"error\":\"%s\"}",
+                 esp_err_to_name(err));
+        httpd_resp_set_status(req, err == ESP_ERR_INVALID_STATE
+                                      ? "409 Conflict"
+                                      : "502 Bad Gateway");
+        httpd_resp_set_type(req, "application/json");
+        return httpd_resp_sendstr(req, response);
+    }
+    char *escaped = http_json_escape(answer);
+    if (escaped == NULL) return ESP_ERR_NO_MEM;
+    size_t capacity = strlen(escaped) + 64;
+    char *response = malloc(capacity);
+    if (response == NULL) {
+        free(escaped);
+        return ESP_ERR_NO_MEM;
+    }
+    snprintf(response, capacity, "{\"ok\":true,\"answer\":\"%s\"}",
+             escaped);
+    free(escaped);
+    httpd_resp_set_type(req, "application/json");
+    esp_err_t send_err = httpd_resp_sendstr(req, response);
+    free(response);
+    return send_err;
+}
+
+static esp_err_t ai_listen_handler(httpd_req_t *req)
+{
+    brain_config_t config = g_config;
+    const char *missing = NULL;
+    if (!brain_workflow_config_ready(&config, &missing)) {
+        char response[192];
+        snprintf(response, sizeof(response),
+                 "{\"ok\":false,\"error\":\"missing %s\"}", missing);
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        httpd_resp_set_type(req, "application/json");
+        return httpd_resp_sendstr(req, response);
+    }
+    char status[320];
+    workflow_status_json(status, sizeof(status));
+    esp_err_t err = brain_workflow_run_voice(&config, status);
+    char response[160];
+    snprintf(response, sizeof(response),
+             "{\"ok\":%s,\"result\":\"%s\"}",
+             err == ESP_OK ? "true" : "false", esp_err_to_name(err));
+    if (err != ESP_OK) {
+        httpd_resp_set_status(req, err == ESP_ERR_INVALID_STATE
+                                      ? "409 Conflict"
+                                      : "502 Bad Gateway");
+    }
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, response);
+}
+
+static esp_err_t config_status_handler(httpd_req_t *req)
+{
+    const char *missing = NULL;
+    bool ready = brain_workflow_config_ready(&g_config, &missing);
+    char json[1536];
+    snprintf(
+        json, sizeof(json),
+        "{\"ai_ready\":%s,\"missing\":\"%s\","
+        "\"wifi\":{\"ssid\":\"%s\",\"password_set\":%s},"
+        "\"providers\":{\"shared_token_set\":%s,\"llm_token_set\":%s,"
+        "\"replicate_token_set\":%s,\"llm_url\":\"%s\","
+        "\"replicate_url\":\"%s\",\"llm_model\":\"%s\","
+        "\"stt_model\":\"%s\",\"tts_model\":\"%s\","
+        "\"voice_id_set\":%s,\"calendar_token_set\":%s},"
+        "\"wake\":{\"enabled\":%s,\"phrase\":\"%s\","
+        "\"silence_ms\":%u,\"vad_threshold\":%u},"
+        "\"timezone\":\"%s\"}",
+        ready ? "true" : "false", missing != NULL ? missing : "",
+        g_config.wifi_ssid,
+        g_config.wifi_password[0] ? "true" : "false",
+        g_config.ai_token[0] ? "true" : "false",
+        g_config.llm_token[0] ? "true" : "false",
+        g_config.replicate_token[0] ? "true" : "false",
+        g_config.llm_url, g_config.replicate_url, g_config.llm_model,
+        g_config.stt_model, g_config.tts_model,
+        g_config.voice_id[0] ? "true" : "false",
+        g_config.google_calendar_token[0] ? "true" : "false",
+        g_config.wake_enabled ? "true" : "false", g_config.wake_phrase,
+        g_config.silence_ms, g_config.vad_threshold, g_config.timezone);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, json);
+}
+
 static void start_http_server(void)
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = CONFIG_SARCASMOS_HTTP_PORT;
+    config.stack_size = 20480;
+    config.max_uri_handlers = 8;
     httpd_handle_t server = NULL;
     ESP_ERROR_CHECK(httpd_start(&server, &config));
     httpd_uri_t status_uri = { .uri = "/api/status", .method = HTTP_GET, .handler = status_handler };
     httpd_uri_t command_uri = { .uri = "/api/command", .method = HTTP_POST, .handler = command_handler };
+    httpd_uri_t ai_text_uri = {
+        .uri = "/api/ai/text", .method = HTTP_POST,
+        .handler = ai_text_handler
+    };
+    httpd_uri_t ai_listen_uri = {
+        .uri = "/api/ai/listen", .method = HTTP_POST,
+        .handler = ai_listen_handler
+    };
+    httpd_uri_t config_uri = {
+        .uri = "/api/config", .method = HTTP_GET,
+        .handler = config_status_handler
+    };
     ESP_ERROR_CHECK(httpd_register_uri_handler(server, &status_uri));
     ESP_ERROR_CHECK(httpd_register_uri_handler(server, &command_uri));
+    ESP_ERROR_CHECK(httpd_register_uri_handler(server, &ai_text_uri));
+    ESP_ERROR_CHECK(httpd_register_uri_handler(server, &ai_listen_uri));
+    ESP_ERROR_CHECK(httpd_register_uri_handler(server, &config_uri));
 }
 
 static uint8_t animation_for_expression(const char *expression);
@@ -1125,7 +1313,7 @@ static void workflow_wake_task(void *arg)
     while (true) {
         brain_config_t config = g_config;
         if (!config.wake_enabled || !g_wifi_connected ||
-            config.workflow_url[0] == '\0') {
+            !brain_workflow_config_ready(&config, NULL)) {
             vTaskDelay(pdMS_TO_TICKS(1000));
             continue;
         }
@@ -1307,6 +1495,7 @@ static void cli_print_interact(void)
     printf("  brightness <0-255>\n");
     printf("  buck 5v on|off   buck hp on|off\n");
     printf("  listen           start one assistant voice interaction\n");
+    printf("  ask <message>    ask through the ESP32-native AI workflow\n");
     printf("  0  home          h/? show this page\n");
     printf("-----------------------------------------\n");
 }
@@ -1518,12 +1707,6 @@ static void cli_set_config(char *arguments)
     } else if (strcmp(key, "password") == 0) {
         err = brain_config_set_string(
             &g_config, BRAIN_CONFIG_WIFI_PASSWORD, value);
-    } else if (strcmp(key, "url") == 0) {
-        err = brain_config_set_string(
-            &g_config, BRAIN_CONFIG_WORKFLOW_URL, value);
-    } else if (strcmp(key, "token") == 0) {
-        err = brain_config_set_string(
-            &g_config, BRAIN_CONFIG_WORKFLOW_TOKEN, value);
     } else if (strcmp(key, "wake") == 0) {
         err = brain_config_set_string(
             &g_config, BRAIN_CONFIG_WAKE_PHRASE, value);
@@ -1653,9 +1836,13 @@ static void cli_handle_interact(char *command)
     } else if (strcmp(command, "listen") == 0) {
         if (!g_wifi_connected) {
             printf("AI voice requires an active Wi-Fi connection.\n");
-        } else if (g_config.workflow_url[0] == '\0') {
-            printf("Set the Workflow URL on the Configuration page first.\n");
         } else {
+            const char *missing = NULL;
+            if (!brain_workflow_config_ready(&g_config, &missing)) {
+                printf("AI is not ready: set %s on the Configuration page.\n",
+                       missing);
+                return;
+            }
             printf("Listening. Start speaking; the request ends after %u ms "
                    "of silence.\n", g_config.silence_ms);
             g_post_speech_animation = ANIM_IDLE;
@@ -1664,6 +1851,24 @@ static void cli_handle_interact(char *command)
             esp_err_t err = brain_workflow_run_voice(&g_config, status);
             printf("AI interaction: %s\n", esp_err_to_name(err));
         }
+    } else if (strncmp(command, "ask ", 4) == 0) {
+        if (!g_wifi_connected) {
+            printf("AI requires an active Wi-Fi connection.\n");
+            return;
+        }
+        const char *missing = NULL;
+        if (!brain_workflow_config_ready(&g_config, &missing)) {
+            printf("AI is not ready: set %s on the Configuration page.\n",
+                   missing);
+            return;
+        }
+        char status[320];
+        char answer[8192];
+        workflow_status_json(status, sizeof(status));
+        esp_err_t err = brain_workflow_run_text(
+            &g_config, cli_trim(command + 4), status,
+            answer, sizeof(answer));
+        printf("AI interaction: %s\n", esp_err_to_name(err));
     } else {
         printf("Unknown interaction command. Enter h for this page.\n");
     }

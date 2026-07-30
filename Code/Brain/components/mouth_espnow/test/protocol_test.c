@@ -91,6 +91,29 @@ int main(void)
     assert(eye_protocol_transition_complete(
         &eye, DISPLAY_ANIM_SPEAKING, 42));
 
+    eye.pending_animation = DISPLAY_ANIM_HAPPY;
+    eye.pending_transition_token = 43;
+    eye.playback_flags = EYE_PLAYBACK_PENDING | EYE_PLAYBACK_EXITING |
+                         EYE_PLAYBACK_READY;
+    assert(eye_protocol_transition_ready(
+        &eye, DISPLAY_ANIM_HAPPY, 43));
+    assert(!eye_protocol_transition_complete(
+        &eye, DISPLAY_ANIM_HAPPY, 43));
+    eye.playback_flags &= (uint8_t)~EYE_PLAYBACK_READY;
+    assert(!eye_protocol_transition_ready(
+        &eye, DISPLAY_ANIM_HAPPY, 43));
+
+    uint8_t sync[EYE_SYNC_PAYLOAD_SIZE];
+    eye_protocol_encode_sync(sync, 43, EYE_SYNC_START_DELAY_MS);
+    assert(sync[0] == 43);
+    assert(sync[1] == 50);
+    assert(sync[2] == 0);
+    assert(sync[3] == 0);
+
+    eye.pending_animation = EYE_PROTOCOL_NO_PENDING_ANIMATION;
+    eye.pending_transition_token = 0;
+    eye.playback_flags = EYE_PLAYBACK_TARGET_ACTIVATED;
+
     eye.active_transition_token = 41;
     assert(!eye_protocol_transition_complete(
         &eye, DISPLAY_ANIM_SPEAKING, 42));

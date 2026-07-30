@@ -441,6 +441,38 @@ static esp_err_t display_command(uint8_t address, uint8_t expected_role,
     return err;
 }
 
+static esp_err_t transmit_eye_command(uint8_t address, uint8_t command,
+                                      const uint8_t *payload,
+                                      uint8_t payload_length)
+{
+    if (payload_length > 64) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    i2c_device_config_t config = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = address,
+        .scl_speed_hz = CONFIG_BRAIN_SELF_TEST_I2C_FREQ_HZ,
+    };
+    i2c_master_dev_handle_t device = NULL;
+    esp_err_t err = i2c_master_bus_add_device(g_i2c_bus, &config, &device);
+    if (err != ESP_OK) {
+        return err;
+    }
+    uint8_t frame[69] = {
+        EYE_PROTOCOL_VERSION, command, g_display_sequence++, payload_length
+    };
+    if (g_display_sequence == 0) {
+        g_display_sequence = 1;
+    }
+    if (payload_length > 0 && payload != NULL) {
+        memcpy(&frame[4], payload, payload_length);
+    }
+    frame[4 + payload_length] = crc8(frame, 4 + payload_length);
+    err = i2c_master_transmit(device, frame, 5 + payload_length, 80);
+    i2c_master_bus_rm_device(device);
+    return err;
+}
+
 static esp_err_t read_eye_status(uint8_t address, uint8_t role,
                                  eye_protocol_status_t *status)
 {
@@ -465,6 +497,23 @@ static esp_err_t read_eye_status(uint8_t address, uint8_t role,
     return err;
 }
 
+static esp_err_t wait_for_eye_ready(uint8_t address, uint8_t role,
+                                    uint8_t animation, uint8_t token)
+{
+    uint32_t waited = 0;
+    while (waited < FACE_EYE_TIMEOUT_MS) {
+        eye_protocol_status_t status;
+        esp_err_t err = read_eye_status(address, role, &status);
+        if (err == ESP_OK &&
+            eye_protocol_transition_ready(&status, animation, token)) {
+            return ESP_OK;
+        }
+        vTaskDelay(pdMS_TO_TICKS(FACE_EYE_POLL_MS));
+        waited += FACE_EYE_POLL_MS;
+    }
+    return ESP_ERR_TIMEOUT;
+}
+
 static esp_err_t wait_for_eye_transition(uint8_t address, uint8_t role,
                                          uint8_t animation, uint8_t token)
 {
@@ -480,6 +529,30 @@ static esp_err_t wait_for_eye_transition(uint8_t address, uint8_t role,
         waited += FACE_EYE_POLL_MS;
     }
     return ESP_ERR_TIMEOUT;
+}
+
+static esp_err_t transition_one_eye(uint8_t address, uint8_t role,
+                                    uint8_t animation, uint8_t token)
+{
+    uint8_t request[3] = {
+        animation, token, FACE_TRANSITION_DURATION_TICKS
+    };
+    esp_err_t err = transmit_eye_command(
+        address, DISPLAY_CMD_SET_ANIMATION, request, sizeof(request));
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = wait_for_eye_ready(address, role, animation, token);
+    if (err != ESP_OK) {
+        return err;
+    }
+    uint8_t sync[EYE_SYNC_PAYLOAD_SIZE];
+    eye_protocol_encode_sync(sync, token, EYE_SYNC_START_DELAY_MS);
+    err = transmit_eye_command(
+        address, DISPLAY_CMD_SYNC, sync, sizeof(sync));
+    return err == ESP_OK
+               ? wait_for_eye_transition(address, role, animation, token)
+               : err;
 }
 
 static void test_display_controller(uint8_t address, uint8_t role, const char *name)
@@ -509,15 +582,7 @@ static void test_display_controller(uint8_t address, uint8_t role, const char *n
             if (g_face_transition_token == 0) {
                 g_face_transition_token = 1;
             }
-            uint8_t payload[3] = {
-                animations[i], token, FACE_TRANSITION_DURATION_TICKS
-            };
-            err = display_command(address, role, DISPLAY_CMD_SET_ANIMATION,
-                                  payload, sizeof(payload));
-            if (err == ESP_OK) {
-                err = wait_for_eye_transition(
-                    address, role, animations[i], token);
-            }
+            err = transition_one_eye(address, role, animations[i], token);
             if (err != ESP_OK) {
                 break;
             }
@@ -1705,8 +1770,8 @@ static void send_face_state(const face_targets_t *targets,
 
     if (targets->left_eye) {
         requested_mask |= 1U << 0;
-        esp_err_t err = display_command(
-            I2C_ADDR_LEFT_EYE, 0, DISPLAY_CMD_SET_ANIMATION,
+        esp_err_t err = transmit_eye_command(
+            I2C_ADDR_LEFT_EYE, DISPLAY_CMD_SET_ANIMATION,
             payload, sizeof(payload));
         if (err == ESP_OK) {
             sent_mask |= 1U << 0;
@@ -1716,8 +1781,8 @@ static void send_face_state(const face_targets_t *targets,
     }
     if (targets->right_eye) {
         requested_mask |= 1U << 1;
-        esp_err_t err = display_command(
-            I2C_ADDR_RIGHT_EYE, 1, DISPLAY_CMD_SET_ANIMATION,
+        esp_err_t err = transmit_eye_command(
+            I2C_ADDR_RIGHT_EYE, DISPLAY_CMD_SET_ANIMATION,
             payload, sizeof(payload));
         if (err == ESP_OK) {
             sent_mask |= 1U << 1;
@@ -1732,7 +1797,7 @@ static void send_face_state(const face_targets_t *targets,
             (ready_mask & (1U << 0)) == 0) {
             eye_protocol_status_t eye;
             if (read_eye_status(I2C_ADDR_LEFT_EYE, 0, &eye) == ESP_OK &&
-                eye_protocol_transition_complete(&eye, state->id, token)) {
+                eye_protocol_transition_ready(&eye, state->id, token)) {
                 ready_mask |= 1U << 0;
             }
         }
@@ -1740,7 +1805,7 @@ static void send_face_state(const face_targets_t *targets,
             (ready_mask & (1U << 1)) == 0) {
             eye_protocol_status_t eye;
             if (read_eye_status(I2C_ADDR_RIGHT_EYE, 1, &eye) == ESP_OK &&
-                eye_protocol_transition_complete(&eye, state->id, token)) {
+                eye_protocol_transition_ready(&eye, state->id, token)) {
                 ready_mask |= 1U << 1;
             }
         }
@@ -1749,17 +1814,58 @@ static void send_face_state(const face_targets_t *targets,
             waited += FACE_EYE_POLL_MS;
         }
     }
+    uint8_t sync[EYE_SYNC_PAYLOAD_SIZE];
+    eye_protocol_encode_sync(sync, token, EYE_SYNC_START_DELAY_MS);
+    uint8_t committed_mask = 0;
+    if ((ready_mask & (1U << 0)) != 0 &&
+        transmit_eye_command(
+            I2C_ADDR_LEFT_EYE, DISPLAY_CMD_SYNC,
+            sync, sizeof(sync)) == ESP_OK) {
+        committed_mask |= 1U << 0;
+    }
+    if ((ready_mask & (1U << 1)) != 0 &&
+        transmit_eye_command(
+            I2C_ADDR_RIGHT_EYE, DISPLAY_CMD_SYNC,
+            sync, sizeof(sync)) == ESP_OK) {
+        committed_mask |= 1U << 1;
+    }
+
+    uint8_t activated_mask = 0;
+    waited = 0;
+    while (activated_mask != committed_mask &&
+           waited < FACE_EYE_TIMEOUT_MS) {
+        if ((committed_mask & (1U << 0)) != 0 &&
+            (activated_mask & (1U << 0)) == 0) {
+            eye_protocol_status_t eye;
+            if (read_eye_status(I2C_ADDR_LEFT_EYE, 0, &eye) == ESP_OK &&
+                eye_protocol_transition_complete(&eye, state->id, token)) {
+                activated_mask |= 1U << 0;
+            }
+        }
+        if ((committed_mask & (1U << 1)) != 0 &&
+            (activated_mask & (1U << 1)) == 0) {
+            eye_protocol_status_t eye;
+            if (read_eye_status(I2C_ADDR_RIGHT_EYE, 1, &eye) == ESP_OK &&
+                eye_protocol_transition_complete(&eye, state->id, token)) {
+                activated_mask |= 1U << 1;
+            }
+        }
+        if (activated_mask != committed_mask) {
+            vTaskDelay(pdMS_TO_TICKS(FACE_EYE_POLL_MS));
+            waited += FACE_EYE_POLL_MS;
+        }
+    }
     if ((requested_mask & (1U << 0)) != 0 &&
         (sent_mask & (1U << 0)) != 0) {
         append_send_result(
             status, status_capacity, &used, "left",
-            (ready_mask & (1U << 0)) != 0 ? ESP_OK : ESP_ERR_TIMEOUT);
+            (activated_mask & (1U << 0)) != 0 ? ESP_OK : ESP_ERR_TIMEOUT);
     }
     if ((requested_mask & (1U << 1)) != 0 &&
         (sent_mask & (1U << 1)) != 0) {
         append_send_result(
             status, status_capacity, &used, "right",
-            (ready_mask & (1U << 1)) != 0 ? ESP_OK : ESP_ERR_TIMEOUT);
+            (activated_mask & (1U << 1)) != 0 ? ESP_OK : ESP_ERR_TIMEOUT);
     }
     if (targets->mouth) {
         esp_err_t err = mouth_espnow_send(

@@ -18,6 +18,9 @@ extern "C" {
 #define EYE_PLAYBACK_PENDING (1U << 0)
 #define EYE_PLAYBACK_EXITING (1U << 1)
 #define EYE_PLAYBACK_TARGET_ACTIVATED (1U << 2)
+#define EYE_PLAYBACK_READY (1U << 3)
+#define EYE_SYNC_START_DELAY_MS 50U
+#define EYE_SYNC_PAYLOAD_SIZE 4U
 
 typedef struct {
     uint8_t protocol_version;
@@ -71,6 +74,26 @@ static inline bool eye_protocol_transition_complete(
            status->pending_animation == EYE_PROTOCOL_NO_PENDING_ANIMATION &&
            (status->playback_flags & EYE_PLAYBACK_PENDING) == 0 &&
            status->last_error == 0;
+}
+
+static inline bool eye_protocol_transition_ready(
+    const eye_protocol_status_t *status, uint8_t animation, uint8_t token)
+{
+    return status != NULL &&
+           status->pending_animation == animation &&
+           status->pending_transition_token == token &&
+           (status->playback_flags & EYE_PLAYBACK_PENDING) != 0 &&
+           (status->playback_flags & EYE_PLAYBACK_READY) != 0 &&
+           status->last_error == 0;
+}
+
+static inline void eye_protocol_encode_sync(
+    uint8_t output[EYE_SYNC_PAYLOAD_SIZE], uint8_t token, uint16_t delay_ms)
+{
+    output[0] = token;
+    output[1] = (uint8_t)(delay_ms & 0xFFU);
+    output[2] = (uint8_t)(delay_ms >> 8);
+    output[3] = 0;
 }
 
 #ifdef __cplusplus

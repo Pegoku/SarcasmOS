@@ -9,7 +9,11 @@ ESP-IDF firmware for the ESP32-S3 brain PCB.
 - Controls the left eye at I2C `0x30`, the right eye at I2C `0x31`, and the
   mouth through acknowledged ESP-NOW unicast.
 - Coordinates animation transitions: both eyes receive a transition token and
-  finish their outgoing animation before the matching mouth blend is released.
+  finish their outgoing animation independently, report READY, then receive a
+  back-to-back `CMD_SYNC` commit with a 50 ms future start deadline. The mouth
+  is released after the committed eyes confirm activation. If one eye is
+  absent or times out, the ready eye is committed and the transition is marked
+  degraded instead of remaining frozen.
 - Implements the packet protocol from `PCB/FIRMWARE_PLAN.md`, including CRC-8.
 - Starts Wi-Fi station mode when configured.
 - Serves `GET /api/status` and `POST /api/command`.

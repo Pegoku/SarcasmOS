@@ -282,6 +282,35 @@ static esp_err_t eye_command_both(uint8_t command, const uint8_t *payload,
     return result;
 }
 
+static uint8_t eye_commit_ready(uint8_t ready_mask, uint8_t token)
+{
+    uint8_t committed_mask = 0;
+    uint8_t payload[EYE_SYNC_PAYLOAD_SIZE];
+    eye_protocol_encode_sync(payload, token, EYE_SYNC_START_DELAY_MS);
+    if (xSemaphoreTake(g_display_mutex, portMAX_DELAY) != pdTRUE) {
+        return 0;
+    }
+    for (size_t i = 0; i < EYE_COUNT; ++i) {
+        const uint8_t mask = 1U << i;
+        if ((ready_mask & mask) == 0) {
+            continue;
+        }
+        esp_err_t err = eye_transmit_locked(
+            &g_displays[i], CMD_SYNC, payload, sizeof(payload));
+        if (err == ESP_OK) {
+            committed_mask |= mask;
+            ESP_LOGI(TAG, "%s commit sent token=%u delay=%u ms at %" PRIu32,
+                     g_displays[i].name, token, EYE_SYNC_START_DELAY_MS,
+                     uptime_ms());
+        } else {
+            ESP_LOGE(TAG, "%s commit failed: %s",
+                     g_displays[i].name, esp_err_to_name(err));
+        }
+    }
+    xSemaphoreGive(g_display_mutex);
+    return committed_mask;
+}
+
 static esp_err_t mouth_command(uint8_t command, const uint8_t *payload,
                                uint8_t len)
 {
@@ -711,8 +740,7 @@ restart_transition:
             request.animation, token, duration_ticks
         };
         set_transition_runtime(
-            request.animation, token,
-            request.emergency ? 0 : EYE_BOTH_MASK, false);
+            request.animation, token, EYE_BOTH_MASK, false);
 
         ESP_LOGI(TAG, "face request target=0x%02X token=%u emergency=%s at %" PRIu32,
                  request.animation, token, request.emergency ? "true" : "false",
@@ -733,23 +761,13 @@ restart_transition:
         }
 
         bool degraded = eye_sent_mask != EYE_BOTH_MASK;
-        if (request.emergency) {
-            esp_err_t mouth_err =
-                mouth_command(CMD_SET_ANIMATION, payload, sizeof(payload));
-            ESP_LOGW(TAG, "emergency mouth command token=%u at %" PRIu32 ": %s",
-                     token, uptime_ms(), esp_err_to_name(mouth_err));
-            commit_transition(
-                request.animation, token, degraded, mouth_err == ESP_OK);
-            continue;
-        }
-
         uint8_t ready_mask = 0;
         uint32_t started = uptime_ms();
         uint32_t timeout_ms = eye_sent_mask == 0
                                   ? CONFIG_SARCASMOS_NO_EYE_TIMEOUT_MS
                                   : CONFIG_SARCASMOS_EYE_BARRIER_TIMEOUT_MS;
         bool replaced = false;
-        while (ready_mask != EYE_BOTH_MASK &&
+        while (ready_mask != eye_sent_mask &&
                uptime_ms() - started < timeout_ms) {
             face_request_t newer;
             if (xQueueReceive(g_face_queue, &newer, 0) == pdTRUE) {
@@ -767,16 +785,17 @@ restart_transition:
                 eye_protocol_status_t status;
                 esp_err_t err = eye_read_status(&g_displays[i], &status);
                 if (err == ESP_OK &&
-                    eye_protocol_transition_complete(
+                    eye_protocol_transition_ready(
                         &status, request.animation, token)) {
                     ready_mask |= mask;
-                    ESP_LOGI(TAG, "%s activated target=0x%02X token=%u at %" PRIu32,
+                    ESP_LOGI(TAG, "%s READY target=0x%02X token=%u frame=%u at %" PRIu32,
                              g_displays[i].name, request.animation, token,
+                             status.current_frame,
                              uptime_ms());
                 }
             }
-            update_transition_waiting(EYE_BOTH_MASK & ~ready_mask, degraded);
-            if (ready_mask != EYE_BOTH_MASK) {
+            update_transition_waiting(eye_sent_mask & ~ready_mask, degraded);
+            if (ready_mask != eye_sent_mask) {
                 vTaskDelay(pdMS_TO_TICKS(
                     CONFIG_SARCASMOS_EYE_POLL_INTERVAL_MS));
             }
@@ -792,7 +811,7 @@ restart_transition:
             goto restart_transition;
         }
 
-        uint8_t incomplete_mask = EYE_BOTH_MASK & ~ready_mask;
+        uint8_t incomplete_mask = eye_sent_mask & ~ready_mask;
         if (incomplete_mask != 0) {
             degraded = true;
             for (size_t i = 0; i < EYE_COUNT; ++i) {
@@ -802,8 +821,59 @@ restart_transition:
             }
         }
 
-        ESP_LOGI(TAG, "eye barrier released target=0x%02X token=%u degraded=%s",
-                 request.animation, token, degraded ? "true" : "false");
+        uint8_t committed_mask = eye_commit_ready(ready_mask, token);
+        if (committed_mask != ready_mask) {
+            degraded = true;
+        }
+        update_transition_waiting(committed_mask, degraded);
+
+        uint8_t activated_mask = 0;
+        started = uptime_ms();
+        while (activated_mask != committed_mask &&
+               uptime_ms() - started <
+                   CONFIG_SARCASMOS_EYE_BARRIER_TIMEOUT_MS) {
+            for (size_t i = 0; i < EYE_COUNT; ++i) {
+                const uint8_t mask = 1U << i;
+                if ((committed_mask & mask) == 0 ||
+                    (activated_mask & mask) != 0) {
+                    continue;
+                }
+                eye_protocol_status_t status;
+                esp_err_t err = eye_read_status(&g_displays[i], &status);
+                if (err == ESP_OK &&
+                    eye_protocol_transition_complete(
+                        &status, request.animation, token)) {
+                    activated_mask |= mask;
+                    ESP_LOGI(
+                        TAG,
+                        "%s activated target=0x%02X token=%u frame=%u at %" PRIu32,
+                        g_displays[i].name, request.animation, token,
+                        status.current_frame, uptime_ms());
+                }
+            }
+            update_transition_waiting(
+                committed_mask & ~activated_mask, degraded);
+            if (activated_mask != committed_mask) {
+                vTaskDelay(pdMS_TO_TICKS(
+                    CONFIG_SARCASMOS_EYE_POLL_INTERVAL_MS));
+            }
+        }
+        const uint8_t activation_timeout_mask =
+            committed_mask & ~activated_mask;
+        if (activation_timeout_mask != 0) {
+            degraded = true;
+            for (size_t i = 0; i < EYE_COUNT; ++i) {
+                if ((activation_timeout_mask & (1U << i)) != 0) {
+                    log_eye_timeout(i, request.animation, token);
+                }
+            }
+        }
+
+        ESP_LOGI(TAG,
+                 "eye barrier complete target=0x%02X token=%u ready=0x%02X "
+                 "committed=0x%02X activated=0x%02X degraded=%s",
+                 request.animation, token, ready_mask, committed_mask,
+                 activated_mask, degraded ? "true" : "false");
         esp_err_t mouth_err =
             mouth_command(CMD_SET_ANIMATION, payload, sizeof(payload));
         ESP_LOGI(TAG, "mouth command target=0x%02X token=%u at %" PRIu32 ": %s",

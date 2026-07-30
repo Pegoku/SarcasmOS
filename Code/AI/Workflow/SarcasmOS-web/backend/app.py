@@ -1734,6 +1734,44 @@ def ndjson_line(payload: dict) -> bytes:
     return (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
 
 
+def append_device_history(
+    email: str, transcript: str, answer: str, audio_url: str
+) -> None:
+    document = load_history_document_for_email(email)
+    chats = document.setdefault("chats", [])
+    chat = next(
+        (
+            item
+            for item in chats
+            if isinstance(item, dict) and item.get("id") == "brain-device"
+        ),
+        None,
+    )
+    now = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
+    if chat is None:
+        chat = {
+            "id": "brain-device",
+            "title": "SarcasmOS Brain",
+            "createdAt": now,
+            "updatedAt": now,
+            "items": [],
+        }
+        chats.append(chat)
+    chat.setdefault("items", []).append(
+        {
+            "question": transcript,
+            "answer": answer,
+            "audioUrl": audio_url,
+            "timestamp": now,
+        }
+    )
+    chat["items"] = chat["items"][-100:]
+    chat["updatedAt"] = now
+    document["activeChatId"] = "brain-device"
+    document["items"] = history_items_from_payload({"chats": chats})
+    save_history_document_for_email(email, document)
+
+
 @app.post("/api/device/wake")
 async def device_wake(
     request: Request,
@@ -1785,6 +1823,7 @@ async def device_wake(
 async def device_voice(
     request: Request,
     sample_rate: int = Header(default=16000, alias="X-Audio-Sample-Rate"),
+    robot_status: str = Header(default="", alias="X-Robot-Status"),
     authorization: str | None = Header(default=None),
 ) -> StreamingResponse:
     user = current_device_user(authorization)
@@ -1794,6 +1833,14 @@ async def device_voice(
     )
     context = best_chat_context(None, "brain-device", user["email"])
     tool_context = tool_context_for_user(user)
+    if robot_status:
+        try:
+            parsed_robot_status = json.loads(robot_status)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid X-Robot-Status JSON.")
+        if not isinstance(parsed_robot_status, dict):
+            raise HTTPException(status_code=400, detail="X-Robot-Status must be an object.")
+        tool_context["robot_status"] = parsed_robot_status
     overrides = developer_config_for_user(user)
 
     async def event_stream():
@@ -1843,14 +1890,19 @@ async def device_voice(
                         result.get("answer", ""),
                     )[:2],
                 )
+                audio_url = f"/api/audio/{output_name}" if output_name else ""
+                append_device_history(
+                    user["email"],
+                    result.get("transcript", ""),
+                    result.get("answer", ""),
+                    audio_url,
+                )
                 publish(
                     {
                         "type": "done",
                         "transcript": result.get("transcript", ""),
                         "answer": result.get("answer", ""),
-                        "audio_url": (
-                            f"/api/audio/{output_name}" if output_name else ""
-                        ),
+                        "audio_url": audio_url,
                         "display": device_display_metadata(result),
                         "quota": quota,
                     }

@@ -4,6 +4,7 @@
 #include "pico/stdlib.h"
 
 #include "gc9a01.hpp"
+#include "display_orientation.hpp"
 #include "protocol.hpp"
 #include "swd_rtt.hpp"
 
@@ -116,8 +117,7 @@ int main() {
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
     watchdog_enable(2000, true);
-    const uint8_t madctl = (DEVICE_ROLE == kRoleRightEye) ? 0x48 : 0x88;
-    eye_display::init(255, madctl);
+    eye_display::init(255, eye_display_orientation::kMadctl);
 
     int last_pattern = -1;
     while (true) {

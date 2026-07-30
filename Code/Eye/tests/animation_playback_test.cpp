@@ -2,6 +2,7 @@
 
 #include "animation_playback.hpp"
 #include "animation_transition.hpp"
+#include "display_orientation.hpp"
 #include "eye_status.hpp"
 
 using eye_playback::Spec;
@@ -13,6 +14,9 @@ static void advance_to(State &state, const Spec &spec, uint8_t expected) {
 }
 
 int main() {
+    // Hardware must not add a role-specific mirror after the asset compiler
+    // has applied the emulator's independent left/right orientation flags.
+    static_assert(eye_display_orientation::kMadctl == 0x88);
     {
         const Spec spec{7, eye_playback::kLoop, 2, 4, eye_playback::kLoop};
         State state;

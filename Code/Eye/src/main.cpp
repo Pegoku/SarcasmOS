@@ -12,6 +12,7 @@
 #include "gc9a01.hpp"
 #include "animation_playback.hpp"
 #include "animation_transition.hpp"
+#include "display_orientation.hpp"
 #include "eye_status.hpp"
 #include "generated/eye_assets.hpp"
 #include "protocol.hpp"
@@ -167,8 +168,7 @@ static void i2c_slave_init() {
 }
 
 static void display_init() {
-    const uint8_t madctl = (DEVICE_ROLE == kRoleRightEye) ? 0x48 : 0x88;
-    eye_display::init(brightness, madctl);
+    eye_display::init(brightness, eye_display_orientation::kMadctl);
 }
 
 static eye_playback::Spec playback_spec(

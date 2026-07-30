@@ -195,8 +195,10 @@ so building an alternate pack does not overwrite `generated/eye_assets.hpp` or
 the production asset source. Upload-only commands verify that the selected pack
 path matches the image configuration and ask for a rebuild if it does not.
 
-All three firmware modes rotate the display output 180 degrees while retaining
-the correct mirrored orientation for each eye.
+All three firmware modes use the same 180-degree display transform. Per-eye
+orientation comes exclusively from each animation's `flip_left` and
+`flip_right` emulator settings, so the right display does not reverse the
+generated artwork a second time.
 
 The equivalent manual build commands are below.
 

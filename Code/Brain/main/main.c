@@ -1316,7 +1316,13 @@ static void cli_print_config(void)
     printf("\n------------- Configuration -------------\n");
     printf("  show\n");
     printf("  set ssid <value>          set password <value>\n");
-    printf("  set url <http[s]://...>   set token <value>\n");
+    printf("  set ai-token <value>      set llm-token <value>\n");
+    printf("  set replicate-token <value>\n");
+    printf("  set llm-url <url>         set replicate-url <url>\n");
+    printf("  set llm-model <model>     set stt-model <model>\n");
+    printf("  set tts-model <model>     set voice-id <value>\n");
+    printf("  set calendar-token <OAuth access token>\n");
+    printf("  set timezone <IANA name>\n");
     printf("  set wake <phrase>         set wake-enabled on|off\n");
     printf("  set silence-ms <500-15000>\n");
     printf("  set vad <1-65535>         reset\n");
@@ -1467,10 +1473,26 @@ static void cli_show_config(void)
            g_config.wifi_ssid[0] ? g_config.wifi_ssid : "<not set>");
     printf("Wi-Fi password:   %s\n",
            g_config.wifi_password[0] ? "<set>" : "<not set>");
-    printf("Workflow URL:     %s\n",
-           g_config.workflow_url[0] ? g_config.workflow_url : "<not set>");
-    printf("Workflow token:   %s\n",
-           g_config.workflow_token[0] ? "<set>" : "<not set>");
+    printf("Shared AI token:  %s\n",
+           g_config.ai_token[0] ? "<set>" : "<not set>");
+    printf("LLM token:        %s%s\n",
+           g_config.llm_token[0] ? "<set>" : "<shared token>",
+           !g_config.llm_token[0] && !g_config.ai_token[0]
+               ? " (not set)" : "");
+    printf("Replicate token:  %s%s\n",
+           g_config.replicate_token[0] ? "<set>" : "<shared token>",
+           !g_config.replicate_token[0] && !g_config.ai_token[0]
+               ? " (not set)" : "");
+    printf("LLM URL:          %s\n", g_config.llm_url);
+    printf("Replicate URL:    %s\n", g_config.replicate_url);
+    printf("LLM model:        %s\n", g_config.llm_model);
+    printf("STT model:        %s\n", g_config.stt_model);
+    printf("TTS model:        %s\n", g_config.tts_model);
+    printf("Voice ID:         %s\n",
+           g_config.voice_id[0] ? "<set>" : "<not set>");
+    printf("Calendar token:   %s\n",
+           g_config.google_calendar_token[0] ? "<set>" : "<not set>");
+    printf("Timezone:         %s\n", g_config.timezone);
     printf("Wake phrase:      %s\n",
            g_config.wake_phrase[0] ? g_config.wake_phrase : "<not set>");
     printf("Wake enabled:     %s\n", g_config.wake_enabled ? "yes" : "no");
@@ -1505,6 +1527,39 @@ static void cli_set_config(char *arguments)
     } else if (strcmp(key, "wake") == 0) {
         err = brain_config_set_string(
             &g_config, BRAIN_CONFIG_WAKE_PHRASE, value);
+    } else if (strcmp(key, "ai-token") == 0) {
+        err = brain_config_set_string(
+            &g_config, BRAIN_CONFIG_AI_TOKEN, value);
+    } else if (strcmp(key, "llm-token") == 0) {
+        err = brain_config_set_string(
+            &g_config, BRAIN_CONFIG_LLM_TOKEN, value);
+    } else if (strcmp(key, "replicate-token") == 0) {
+        err = brain_config_set_string(
+            &g_config, BRAIN_CONFIG_REPLICATE_TOKEN, value);
+    } else if (strcmp(key, "llm-url") == 0) {
+        err = brain_config_set_string(
+            &g_config, BRAIN_CONFIG_LLM_URL, value);
+    } else if (strcmp(key, "replicate-url") == 0) {
+        err = brain_config_set_string(
+            &g_config, BRAIN_CONFIG_REPLICATE_URL, value);
+    } else if (strcmp(key, "llm-model") == 0) {
+        err = brain_config_set_string(
+            &g_config, BRAIN_CONFIG_LLM_MODEL, value);
+    } else if (strcmp(key, "stt-model") == 0) {
+        err = brain_config_set_string(
+            &g_config, BRAIN_CONFIG_STT_MODEL, value);
+    } else if (strcmp(key, "tts-model") == 0) {
+        err = brain_config_set_string(
+            &g_config, BRAIN_CONFIG_TTS_MODEL, value);
+    } else if (strcmp(key, "voice-id") == 0) {
+        err = brain_config_set_string(
+            &g_config, BRAIN_CONFIG_VOICE_ID, value);
+    } else if (strcmp(key, "calendar-token") == 0) {
+        err = brain_config_set_string(
+            &g_config, BRAIN_CONFIG_GOOGLE_CALENDAR_TOKEN, value);
+    } else if (strcmp(key, "timezone") == 0) {
+        err = brain_config_set_string(
+            &g_config, BRAIN_CONFIG_TIMEZONE, value);
     } else if (strcmp(key, "wake-enabled") == 0) {
         if (strcmp(value, "on") == 0 || strcmp(value, "true") == 0) {
             err = brain_config_set_wake_enabled(&g_config, true);

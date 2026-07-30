@@ -47,6 +47,53 @@ static config_string_t config_string(brain_config_t *config,
         return (config_string_t){
             "wake_phrase", config->wake_phrase, sizeof(config->wake_phrase)
         };
+    case BRAIN_CONFIG_AI_TOKEN:
+        return (config_string_t){
+            "ai_token", config->ai_token, sizeof(config->ai_token)
+        };
+    case BRAIN_CONFIG_LLM_TOKEN:
+        return (config_string_t){
+            "llm_token", config->llm_token, sizeof(config->llm_token)
+        };
+    case BRAIN_CONFIG_REPLICATE_TOKEN:
+        return (config_string_t){
+            "repl_token", config->replicate_token,
+            sizeof(config->replicate_token)
+        };
+    case BRAIN_CONFIG_LLM_URL:
+        return (config_string_t){
+            "llm_url", config->llm_url, sizeof(config->llm_url)
+        };
+    case BRAIN_CONFIG_REPLICATE_URL:
+        return (config_string_t){
+            "repl_url", config->replicate_url,
+            sizeof(config->replicate_url)
+        };
+    case BRAIN_CONFIG_LLM_MODEL:
+        return (config_string_t){
+            "llm_model", config->llm_model, sizeof(config->llm_model)
+        };
+    case BRAIN_CONFIG_STT_MODEL:
+        return (config_string_t){
+            "stt_model", config->stt_model, sizeof(config->stt_model)
+        };
+    case BRAIN_CONFIG_TTS_MODEL:
+        return (config_string_t){
+            "tts_model", config->tts_model, sizeof(config->tts_model)
+        };
+    case BRAIN_CONFIG_VOICE_ID:
+        return (config_string_t){
+            "voice_id", config->voice_id, sizeof(config->voice_id)
+        };
+    case BRAIN_CONFIG_GOOGLE_CALENDAR_TOKEN:
+        return (config_string_t){
+            "gcal_token", config->google_calendar_token,
+            sizeof(config->google_calendar_token)
+        };
+    case BRAIN_CONFIG_TIMEZONE:
+        return (config_string_t){
+            "timezone", config->timezone, sizeof(config->timezone)
+        };
     default:
         return (config_string_t){ NULL, NULL, 0 };
     }
@@ -81,6 +128,29 @@ esp_err_t brain_config_load(brain_config_t *config)
                  CONFIG_SARCASMOS_WORKFLOW_TOKEN);
     copy_default(config->wake_phrase, sizeof(config->wake_phrase),
                  CONFIG_SARCASMOS_WAKE_PHRASE);
+    copy_default(config->ai_token, sizeof(config->ai_token),
+                 CONFIG_SARCASMOS_AI_TOKEN);
+    copy_default(config->llm_token, sizeof(config->llm_token),
+                 CONFIG_SARCASMOS_LLM_TOKEN);
+    copy_default(config->replicate_token, sizeof(config->replicate_token),
+                 CONFIG_SARCASMOS_REPLICATE_TOKEN);
+    copy_default(config->llm_url, sizeof(config->llm_url),
+                 CONFIG_SARCASMOS_LLM_URL);
+    copy_default(config->replicate_url, sizeof(config->replicate_url),
+                 CONFIG_SARCASMOS_REPLICATE_URL);
+    copy_default(config->llm_model, sizeof(config->llm_model),
+                 CONFIG_SARCASMOS_LLM_MODEL);
+    copy_default(config->stt_model, sizeof(config->stt_model),
+                 CONFIG_SARCASMOS_STT_MODEL);
+    copy_default(config->tts_model, sizeof(config->tts_model),
+                 CONFIG_SARCASMOS_TTS_MODEL);
+    copy_default(config->voice_id, sizeof(config->voice_id),
+                 CONFIG_SARCASMOS_VOICE_ID);
+    copy_default(config->google_calendar_token,
+                 sizeof(config->google_calendar_token),
+                 CONFIG_SARCASMOS_GOOGLE_CALENDAR_TOKEN);
+    copy_default(config->timezone, sizeof(config->timezone),
+                 CONFIG_SARCASMOS_TIMEZONE);
 #ifdef CONFIG_SARCASMOS_WAKE_ENABLED
     config->wake_enabled = true;
 #else
@@ -99,7 +169,7 @@ esp_err_t brain_config_load(brain_config_t *config)
     }
 
     for (brain_config_string_key_t key = BRAIN_CONFIG_WIFI_SSID;
-         key <= BRAIN_CONFIG_WAKE_PHRASE; ++key) {
+         key < BRAIN_CONFIG_STRING_COUNT; ++key) {
         load_string(handle, config_string(config, key));
     }
     uint8_t wake_enabled = config->wake_enabled;

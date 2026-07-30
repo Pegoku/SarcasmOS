@@ -16,6 +16,50 @@ config SARCASMOS_WORKFLOW_TOKEN
     string "Workflow bearer/device token"
     default ""
 
+config SARCASMOS_AI_TOKEN
+    string "Shared AI provider token"
+    default ""
+
+config SARCASMOS_LLM_TOKEN
+    string "LLM token (falls back to shared token)"
+    default ""
+
+config SARCASMOS_REPLICATE_TOKEN
+    string "STT/TTS token (falls back to shared token)"
+    default ""
+
+config SARCASMOS_LLM_URL
+    string "OpenAI-compatible LLM base URL"
+    default "https://ai.hackclub.com/proxy/v1"
+
+config SARCASMOS_REPLICATE_URL
+    string "Replicate-compatible base URL"
+    default "https://ai.hackclub.com/proxy/v1/replicate"
+
+config SARCASMOS_LLM_MODEL
+    string "LLM model"
+    default "~anthropic/claude-sonnet-latest"
+
+config SARCASMOS_STT_MODEL
+    string "Replicate STT model or version"
+    default "vaibhavs10/incredibly-fast-whisper:3ab86df6c8f54c11309d4d1f930ac292bad43ace52d10c80d87eb258b3c9f79c"
+
+config SARCASMOS_TTS_MODEL
+    string "Replicate TTS model"
+    default "minimax/speech-2.8-turbo"
+
+config SARCASMOS_VOICE_ID
+    string "MiniMax Bender voice ID"
+    default ""
+
+config SARCASMOS_GOOGLE_CALENDAR_TOKEN
+    string "Google Calendar OAuth access token"
+    default ""
+
+config SARCASMOS_TIMEZONE
+    string "IANA timezone"
+    default "Europe/Madrid"
+
 config SARCASMOS_WAKE_PHRASE
     string "Wake phrase"
     default "oye bender"

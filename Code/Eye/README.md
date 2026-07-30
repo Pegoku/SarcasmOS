@@ -135,24 +135,36 @@ monitor automatically uses the only connected `/dev/serial/by-id`,
 one with `--port /dev/ttyACM0` or set `EYE_LEFT_PORT` and `EYE_RIGHT_PORT`.
 Run `./flash.sh --help` for all options and environment overrides.
 
-Every activated animation now starts at frame one on its own local clock; the
-I2C sync timestamp is never added to its frame index. A request for another
-state becomes the current animation's end signal. Regular playback completes
-its forward pass, whole-animation ping-pong completes its return to frame one,
-and a persistent range loop runs its stored outro before the pending state is
-activated. If a range occupies the final frames and the animation itself is
-ping-pong, firmware automatically returns through the entry frames. Therefore
-demo states remain active for at least three seconds and may take slightly
-longer while their graceful exit finishes. Regular I2C mode uses the identical
-transition logic.
+Every activated animation starts at frame zero on its own local clock. A
+request for another state becomes the current animation's end signal. Regular
+playback completes its forward pass, whole-animation ping-pong completes its
+return to frame zero, and a persistent range loop runs its stored outro before
+holding its final legal exit frame. At that barrier the Eye reports READY and
+waits for a matching `CMD_SYNC`; it never activates the pending state early. If
+a range occupies the final frames and the animation itself is ping-pong,
+firmware automatically returns through the entry frames. Therefore demo states
+remain active for at least three seconds and may take slightly longer while
+their graceful exit finishes. Demo mode commits its own READY transitions;
+regular I2C mode waits for Brain's paired commit.
 
 Animation and expression commands accept either the legacy one-byte payload
 `{animation}` or the synchronized payload
 `{animation, transition_token, mouth_duration_ticks}`. The eye ignores the
 mouth-duration byte, keeps playing the current animation through its legal
-exit, and associates the token with the destination only when that destination
-actually starts. Repeating an already queued animation/token pair does not
-restart playback; a newer queued request replaces the older destination.
+exit, and associates the token with the destination only when a matching commit
+starts it. Repeating an already queued animation/token pair does not restart
+playback; a newer queued request replaces the older destination and clears the
+old READY/commit state. Requesting the active animation with a new token creates
+an immediately READY restart so two drifting Eyes can be resynchronized.
+
+`CMD_SYNC` is the four-byte commit payload
+`{transition_token, delay_ms_low, delay_ms_high, flags}`. Flags must be zero and
+the little-endian delay must be 10–250 ms; Brain uses 50 ms. The deadline is
+based on the local I2C STOP timestamp. Both Eyes therefore start frame zero at
+their corresponding future deadlines even if command parsing is delayed. A
+READY Eye without a valid commit holds the exit pose and reports an error after
+five seconds. On every committed activation the onboard LED inverts for 10 ms,
+providing a logic-analyzer timing point over the normal heartbeat.
 
 Eye protocol version `0x02` returns a 13-byte status response:
 
@@ -168,7 +180,7 @@ Eye protocol version `0x02` returns a 13-byte status response:
 | 8 | pending animation, or `0xFF` |
 | 9 | active transition token |
 | 10 | pending transition token, or `0` |
-| 11 | playback flags: pending, exiting, activated |
+| 11 | playback flags: pending (bit 0), exiting (bit 1), activated/no pending (bit 2), READY (bit 3) |
 | 12 | current local frame |
 
 The controller should treat an eye as complete only when one full response has

@@ -30,6 +30,9 @@ constexpr uint I2C_SCL_PIN = 5;
 constexpr int WIDTH = eye_display::WIDTH;
 constexpr int HEIGHT = eye_display::HEIGHT;
 constexpr uint32_t FRAME_INTERVAL_MS = 40;
+constexpr uint32_t READY_TIMEOUT_MS = 5000;
+constexpr uint32_t DRAW_DEADLINE_MARGIN_MS = 2;
+constexpr uint32_t ACTIVATION_PULSE_MS = 10;
 
 static_assert(eye_assets::kWidth == WIDTH, "asset width mismatch");
 static_assert(eye_assets::kHeight == HEIGHT, "asset height mismatch");
@@ -47,6 +50,7 @@ static volatile uint8_t tx_len = kEyeStatusSize;
 static volatile uint8_t tx_pos;
 static volatile bool command_ready;
 static volatile bool status_refresh_pending;
+static volatile uint32_t command_stop_ms;
 static eye_transition::State transition_state;
 static uint8_t brightness = 180;
 static uint8_t last_sequence;
@@ -54,8 +58,12 @@ static uint8_t last_error;
 static eye_playback::State playback_state;
 static uint32_t frame_started_ms;
 static uint32_t animation_started_ms;
+static uint32_t worst_draw_ms = FRAME_INTERVAL_MS;
+static bool frame_render_pending;
+static uint32_t activation_pulse_until_ms;
 
-static void request_animation(uint8_t animation, uint8_t token = 0);
+static void request_animation(
+    uint8_t animation, uint8_t token, uint32_t now_ms);
 
 static const char *const kAnimationNames[] = {
     "idle", "listening", "thinking", "thinking_audio",
@@ -91,7 +99,7 @@ static void update_animation_autoplay(uint32_t now_ms) {
     if (!eye_transition::has_pending(transition_state) &&
         now_ms - animation_started_ms >= kStateDurationMs) {
         request_animation(
-            (transition_state.active_animation + 1) % kAnimCount);
+            (transition_state.active_animation + 1) % kAnimCount, 0, now_ms);
     }
 }
 #endif
@@ -135,7 +143,10 @@ static void i2c_irq_handler() {
     }
     if (status & I2C_IC_INTR_STAT_R_STOP_DET_BITS) {
         hw->clr_stop_det;
-        if (rx_len > 0) command_ready = true;
+        if (rx_len > 0) {
+            command_stop_ms = to_ms_since_boot(get_absolute_time());
+            command_ready = true;
+        }
         tx_pos = 0;
     }
 }
@@ -183,14 +194,17 @@ static void activate_animation(uint8_t animation, uint32_t now_ms) {
     eye_playback::start(playback_state);
     frame_started_ms = now_ms;
     animation_started_ms = now_ms;
+    frame_render_pending = true;
     prepare_status_response();
     report_animation("Current");
 }
 
-static void request_animation(uint8_t animation, uint8_t token) {
+static void request_animation(
+    uint8_t animation, uint8_t token, uint32_t now_ms
+) {
     if (!isValidAnimation(animation)) return;
     const eye_transition::RequestResult result =
-        eye_transition::request(transition_state, animation, token);
+        eye_transition::request(transition_state, animation, token, now_ms);
     if (result == eye_transition::RequestResult::Queued) {
         const eye_assets::Animation &current =
             eye_assets::kAnimations[transition_state.active_animation];
@@ -201,6 +215,22 @@ static void request_animation(uint8_t animation, uint8_t token) {
 
 static void update_animation_playback(uint32_t now_ms) {
     while (true) {
+        if (transition_state.ready) {
+            if (eye_transition::commit_due(transition_state, now_ms)) {
+                const uint32_t deadline = transition_state.commit_deadline_ms;
+                activate_animation(
+                    transition_state.pending_animation, deadline);
+                activation_pulse_until_ms = now_ms + ACTIVATION_PULSE_MS;
+                continue;
+            }
+            if (last_error != kErrorReadyTimeout &&
+                eye_transition::ready_timed_out(
+                    transition_state, now_ms, READY_TIMEOUT_MS)) {
+                last_error = kErrorReadyTimeout;
+                prepare_status_response();
+            }
+            return;
+        }
         const eye_assets::Animation &animation =
             eye_assets::kAnimations[transition_state.active_animation];
         if (now_ms - frame_started_ms < animation.frameMs) return;
@@ -209,8 +239,14 @@ static void update_animation_playback(uint32_t now_ms) {
         if (eye_playback::advance(
                 playback_spec(animation), playback_state)) {
             if (!eye_transition::has_pending(transition_state)) return;
-            activate_animation(
-                transition_state.pending_animation, frame_started_ms);
+            eye_transition::mark_ready(transition_state, now_ms);
+#ifdef ANIMATION_AUTOPLAY
+            eye_transition::arm_commit(
+                transition_state, transition_state.pending_token,
+                eye_transition::kMinimumCommitDelayMs, now_ms);
+#endif
+            prepare_status_response();
+            return;
         } else if (was_exiting) {
             prepare_status_response();
         }
@@ -271,22 +307,24 @@ static void draw_eye() {
 static void parse_command() {
     uint8_t local[80];
     uint8_t len;
+    uint32_t stop_ms;
     irq_set_enabled(I2C0_IRQ, false);
     len = rx_len;
+    stop_ms = command_stop_ms;
     memcpy(local, (const void *)rx_buf, len);
     rx_len = 0;
     command_ready = false;
     irq_set_enabled(I2C0_IRQ, true);
 
     if (len < 5 || local[0] != kProtocolVersion || local[3] > 64 || len != local[3] + 5 || crc8(local, len - 1) != local[len - 1]) {
-        last_error = 1;
+        last_error = kErrorMalformedCommand;
         prepare_status_response();
         return;
     }
     uint8_t command = local[1];
     last_sequence = local[2];
     const uint8_t *payload = &local[4];
-    last_error = 0;
+    last_error = kErrorNone;
     switch (command) {
     case kCmdPing:
     case kCmdGetInfo:
@@ -298,24 +336,39 @@ static void parse_command() {
     case kCmdSetExpression:
         if (local[3] >= 1 && isValidAnimation(payload[0])) {
             const uint8_t token = local[3] >= 2 ? payload[1] : 0;
-            request_animation(payload[0], token);
+            request_animation(payload[0], token, stop_ms);
         } else {
-            last_error = 1;
+            last_error = kErrorMalformedCommand;
         }
         break;
-    case kCmdSync:
-        // Animation commands reset their own local timeline. Both eye boards
-        // receive the same command sequence, so an absolute remote uptime must
-        // not be added to the new animation's frame index.
+    case kCmdSync: {
+        if (local[3] != 4 || payload[3] != 0) {
+            last_error = kErrorMalformedCommand;
+            break;
+        }
+        const uint16_t delay_ms = static_cast<uint16_t>(payload[1]) |
+                                  (static_cast<uint16_t>(payload[2]) << 8);
+        const eye_transition::CommitResult result =
+            eye_transition::arm_commit(
+                transition_state, payload[0], delay_ms, stop_ms);
+        if (result == eye_transition::CommitResult::WrongToken) {
+            last_error = kErrorSyncToken;
+        } else if (result == eye_transition::CommitResult::InvalidDelay) {
+            last_error = kErrorSyncDelay;
+        } else if (result == eye_transition::CommitResult::NoPending ||
+                   result == eye_transition::CommitResult::NotReady) {
+            last_error = kErrorSyncState;
+        }
         break;
+    }
     case kCmdStop:
-        request_animation(kAnimSleep);
+        request_animation(kAnimSleep, 0, stop_ms);
         break;
     case kCmdReset:
         watchdog_reboot(0, 0, 10);
         break;
     default:
-        last_error = 2;
+        last_error = kErrorUnknownCommand;
         break;
     }
     prepare_status_response();
@@ -345,10 +398,32 @@ int main() {
         update_animation_autoplay(now);
 #endif
         update_animation_playback(now);
-        gpio_put(LED_PIN, (now / 500) & 1);
-        if (now - last_draw >= FRAME_INTERVAL_MS) {
+        const bool activation_pulse =
+            activation_pulse_until_ms != 0 &&
+            !eye_transition::time_reached(now, activation_pulse_until_ms);
+        const bool heartbeat = (now / 500) & 1;
+        gpio_put(LED_PIN, activation_pulse ? !heartbeat : heartbeat);
+        const bool draw_due = frame_render_pending ||
+                              now - last_draw >= FRAME_INTERVAL_MS;
+        bool deadline_safe = true;
+        if (transition_state.commit_armed) {
+            const int32_t until_deadline = static_cast<int32_t>(
+                transition_state.commit_deadline_ms - now);
+            deadline_safe = until_deadline <= 0 ||
+                            static_cast<uint32_t>(until_deadline) >
+                                worst_draw_ms + DRAW_DEADLINE_MARGIN_MS;
+        }
+        if (draw_due && deadline_safe) {
             last_draw = now;
+            frame_render_pending = false;
+            const uint32_t draw_started_ms =
+                to_ms_since_boot(get_absolute_time());
             draw_eye();
+            const uint32_t draw_duration_ms =
+                to_ms_since_boot(get_absolute_time()) - draw_started_ms;
+            if (draw_duration_ms > worst_draw_ms) {
+                worst_draw_ms = draw_duration_ms;
+            }
         }
         tight_loop_contents();
     }

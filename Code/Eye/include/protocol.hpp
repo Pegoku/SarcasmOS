@@ -15,6 +15,14 @@ constexpr uint8_t kCmdSetParam = 0x30;
 constexpr uint8_t kCmdDebugFrame = 0x7E;
 constexpr uint8_t kCmdReset = 0x7F;
 
+constexpr uint8_t kErrorNone = 0;
+constexpr uint8_t kErrorMalformedCommand = 1;
+constexpr uint8_t kErrorUnknownCommand = 2;
+constexpr uint8_t kErrorSyncState = 3;
+constexpr uint8_t kErrorSyncToken = 4;
+constexpr uint8_t kErrorSyncDelay = 5;
+constexpr uint8_t kErrorReadyTimeout = 6;
+
 constexpr uint8_t kAnimIdle = 0x00;
 constexpr uint8_t kAnimListening = 0x01;
 constexpr uint8_t kAnimThinking = 0x02;

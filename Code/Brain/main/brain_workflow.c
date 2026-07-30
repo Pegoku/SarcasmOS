@@ -11,6 +11,7 @@
 #include "esp_random.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/stream_buffer.h"
 #include "freertos/task.h"
 #include "mbedtls/base64.h"
 
@@ -25,6 +26,10 @@
 #define MAX_TOOL_RESULT 12288
 #define MAX_TOOL_ROUNDS 6
 #define AUDIO_BUFFER_SIZE 2048
+#define STT_UPLOAD_BLOCK_SIZE 3072
+#define STT_STREAM_BUFFER_SIZE (64 * 1024)
+#define MANUAL_LOCK_WAIT_MS 6500
+#define CONVERSATION_HISTORY_SIZE 8192
 
 typedef struct {
     char *data;
@@ -34,13 +39,27 @@ typedef struct {
 
 typedef struct {
     esp_http_client_handle_t client;
+    const brain_config_t *config;
+    char url[MAX_URL];
+    const char *version;
     uint8_t carry[3];
     size_t carry_length;
+    StreamBufferHandle_t stream;
+    SemaphoreHandle_t done;
+    char *transcript;
+    size_t transcript_capacity;
+    volatile bool capture_done;
+    volatile bool abort;
+    volatile bool finished;
+    bool started;
+    bool opened;
+    esp_err_t result;
 } stt_upload_t;
 
 static brain_workflow_event_handler_t s_event_handler;
 static void *s_event_context;
 static SemaphoreHandle_t s_workflow_mutex;
+static char s_conversation_history[CONVERSATION_HISTORY_SIZE];
 
 static void emit_event(brain_workflow_event_type_t type, const char *message,
                        const char *tool, const char *expression,
@@ -578,13 +597,6 @@ static esp_err_t base64_write(stt_upload_t *upload, const uint8_t *data,
     return err;
 }
 
-static esp_err_t stt_pcm_sink(const int16_t *samples, size_t sample_count,
-                              void *context)
-{
-    return base64_write(context, (const uint8_t *)samples,
-                        sample_count * sizeof(*samples), false);
-}
-
 static void wav_header(uint8_t header[44])
 {
     const uint8_t template[] = {
@@ -594,6 +606,151 @@ static void wav_header(uint8_t header[44])
         'd','a','t','a', 0xff,0xff,0xff,0x7f
     };
     memcpy(header, template, sizeof(template));
+}
+
+static esp_err_t stt_open(stt_upload_t *upload)
+{
+    if (upload->opened) return ESP_OK;
+    upload->client = create_http_client(upload->url);
+    if (upload->client == NULL) return ESP_ERR_NO_MEM;
+    esp_http_client_set_method(upload->client, HTTP_METHOD_POST);
+    esp_err_t err = set_bearer(
+        upload->client, replicate_token(upload->config));
+    if (err == ESP_OK) {
+        err = esp_http_client_set_header(
+            upload->client, "Content-Type", "application/json");
+    }
+    if (err == ESP_OK) {
+        err = esp_http_client_set_header(
+            upload->client, "Prefer", "wait");
+    }
+    if (err == ESP_OK) err = esp_http_client_open(upload->client, -1);
+    char prefix[256];
+    int prefix_length = upload->version != NULL
+        ? snprintf(prefix, sizeof(prefix),
+                   "{\"version\":\"%s\",\"input\":{\"audio\":"
+                   "\"data:audio/wav;base64,", upload->version)
+        : snprintf(prefix, sizeof(prefix),
+                   "{\"input\":{\"audio\":\"data:audio/wav;base64,");
+    if (err == ESP_OK &&
+        (prefix_length <= 0 || (size_t)prefix_length >= sizeof(prefix))) {
+        err = ESP_ERR_INVALID_SIZE;
+    }
+    if (err == ESP_OK) {
+        err = chunk_write(upload->client, prefix, prefix_length);
+    }
+    uint8_t header[44];
+    wav_header(header);
+    if (err == ESP_OK) {
+        upload->opened = true;
+        err = base64_write(upload, header, sizeof(header), false);
+    }
+    if (err != ESP_OK && upload->client != NULL) {
+        esp_http_client_close(upload->client);
+        esp_http_client_cleanup(upload->client);
+        upload->client = NULL;
+    }
+    return err;
+}
+
+static void stt_upload_task(void *argument)
+{
+    stt_upload_t *upload = argument;
+    esp_err_t err = stt_open(upload);
+    uint8_t raw[STT_UPLOAD_BLOCK_SIZE];
+    while (err == ESP_OK && !upload->abort) {
+        size_t received = xStreamBufferReceive(
+            upload->stream, raw, sizeof(raw), pdMS_TO_TICKS(100));
+        if (received > 0) {
+            err = base64_write(upload, raw, received, false);
+        } else if (upload->capture_done) {
+            break;
+        }
+    }
+    if (err == ESP_OK && !upload->abort) {
+        err = base64_write(upload, NULL, 0, true);
+    }
+    static const char suffix[] =
+        "\",\"task\":\"transcribe\",\"language\":\"spanish\","
+        "\"timestamp\":\"chunk\",\"batch_size\":24,"
+        "\"diarise_audio\":false}}";
+    if (err == ESP_OK && !upload->abort) {
+        err = chunk_write(upload->client, suffix, strlen(suffix));
+    }
+    if (err == ESP_OK && !upload->abort) {
+        err = write_all(upload->client, "0\r\n\r\n", 5);
+    }
+    response_buffer_t prediction = { 0 };
+    int status = 0;
+    if (err == ESP_OK && !upload->abort) {
+        err = read_http_response(upload->client, &prediction, &status);
+    }
+    if (upload->client != NULL) {
+        esp_http_client_close(upload->client);
+        esp_http_client_cleanup(upload->client);
+        upload->client = NULL;
+    }
+    if (err == ESP_OK && !upload->abort &&
+        (status < 200 || status >= 300)) {
+        printf("\n[AI STT HTTP %d] %.320s\n", status,
+               prediction.data != NULL ? prediction.data : "");
+        err = ESP_ERR_INVALID_RESPONSE;
+    }
+    if (err == ESP_OK && !upload->abort) {
+        err = wait_prediction(upload->config, &prediction,
+                              upload->transcript,
+                              upload->transcript_capacity);
+    }
+    free(prediction.data);
+    upload->result = upload->abort ? ESP_ERR_INVALID_STATE : err;
+    upload->finished = true;
+    xSemaphoreGive(upload->done);
+    vTaskDelete(NULL);
+}
+
+static esp_err_t stt_start(stt_upload_t *upload)
+{
+    if (upload->started) return ESP_OK;
+    upload->stream = xStreamBufferCreate(STT_STREAM_BUFFER_SIZE, 1);
+    upload->done = xSemaphoreCreateBinary();
+    if (upload->stream == NULL || upload->done == NULL) {
+        if (upload->stream != NULL) vStreamBufferDelete(upload->stream);
+        if (upload->done != NULL) vSemaphoreDelete(upload->done);
+        upload->stream = NULL;
+        upload->done = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+    BaseType_t created = xTaskCreate(
+        stt_upload_task, "stt_upload", 12288, upload, 5, NULL);
+    if (created != pdPASS) {
+        vStreamBufferDelete(upload->stream);
+        vSemaphoreDelete(upload->done);
+        upload->stream = NULL;
+        upload->done = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+    upload->started = true;
+    return ESP_OK;
+}
+
+static esp_err_t stt_pcm_sink(const int16_t *samples, size_t sample_count,
+                              void *context)
+{
+    stt_upload_t *upload = context;
+    esp_err_t err = stt_start(upload);
+    if (err != ESP_OK) return err;
+    if (upload->finished) return upload->result;
+    const uint8_t *bytes = (const uint8_t *)samples;
+    size_t remaining = sample_count * sizeof(*samples);
+    while (remaining > 0) {
+        if (upload->finished) return upload->result;
+        size_t sent = xStreamBufferSend(
+            upload->stream, bytes, remaining, pdMS_TO_TICKS(1000));
+        if (sent == 0) return ESP_ERR_TIMEOUT;
+        bytes += sent;
+        remaining -= sent;
+    }
+    return ESP_OK;
 }
 
 static esp_err_t transcribe(const brain_config_t *config,
@@ -606,30 +763,13 @@ static esp_err_t transcribe(const brain_config_t *config,
     esp_err_t err = prediction_endpoint(
         config, config->stt_model, url, sizeof(url), &version);
     if (err != ESP_OK) return err;
-    esp_http_client_handle_t client = create_http_client(url);
-    if (client == NULL) return ESP_ERR_NO_MEM;
-    stt_upload_t upload = { .client = client };
-    esp_http_client_set_method(client, HTTP_METHOD_POST);
-    set_bearer(client, replicate_token(config));
-    esp_http_client_set_header(client, "Content-Type", "application/json");
-    esp_http_client_set_header(client, "Prefer", "wait");
-    err = esp_http_client_open(client, -1);
-    char prefix[256];
-    int prefix_length = version != NULL
-        ? snprintf(prefix, sizeof(prefix),
-                   "{\"version\":\"%s\",\"input\":{\"audio\":"
-                   "\"data:audio/wav;base64,", version)
-        : snprintf(prefix, sizeof(prefix),
-                   "{\"input\":{\"audio\":\"data:audio/wav;base64,");
-    if (err == ESP_OK &&
-        (prefix_length <= 0 || (size_t)prefix_length >= sizeof(prefix))) {
-        err = ESP_ERR_INVALID_SIZE;
-    }
-    if (err == ESP_OK) err = chunk_write(client, prefix, prefix_length);
-    uint8_t header[44];
-    wav_header(header);
-    if (err == ESP_OK) err = base64_write(&upload, header, sizeof(header),
-                                           false);
+    stt_upload_t upload = {
+        .config = config,
+        .version = version,
+        .transcript = transcript,
+        .transcript_capacity = transcript_capacity,
+    };
+    strlcpy(upload.url, url, sizeof(upload.url));
     brain_audio_capture_result_t capture;
     brain_audio_capture_config_t capture_config = {
         .vad_threshold = config->vad_threshold,
@@ -641,28 +781,20 @@ static esp_err_t transcribe(const brain_config_t *config,
         err = brain_audio_capture(&capture_config, stt_pcm_sink,
                                   &upload, &capture);
     }
-    if (err == ESP_OK) err = base64_write(&upload, NULL, 0, true);
-    static const char suffix[] =
-        "\",\"task\":\"transcribe\",\"language\":\"spanish\","
-        "\"timestamp\":\"chunk\",\"batch_size\":24,"
-        "\"diarise_audio\":false}}";
-    if (err == ESP_OK) err = chunk_write(client, suffix, strlen(suffix));
-    if (err == ESP_OK) err = write_all(client, "0\r\n\r\n", 5);
-    response_buffer_t prediction = { 0 };
-    int status = 0;
-    if (err == ESP_OK) err = read_http_response(client, &prediction, &status);
-    esp_http_client_close(client);
-    esp_http_client_cleanup(client);
-    if (err == ESP_OK && (status < 200 || status >= 300)) {
-        printf("\n[AI STT HTTP %d] %.320s\n", status,
-               prediction.data != NULL ? prediction.data : "");
-        err = ESP_ERR_INVALID_RESPONSE;
+    if (upload.started) {
+        if (err != ESP_OK) upload.abort = true;
+        upload.capture_done = true;
+        if (xSemaphoreTake(upload.done, portMAX_DELAY) != pdTRUE &&
+            err == ESP_OK) {
+            err = ESP_FAIL;
+        } else if (err == ESP_OK) {
+            err = upload.result;
+        }
+        vStreamBufferDelete(upload.stream);
+        vSemaphoreDelete(upload.done);
+    } else if (err == ESP_OK) {
+        err = ESP_ERR_INVALID_STATE;
     }
-    if (err == ESP_OK) {
-        err = wait_prediction(config, &prediction,
-                              transcript, transcript_capacity);
-    }
-    free(prediction.data);
     return err;
 }
 
@@ -1060,26 +1192,32 @@ static esp_err_t llm_directive(const brain_config_t *config,
     char *status = json_escape(
         robot_status_json != NULL ? robot_status_json : "{}");
     char *history = json_escape(tool_history != NULL ? tool_history : "");
+    char *conversation = json_escape(s_conversation_history);
     char *model = json_escape(config->llm_model);
     if (system == NULL || user == NULL || status == NULL ||
-        history == NULL || model == NULL) {
-        free(system); free(user); free(status); free(history); free(model);
+        history == NULL || conversation == NULL || model == NULL) {
+        free(system); free(user); free(status); free(history);
+        free(conversation); free(model);
         return ESP_ERR_NO_MEM;
     }
     size_t body_size = strlen(system) + strlen(user) + strlen(status) +
-                       strlen(history) + strlen(model) + 512;
+                       strlen(history) + strlen(conversation) +
+                       strlen(model) + 640;
     char *body = malloc(body_size);
     if (body == NULL) {
-        free(system); free(user); free(status); free(history); free(model);
+        free(system); free(user); free(status); free(history);
+        free(conversation); free(model);
         return ESP_ERR_NO_MEM;
     }
     snprintf(body, body_size,
              "{\"model\":\"%s\",\"temperature\":0.7,\"messages\":["
              "{\"role\":\"system\",\"content\":\"%s\"},"
              "{\"role\":\"user\",\"content\":\"Peticion: %s\\n"
-             "Estado fisico: %s\\nResultados previos: %s\"}]}",
-             model, system, user, status, history);
-    free(system); free(user); free(status); free(history); free(model);
+             "Estado fisico: %s\\nMemoria de conversacion: %s\\n"
+             "Resultados previos de herramientas: %s\"}]}",
+             model, system, user, status, conversation, history);
+    free(system); free(user); free(status); free(history);
+    free(conversation); free(model);
     char url[MAX_URL];
     esp_err_t err = join_url(
         url, sizeof(url), config->llm_url, "/chat/completions");
@@ -1096,6 +1234,20 @@ static esp_err_t llm_directive(const brain_config_t *config,
     }
     free(response.data);
     return err;
+}
+
+static void remember_conversation(const char *message, const char *answer)
+{
+    size_t used = strlen(s_conversation_history);
+    size_t needed = strlen(message) + strlen(answer) + 32;
+    if (used + needed >= sizeof(s_conversation_history)) {
+        s_conversation_history[0] = '\0';
+        used = 0;
+    }
+    snprintf(s_conversation_history + used,
+             sizeof(s_conversation_history) - used,
+             "%sUsuario: %.1800s\nBender: %.2200s",
+             used ? "\n---\n" : "", message, answer);
 }
 
 static esp_err_t process_text(const brain_config_t *config,
@@ -1132,6 +1284,7 @@ static esp_err_t process_text(const brain_config_t *config,
             json_get_string(directive, "expression",
                             expression, sizeof(expression));
             err = speak(config, answer, expression);
+            if (err == ESP_OK) remember_conversation(message, answer);
             break;
         }
         if (strcmp(kind, "tool") != 0) {
@@ -1232,7 +1385,8 @@ esp_err_t brain_workflow_run_text(const brain_config_t *config,
         answer_capacity == 0 || !brain_workflow_config_ready(config, NULL)) {
         return ESP_ERR_INVALID_ARG;
     }
-    if (xSemaphoreTake(s_workflow_mutex, 0) != pdTRUE) {
+    if (xSemaphoreTake(s_workflow_mutex,
+                       pdMS_TO_TICKS(MANUAL_LOCK_WAIT_MS)) != pdTRUE) {
         return ESP_ERR_INVALID_STATE;
     }
     answer[0] = '\0';
@@ -1253,7 +1407,8 @@ esp_err_t brain_workflow_run_voice(const brain_config_t *config,
     if (!brain_workflow_config_ready(config, NULL)) {
         return ESP_ERR_INVALID_STATE;
     }
-    if (xSemaphoreTake(s_workflow_mutex, 0) != pdTRUE) {
+    if (xSemaphoreTake(s_workflow_mutex,
+                       pdMS_TO_TICKS(MANUAL_LOCK_WAIT_MS)) != pdTRUE) {
         return ESP_ERR_INVALID_STATE;
     }
     char *transcript = malloc(MAX_TRANSCRIPT);
@@ -1297,7 +1452,7 @@ esp_err_t brain_workflow_wait_for_wake(const brain_config_t *config,
         return ESP_ERR_INVALID_STATE;
     }
     char transcript[512];
-    esp_err_t err = transcribe(config, 900, 60000, 10000,
+    esp_err_t err = transcribe(config, 900, 5000, 10000,
                                transcript, sizeof(transcript));
     if (err == ESP_OK) {
         char normalized_transcript[512];

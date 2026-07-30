@@ -1061,13 +1061,24 @@ static char *http_json_escape(const char *value)
 static esp_err_t ai_text_handler(httpd_req_t *req)
 {
     char body[2048];
-    int received = httpd_req_recv(req, body, sizeof(body) - 1);
-    if (received <= 0) {
+    if (req->content_len == 0) {
         httpd_resp_set_status(req, "400 Bad Request");
         return httpd_resp_sendstr(
             req, "{\"ok\":false,\"error\":\"missing request body\"}");
     }
-    body[received] = '\0';
+    if (req->content_len >= sizeof(body)) {
+        httpd_resp_set_status(req, "413 Content Too Large");
+        return httpd_resp_sendstr(
+            req, "{\"ok\":false,\"error\":\"message is too large\"}");
+    }
+    size_t total = 0;
+    while (total < req->content_len) {
+        int received = httpd_req_recv(
+            req, body + total, req->content_len - total);
+        if (received <= 0) return ESP_FAIL;
+        total += (size_t)received;
+    }
+    body[total] = '\0';
     char message[1536] = "";
     if (!http_json_string(body, "message", message, sizeof(message))) {
         strlcpy(message, body, sizeof(message));
@@ -1329,6 +1340,8 @@ static void workflow_wake_task(void *arg)
                    err != ESP_ERR_INVALID_STATE) {
             ESP_LOGW(TAG, "wake listener: %s", esp_err_to_name(err));
             vTaskDelay(pdMS_TO_TICKS(2000));
+        } else if (err == ESP_ERR_TIMEOUT) {
+            vTaskDelay(pdMS_TO_TICKS(100));
         }
     }
 }

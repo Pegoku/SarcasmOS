@@ -818,6 +818,10 @@ restart_transition:
         if (incomplete_mask != 0) {
             if (eye_retry_count == 0) {
                 ++eye_retry_count;
+                if (eye_sent_mask != EYE_BOTH_MASK) {
+                    vTaskDelay(pdMS_TO_TICKS(
+                        CONFIG_SARCASMOS_NO_EYE_TIMEOUT_MS));
+                }
                 ESP_LOGW(
                     TAG,
                     "eye READY timeout target=0x%02X token=%u mask=0x%02X; "
@@ -826,11 +830,6 @@ restart_transition:
                 goto restart_transition;
             }
             degraded = true;
-            for (size_t i = 0; i < EYE_COUNT; ++i) {
-                if ((incomplete_mask & (1U << i)) != 0) {
-                    log_eye_timeout(i, request.animation, token);
-                }
-            }
         }
 
         uint8_t committed_mask = eye_commit_ready(ready_mask, token);

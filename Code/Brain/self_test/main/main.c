@@ -68,6 +68,7 @@
 #define FACE_EYE_POLL_MS 20
 #define FACE_EYE_TIMEOUT_MS 2500
 #define FACE_EYE_RETRY_COUNT 1
+#define FACE_EYE_RETRY_DELAY_MS 250
 
 #define AUDIO_SAMPLE_RATE 16000
 #define AUDIO_BLOCK_FRAMES 64
@@ -1871,6 +1872,10 @@ static void send_face_state(const face_targets_t *targets,
         if ((requested_mask & ~activated_mask) == 0 ||
             retry_count >= FACE_EYE_RETRY_COUNT) {
             break;
+        }
+        if (sent_mask != requested_mask ||
+            committed_mask != ready_mask) {
+            vTaskDelay(pdMS_TO_TICKS(FACE_EYE_RETRY_DELAY_MS));
         }
         ++retry_count;
     }

@@ -128,27 +128,6 @@ Required environment variables go in `backend/.env`, copied from `backend/.env.e
 - `ADMIN_EMAILS` comma-separated Google accounts that start as authorized admins.
 - `AUTO_AUTH=true` to authorize every Google sign-in automatically and let users configure their own API endpoints/keys.
 - Optional: `OPENROUTER_BASE_URL`, `REPLICATE_BASE_URL`, `HF_TOKEN`
-- `DEVICE_API_TOKEN` and `DEVICE_USER_EMAIL` for the physical Brain. Use a
-  long random token; provider API keys remain only on the backend.
-
-## Physical Brain voice API
-
-The ESP32 firmware uses two headless endpoints; the web UI is not involved:
-
-- `POST /api/device/wake` accepts chunked signed PCM16 mono audio. It runs STT,
-  compares `X-Wake-Phrase`, and returns one of four cached Bender
-  acknowledgements when detected.
-- `POST /api/device/voice` accepts the request audio and streams newline-
-  delimited JSON events for transcription, each tool call, tool results,
-  synthesis, and the final answer.
-
-Both endpoints expect `X-Audio-Sample-Rate: 16000` and
-`Authorization: Bearer <DEVICE_API_TOKEN>`. The voice endpoint accepts
-`X-Robot-Status` JSON so the LLM's robot-status tool reports the actual Brain
-peripherals. Tool events include a short LLM-generated Bender progress phrase
-and its TTS URL. Final events include display metadata; weather results carry
-the real temperature and weather expression. Device conversations are kept in
-the `brain-device` chat for follow-up context.
 
 For Google Tools such as Calendar, add these JavaScript origins to the same Google OAuth client:
 

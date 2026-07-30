@@ -631,8 +631,7 @@ def run_tool_call(name: str, arguments: dict, tool_context: dict | None = None) 
 
     if name == "robot_status":
         render_face("watch", "checking status")
-        physical_status = tool_context.get("robot_status")
-        return physical_status if isinstance(physical_status, dict) else robot_status()
+        return robot_status()
 
     if name == "google_calendar_search":
         access_token = str(tool_context.get("google_calendar_access_token") or "")

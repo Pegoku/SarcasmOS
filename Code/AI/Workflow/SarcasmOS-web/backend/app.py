@@ -10,16 +10,14 @@ import os
 import secrets
 import smtplib
 import threading
-import unicodedata
-import wave
 from email.message import EmailMessage
 from urllib.parse import unquote, urlparse
 import uuid
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi import Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 import requests
 
@@ -33,7 +31,6 @@ from .bender_core import (
     service_status,
     strip_tts_markup,
     synthesize_speech,
-    transcribe_audio,
 )
 
 
@@ -152,15 +149,7 @@ GOOGLE_TOOLS_LOCK = threading.RLock()
 DEVELOPER_KEYS_LOCK = threading.RLock()
 USAGE_LOCK = threading.RLock()
 HISTORY_LOCK = threading.RLock()
-DEVICE_ACK_LOCK = threading.RLock()
 CHAT_EXECUTOR = ThreadPoolExecutor(max_workers=int(os.environ.get("CHAT_CONCURRENCY", "20")))
-
-DEVICE_ACKNOWLEDGEMENTS = (
-    "¿Sí?",
-    "¿Qué quieres?",
-    "Uf, ¿qué pasa ahora?",
-    "Ni un momento me dejas solo. Espero que sea importante.",
-)
 
 
 app = FastAPI(title="SarcasmOS Bender API")
@@ -1290,37 +1279,6 @@ def current_auth_user(authorization: str | None) -> dict:
     return user
 
 
-def current_device_user(authorization: str | None) -> dict:
-    load_public_env()
-    configured_token = os.environ.get("DEVICE_API_TOKEN", "").strip()
-    supplied_token = ""
-    if authorization and authorization.lower().startswith("bearer "):
-        supplied_token = authorization.split(" ", 1)[1].strip()
-    if configured_token and supplied_token and secrets.compare_digest(
-        supplied_token, configured_token
-    ):
-        configured_email = os.environ.get("DEVICE_USER_EMAIL", "").strip().lower()
-        users = load_auth_users().get("users", {})
-        if configured_email:
-            user = users.get(configured_email)
-        else:
-            user = next(
-                (
-                    candidate
-                    for candidate in users.values()
-                    if candidate.get("isAdmin") and candidate.get("authorized")
-                ),
-                None,
-            )
-        if not user:
-            raise HTTPException(
-                status_code=503,
-                detail="DEVICE_USER_EMAIL does not identify an authorized user.",
-            )
-        return user
-    return current_auth_user(authorization)
-
-
 def require_admin_user(authorization: str | None) -> dict:
     user = current_auth_user(authorization)
     if not user.get("isAdmin"):
@@ -1638,240 +1596,6 @@ def cleanup_unreferenced_audio(items: list[dict]) -> list[str]:
             path.unlink()
             deleted.append(path.name)
     return deleted
-
-
-async def save_device_pcm_request(
-    request: Request, sample_rate: int, prefix: str
-) -> tuple[Path, float, int]:
-    if sample_rate not in (8000, 16000, 24000, 32000, 48000):
-        raise HTTPException(status_code=400, detail="Unsupported PCM sample rate.")
-    upload_path = uploads_dir() / f"{prefix}-{uuid.uuid4().hex}.wav"
-    upload_path.parent.mkdir(parents=True, exist_ok=True)
-    byte_count = 0
-    carry = b""
-    try:
-        with wave.open(str(upload_path), "wb") as output:
-            output.setnchannels(1)
-            output.setsampwidth(2)
-            output.setframerate(sample_rate)
-            async for chunk in request.stream():
-                if not chunk:
-                    continue
-                byte_count += len(chunk)
-                if byte_count > sample_rate * 2 * 60:
-                    raise HTTPException(
-                        status_code=413,
-                        detail="Device recording exceeds the 60 second limit.",
-                    )
-                chunk = carry + chunk
-                carry = chunk[-1:] if len(chunk) % 2 else b""
-                output.writeframesraw(chunk[:-1] if carry else chunk)
-            if carry:
-                raise HTTPException(
-                    status_code=400,
-                    detail="PCM16 body has an odd byte count.",
-                )
-        if byte_count < sample_rate // 2:
-            raise HTTPException(status_code=400, detail="Device recording is too short.")
-        return upload_path, byte_count / (sample_rate * 2), byte_count
-    except Exception:
-        upload_path.unlink(missing_ok=True)
-        raise
-
-
-def normalized_speech(value: str) -> str:
-    folded = unicodedata.normalize("NFKD", str(value or "").lower())
-    return " ".join(
-        "".join(character for character in folded if not unicodedata.combining(character))
-        .replace("¿", "")
-        .replace("?", "")
-        .replace("¡", "")
-        .replace("!", "")
-        .split()
-    )
-
-
-def wake_phrase_detected(transcript: str, wake_phrase: str) -> bool:
-    heard = normalized_speech(transcript)
-    wanted = normalized_speech(wake_phrase)
-    return bool(wanted and wanted in heard)
-
-
-def device_ack_audio(index: int, config: BenderConfig) -> Path:
-    output_root = outputs_dir()
-    output_root.mkdir(parents=True, exist_ok=True)
-    target = output_root / f"device-ack-{index}.wav"
-    if target.is_file() and target.stat().st_size >= 1024:
-        return target
-    with DEVICE_ACK_LOCK:
-        if target.is_file() and target.stat().st_size >= 1024:
-            return target
-        config.audio_format = "wav"
-        generated = synthesize_speech(DEVICE_ACKNOWLEDGEMENTS[index], config)
-        generated.replace(target)
-    return target
-
-
-def device_display_metadata(result: dict) -> dict:
-    expression = str(result.get("expression") or "speaking")
-    display = {"expression": expression}
-    for item in reversed(result.get("tools") or []):
-        if item.get("name") != "get_weather":
-            continue
-        weather = item.get("result")
-        if not isinstance(weather, dict) or not weather.get("ok", True):
-            continue
-        temperature = weather.get("temperature_c")
-        if isinstance(temperature, (int, float)):
-            display["temperature_c"] = max(-127, min(127, round(temperature)))
-        if weather.get("expression"):
-            display["expression"] = str(weather["expression"])
-        break
-    return display
-
-
-def ndjson_line(payload: dict) -> bytes:
-    return (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
-
-
-@app.post("/api/device/wake")
-async def device_wake(
-    request: Request,
-    wake_phrase: str = Header(default="oye bender", alias="X-Wake-Phrase"),
-    sample_rate: int = Header(default=16000, alias="X-Audio-Sample-Rate"),
-    authorization: str | None = Header(default=None),
-) -> JSONResponse:
-    user = current_device_user(authorization)
-    upload_path, duration, byte_count = await save_device_pcm_request(
-        request, sample_rate, "device-wake"
-    )
-    try:
-        assert_user_has_minimum_credits(user)
-        overrides = developer_config_for_user(user)
-        config = BenderConfig.from_env(overrides)
-        transcript = await asyncio.get_running_loop().run_in_executor(
-            CHAT_EXECUTOR, transcribe_audio, str(upload_path), config
-        )
-        detected = wake_phrase_detected(transcript, wake_phrase)
-        audio_url = ""
-        acknowledgement = ""
-        if detected:
-            index = secrets.randbelow(len(DEVICE_ACKNOWLEDGEMENTS))
-            acknowledgement = DEVICE_ACKNOWLEDGEMENTS[index]
-            ack_path = await asyncio.get_running_loop().run_in_executor(
-                CHAT_EXECUTOR, device_ack_audio, index, config
-            )
-            audio_url = f"/api/audio/{ack_path.name}"
-        quota = consume_ai_credits(
-            user,
-            *shared_credit_charge_for_user(
-                user, "audio", False, duration, byte_count, ""
-            )[:2],
-        )
-        return JSONResponse(
-            content={
-                "detected": detected,
-                "transcript": transcript,
-                "acknowledgement": acknowledgement,
-                "audio_url": audio_url,
-                "quota": quota,
-            }
-        )
-    finally:
-        upload_path.unlink(missing_ok=True)
-
-
-@app.post("/api/device/voice")
-async def device_voice(
-    request: Request,
-    sample_rate: int = Header(default=16000, alias="X-Audio-Sample-Rate"),
-    authorization: str | None = Header(default=None),
-) -> StreamingResponse:
-    user = current_device_user(authorization)
-    assert_user_has_minimum_credits(user)
-    upload_path, duration, byte_count = await save_device_pcm_request(
-        request, sample_rate, "device-voice"
-    )
-    context = best_chat_context(None, "brain-device", user["email"])
-    tool_context = tool_context_for_user(user)
-    overrides = developer_config_for_user(user)
-
-    async def event_stream():
-        loop = asyncio.get_running_loop()
-        queue: asyncio.Queue[dict] = asyncio.Queue()
-
-        def publish(event: dict) -> None:
-            event = dict(event)
-            if event.get("type") == "tool_start":
-                try:
-                    progress_config = BenderConfig.from_env(overrides)
-                    progress_config.audio_format = "wav"
-                    progress_path = synthesize_speech(
-                        str(event.get("message") or ""), progress_config
-                    )
-                    event["audio_url"] = f"/api/audio/{progress_path.name}"
-                except Exception as error:
-                    event["audio_error"] = str(error)
-            asyncio.run_coroutine_threadsafe(queue.put(event), loop).result()
-
-        def run_workflow() -> None:
-            try:
-                result = process_audio_file(
-                    str(upload_path),
-                    {
-                        "context": context,
-                        "tool_context": tool_context,
-                        "synthesize_audio": True,
-                        "config_overrides": overrides,
-                        "event_callback": publish,
-                        "force_wav": True,
-                    },
-                )
-                output_name = (
-                    Path(result["audio_path"]).name
-                    if result.get("audio_path")
-                    else ""
-                )
-                quota = consume_ai_credits(
-                    user,
-                    *shared_credit_charge_for_user(
-                        user,
-                        "audio",
-                        True,
-                        duration,
-                        byte_count,
-                        result.get("answer", ""),
-                    )[:2],
-                )
-                publish(
-                    {
-                        "type": "done",
-                        "transcript": result.get("transcript", ""),
-                        "answer": result.get("answer", ""),
-                        "audio_url": (
-                            f"/api/audio/{output_name}" if output_name else ""
-                        ),
-                        "display": device_display_metadata(result),
-                        "quota": quota,
-                    }
-                )
-            except Exception as error:
-                publish({"type": "error", "error": str(error)})
-            finally:
-                upload_path.unlink(missing_ok=True)
-                publish({"type": "_end"})
-
-        worker = asyncio.create_task(asyncio.to_thread(run_workflow))
-        try:
-            while True:
-                event = await queue.get()
-                if event.get("type") == "_end":
-                    break
-                yield ndjson_line(event)
-        finally:
-            await worker
-
-    return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 
 
 @app.post("/api/chat/audio")

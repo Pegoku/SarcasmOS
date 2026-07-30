@@ -11,7 +11,6 @@ import urllib.parse
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
@@ -36,8 +35,6 @@ TTS_EXPRESSION_TAG_RE = re.compile(
 TTS_PAUSE_TAG_RE = re.compile(r"<#\s*\d+(?:\.\d+)?\s*#>")
 MULTISPACE_RE = re.compile(r"[ \t]{2,}")
 MULTILINE_SPACE_RE = re.compile(r"\n{3,}")
-
-WorkflowEventCallback = Callable[[dict], None]
 
 SUPPORTED_INPUT_EXTENSIONS = {
     ".wav",
@@ -851,29 +848,6 @@ def force_human_answer(transcript: str, answer: str) -> str:
     )
 
 
-def emit_workflow_event(
-    callback: WorkflowEventCallback | None, event_type: str, **payload: object
-) -> None:
-    if callback:
-        callback({"type": event_type, **payload})
-
-
-def tool_progress_message(tool_name: str, model_message: object) -> str:
-    message = str(model_message or "").strip()
-    if message:
-        return strip_tts_markup(message)[:300]
-    fallbacks = {
-        "get_weather": "Voy a mirar el tiempo. Espero que las nubes sepan usar una API.",
-        "get_time": "Voy a comprobar la hora, porque mirar un reloj era demasiado fácil.",
-        "robot_status": "Voy a revisar mis sistemas. Intenta no tocar nada mientras conservo la dignidad.",
-        "google_calendar_search": "Voy a mirar tu calendario. Seguro que está lleno de cosas importantísimas.",
-    }
-    return fallbacks.get(
-        tool_name,
-        "Tengo que consultar otra cosa. Qué emoción: más llamadas y menos siesta.",
-    )
-
-
 def generate_answer(
     api_token: str,
     base_url: str,
@@ -885,8 +859,6 @@ def generate_answer(
     fallback_token: str = "",
     fallback_base_url: str = "",
     fallback_model: str = "",
-    event_callback: WorkflowEventCallback | None = None,
-    run_metadata: dict | None = None,
 ) -> str:
     tool_context = tool_context or {}
     tools = list(TOOLS)
@@ -907,8 +879,6 @@ def generate_answer(
         + "For relative dates, call get_time first if needed, then search the relevant date range.\n"
         + "\n\nANSWERING STYLE:\n"
         + "- Always return a normal textual answer for the user. Never return raw JSON, tool names, commands, or internal state.\n"
-        + "- When you call a tool, put one short Spanish Bender-style sentence in the assistant content explaining what you are about to check. "
-        + "It will be spoken while the tool runs, so make it directly related to that tool and do not claim the result is known yet.\n"
         + "- If the answer is uncomfortable, direct, or harsh, still answer clearly and honestly, with a small touch of Bender-style humor.\n"
         + "- If the user gives only a vague fragment, say what is missing and make a useful guess instead of staying silent."
     )
@@ -919,11 +889,8 @@ def generate_answer(
     messages.append({"role": "user", "content": transcript})
     final_expression = "speaking"
     tool_results: list[tuple[str, object]] = []
-    metadata = run_metadata if run_metadata is not None else {}
-    metadata["tools"] = []
-    metadata["expression"] = final_expression
 
-    for round_index in range(MAX_TOOL_ROUNDS):
+    for _ in range(MAX_TOOL_ROUNDS):
         render_face("thinking", "generating/tool planning")
         try:
             data = chat_completion_with_fallback(
@@ -941,7 +908,6 @@ def generate_answer(
             )
         except ToolContinuationRejected:
             answer = local_tool_answer(tool_results)
-            metadata["expression"] = final_expression
             render_face(final_expression, "local tool answer ready")
             return answer
         message = data["choices"][0]["message"]
@@ -952,7 +918,6 @@ def generate_answer(
             if not answer or not answer.strip():
                 raise RuntimeError("LLM returned an empty answer.")
             answer = force_human_answer(transcript, answer)
-            metadata["expression"] = final_expression
             render_face(final_expression, "final answer ready")
             return answer
 
@@ -966,14 +931,6 @@ def generate_answer(
         for tool_call in tool_calls:
             function = tool_call.get("function", {})
             name = function.get("name", "")
-            progress = tool_progress_message(name, message.get("content"))
-            emit_workflow_event(
-                event_callback,
-                "tool_start",
-                tool=name,
-                round=round_index + 1,
-                message=progress,
-            )
             try:
                 arguments = parse_tool_arguments(function.get("arguments"))
                 result = run_tool_call(name, arguments, tool_context)
@@ -981,18 +938,8 @@ def generate_answer(
                 render_face("error", name)
                 result = {"ok": False, "error": str(error)}
             tool_results.append((name, result))
-            metadata["tools"].append({"name": name, "result": result})
             if isinstance(result, dict) and result.get("expression"):
                 final_expression = str(result["expression"])
-                metadata["expression"] = final_expression
-            emit_workflow_event(
-                event_callback,
-                "tool_result",
-                tool=name,
-                round=round_index + 1,
-                result=result,
-                expression=final_expression,
-            )
             messages.append(
                 {
                     "role": "tool",
@@ -1162,8 +1109,6 @@ def generate_text_answer(
     config: BenderConfig,
     context: list[dict] | None = None,
     tool_context: dict | None = None,
-    event_callback: WorkflowEventCallback | None = None,
-    run_metadata: dict | None = None,
 ) -> str:
     render_face("thinking", "generating answer")
     answer = generate_answer(
@@ -1177,8 +1122,6 @@ def generate_text_answer(
         config.fallback_llm_token,
         config.fallback_llm_base_url,
         config.fallback_llm_model,
-        event_callback,
-        run_metadata,
     )
     if len(answer) > 10000:
         raise RuntimeError("LLM answer is longer than the 10,000 character TTS limit.")
@@ -1244,56 +1187,24 @@ def synthesize_speech(text: str, config: BenderConfig) -> Path:
 def process_audio_file(audio_path: str, options: dict | None = None) -> dict:
     options = options or {}
     config = BenderConfig.from_env(options.get("config_overrides"))
-    if options.get("force_wav"):
-        config.audio_format = "wav"
-    event_callback = options.get("event_callback")
-    emit_workflow_event(event_callback, "stage", stage="transcribing")
     transcript = transcribe_audio(audio_path, config)
-    emit_workflow_event(
-        event_callback, "transcript", transcript=transcript
-    )
-    metadata: dict = {}
-    answer = generate_text_answer(
-        transcript,
-        config,
-        options.get("context"),
-        options.get("tool_context"),
-        event_callback,
-        metadata,
-    )
-    emit_workflow_event(event_callback, "stage", stage="synthesizing")
+    answer = generate_text_answer(transcript, config, options.get("context"), options.get("tool_context"))
     output_path = synthesize_speech(answer, config) if options.get("synthesize_audio", True) else None
     return {
         "transcript": transcript,
         "answer": strip_tts_markup(answer),
         "tts_answer": answer,
         "audio_path": str(output_path) if output_path else "",
-        "expression": metadata.get("expression", "speaking"),
-        "tools": metadata.get("tools", []),
     }
 
 
 def process_text_message(message: str, options: dict | None = None) -> dict:
     options = options or {}
     config = BenderConfig.from_env(options.get("config_overrides"))
-    if options.get("force_wav"):
-        config.audio_format = "wav"
-    event_callback = options.get("event_callback")
-    metadata: dict = {}
-    answer = generate_text_answer(
-        message,
-        config,
-        options.get("context"),
-        options.get("tool_context"),
-        event_callback,
-        metadata,
-    )
-    emit_workflow_event(event_callback, "stage", stage="synthesizing")
+    answer = generate_text_answer(message, config, options.get("context"), options.get("tool_context"))
     output_path = synthesize_speech(answer, config) if options.get("synthesize_audio", True) else None
     return {
         "answer": strip_tts_markup(answer),
         "tts_answer": answer,
         "audio_path": str(output_path) if output_path else "",
-        "expression": metadata.get("expression", "speaking"),
-        "tools": metadata.get("tools", []),
     }

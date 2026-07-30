@@ -1722,14 +1722,8 @@ def device_display_metadata(result: dict) -> dict:
         if not isinstance(weather, dict) or not weather.get("ok", True):
             continue
         temperature = weather.get("temperature_c")
-        try:
-            numeric_temperature = float(temperature)
-        except (TypeError, ValueError):
-            numeric_temperature = None
-        if numeric_temperature is not None:
-            display["temperature_c"] = max(
-                -127, min(127, round(numeric_temperature))
-            )
+        if isinstance(temperature, (int, float)):
+            display["temperature_c"] = max(-127, min(127, round(temperature)))
         if weather.get("expression"):
             display["expression"] = str(weather["expression"])
         break

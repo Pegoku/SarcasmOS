@@ -8,6 +8,32 @@ config SARCASMOS_WIFI_PASSWORD
     string "Wi-Fi password"
     default ""
 
+config SARCASMOS_WORKFLOW_URL
+    string "SarcasmOS Workflow backend URL"
+    default ""
+
+config SARCASMOS_WORKFLOW_TOKEN
+    string "Workflow bearer/device token"
+    default ""
+
+config SARCASMOS_WAKE_PHRASE
+    string "Wake phrase"
+    default "oye bender"
+
+config SARCASMOS_WAKE_ENABLED
+    bool "Enable wake phrase listener at boot"
+    default n
+
+config SARCASMOS_LISTEN_SILENCE_MS
+    int "Silence that finishes a voice request (ms)"
+    range 500 15000
+    default 5000
+
+config SARCASMOS_VAD_THRESHOLD
+    int "Microphone voice activity threshold"
+    range 1 65535
+    default 1200
+
 config SARCASMOS_ENABLE_WIFI
     bool "Enable Wi-Fi station at boot"
     default y

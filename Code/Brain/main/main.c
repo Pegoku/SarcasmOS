@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <ctype.h>
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -8,6 +9,9 @@
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
 #include "driver/i2s_std.h"
+#include "driver/usb_serial_jtag.h"
+#include "driver/usb_serial_jtag_vfs.h"
+#include "brain_config.h"
 #include "display_protocol.h"
 #include "eye_protocol.h"
 #include "esp_check.h"
@@ -158,11 +162,14 @@ static bool g_wifi_connected;
 static bool g_wifi_should_connect;
 static bool g_ethernet_connected;
 static bool g_mouth_initialized;
+static bool g_usb_driver_ready;
+static bool g_discard_line_feed;
 static EventGroupHandle_t g_wifi_events;
 static i2c_master_bus_handle_t g_i2c_bus;
 static QueueHandle_t g_face_queue;
 static SemaphoreHandle_t g_face_mutex;
 static SemaphoreHandle_t g_display_mutex;
+static brain_config_t g_config;
 static face_transition_status_t g_face_transition = {
     .desired_animation = ANIM_IDLE,
     .committed_animation = ANIM_IDLE,
@@ -524,12 +531,12 @@ static esp_err_t start_wifi(void)
                         TAG, "Wi-Fi mode setup failed");
 
 #if CONFIG_SARCASMOS_ENABLE_WIFI
-    g_wifi_should_connect = strlen(CONFIG_SARCASMOS_WIFI_SSID) > 0;
+    g_wifi_should_connect = strlen(g_config.wifi_ssid) > 0;
     if (g_wifi_should_connect) {
         wifi_config_t wifi_config = { 0 };
-        strlcpy((char *)wifi_config.sta.ssid, CONFIG_SARCASMOS_WIFI_SSID,
+        strlcpy((char *)wifi_config.sta.ssid, g_config.wifi_ssid,
                 sizeof(wifi_config.sta.ssid));
-        strlcpy((char *)wifi_config.sta.password, CONFIG_SARCASMOS_WIFI_PASSWORD,
+        strlcpy((char *)wifi_config.sta.password, g_config.wifi_password,
                 sizeof(wifi_config.sta.password));
         wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
         ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_STA, &wifi_config),
@@ -1031,13 +1038,523 @@ static void start_http_server(void)
     ESP_ERROR_CHECK(httpd_register_uri_handler(server, &command_uri));
 }
 
+typedef enum {
+    CLI_PAGE_HOME,
+    CLI_PAGE_TEST,
+    CLI_PAGE_INTERACT,
+    CLI_PAGE_CONFIG,
+} cli_page_t;
+
+typedef struct {
+    uint8_t id;
+    const char *name;
+} animation_option_t;
+
+static const animation_option_t CLI_ANIMATIONS[] = {
+    { DISPLAY_ANIM_IDLE, "idle" },
+    { DISPLAY_ANIM_LISTENING, "listening" },
+    { DISPLAY_ANIM_THINKING, "thinking" },
+    { DISPLAY_ANIM_THINKING_AUDIO, "thinking_audio" },
+    { DISPLAY_ANIM_THINKING_LONG, "thinking_long" },
+    { DISPLAY_ANIM_SPEAKING, "speaking" },
+    { DISPLAY_ANIM_HAPPY, "happy" },
+    { DISPLAY_ANIM_ANGRY, "angry" },
+    { DISPLAY_ANIM_ERROR, "error" },
+    { DISPLAY_ANIM_SLEEP, "sleep" },
+    { DISPLAY_ANIM_TOOL, "tool" },
+    { DISPLAY_ANIM_LEFT, "left" },
+    { DISPLAY_ANIM_RIGHT, "right" },
+    { DISPLAY_ANIM_UP, "up" },
+    { DISPLAY_ANIM_DOWN, "down" },
+    { DISPLAY_ANIM_CENTER, "center" },
+    { DISPLAY_ANIM_NEUTRAL, "neutral" },
+    { DISPLAY_ANIM_SARCASTIC, "sarcastic" },
+    { DISPLAY_ANIM_SUSPICIOUS, "suspicious" },
+    { DISPLAY_ANIM_TIRED, "tired" },
+    { DISPLAY_ANIM_SURPRISED, "surprised" },
+    { DISPLAY_ANIM_BORED, "bored" },
+    { DISPLAY_ANIM_DRAMATIC, "dramatic" },
+    { DISPLAY_ANIM_WATCH, "watch" },
+    { DISPLAY_ANIM_PARTY, "party" },
+    { DISPLAY_ANIM_BATTERY_LOW, "battery_low" },
+    { DISPLAY_ANIM_SUNNY, "sunny" },
+    { DISPLAY_ANIM_RAINY, "rainy" },
+    { DISPLAY_ANIM_CLOUDY, "cloudy" },
+    { DISPLAY_ANIM_STORMY, "stormy" },
+    { DISPLAY_ANIM_SNOWY, "snowy" },
+};
+
+static bool cli_read_serial_byte(uint8_t *input, TickType_t timeout)
+{
+    if (g_usb_driver_ready) {
+        return usb_serial_jtag_read_bytes(input, 1, timeout) == 1;
+    }
+    int character = fgetc(stdin);
+    if (character == EOF) {
+        clearerr(stdin);
+        if (timeout > 0) {
+            vTaskDelay(timeout);
+        }
+        return false;
+    }
+    *input = (uint8_t)character;
+    return true;
+}
+
+static bool cli_read_line(const char *prompt, char *buffer, size_t capacity)
+{
+    size_t length = 0;
+    if (capacity == 0) {
+        return false;
+    }
+    buffer[0] = '\0';
+    printf("%s", prompt);
+    fflush(stdout);
+    while (true) {
+        uint8_t input;
+        if (!cli_read_serial_byte(&input, pdMS_TO_TICKS(20))) {
+            continue;
+        }
+        if (g_discard_line_feed) {
+            g_discard_line_feed = false;
+            if (input == '\n') {
+                continue;
+            }
+        }
+        if (input == '\r' || input == '\n') {
+            g_discard_line_feed = input == '\r';
+            buffer[length] = '\0';
+            printf("\n");
+            fflush(stdout);
+            return true;
+        }
+        if (input == '\b' || input == 0x7f) {
+            if (length > 0) {
+                buffer[--length] = '\0';
+                printf("\b \b");
+                fflush(stdout);
+            }
+            continue;
+        }
+        if (input >= 0x20 && length + 1 < capacity) {
+            buffer[length++] = (char)input;
+            buffer[length] = '\0';
+            putchar(input);
+            fflush(stdout);
+        }
+    }
+}
+
+static char *cli_trim(char *value)
+{
+    while (isspace((unsigned char)*value)) {
+        ++value;
+    }
+    char *end = value + strlen(value);
+    while (end > value && isspace((unsigned char)end[-1])) {
+        *--end = '\0';
+    }
+    return value;
+}
+
+static void cli_print_home(void)
+{
+    printf("\n================ SarcasmOS Brain ================\n");
+    printf("  1  Testing       board and peripheral diagnostics\n");
+    printf("  2  Interact      displays, power and AI assistant\n");
+    printf("  3  Configuration persistent Wi-Fi and AI settings\n");
+    printf("  s  Quick status  h/? show this page\n");
+    printf("==================================================\n");
+}
+
+static void cli_print_test(void)
+{
+    printf("\n---------------- Testing ----------------\n");
+    printf("  a  run all checks       i  scan I2C bus\n");
+    printf("  e  read both eyes       m  ping mouth\n");
+    printf("  n  network status       g  GPIO/power status\n");
+    printf("  0  home                 h/? show this page\n");
+    printf("-----------------------------------------\n");
+}
+
+static void cli_print_interact(void)
+{
+    printf("\n--------------- Interact ----------------\n");
+    printf("  face <hex>       send an animation to eyes + mouth\n");
+    printf("  states           list animation codes\n");
+    printf("  brightness <0-255>\n");
+    printf("  buck 5v on|off   buck hp on|off\n");
+    printf("  listen           start one assistant voice interaction\n");
+    printf("  0  home          h/? show this page\n");
+    printf("-----------------------------------------\n");
+}
+
+static void cli_print_config(void)
+{
+    printf("\n------------- Configuration -------------\n");
+    printf("  show\n");
+    printf("  set ssid <value>          set password <value>\n");
+    printf("  set url <http[s]://...>   set token <value>\n");
+    printf("  set wake <phrase>         set wake-enabled on|off\n");
+    printf("  set silence-ms <500-15000>\n");
+    printf("  set vad <1-65535>         reset\n");
+    printf("  apply-wifi                apply Wi-Fi without rebooting\n");
+    printf("  0  home                   h/? show this page\n");
+    printf("-----------------------------------------\n");
+}
+
+static void cli_print_status(void)
+{
+    mouth_espnow_status_t mouth = { 0 };
+    if (g_mouth_initialized) {
+        mouth_espnow_get_status(&mouth);
+    }
+    printf("State: %-10s  Wi-Fi: %-12s  Ethernet: %s\n",
+           state_name(g_state),
+           g_wifi_connected ? "connected" :
+               (g_wifi_should_connect ? "connecting" : "not configured"),
+           g_ethernet_connected ? "connected" : "offline");
+    printf("Power: +5V=%s  5VHP=%s  charger=%s\n",
+           gpio_get_level(PIN_5V_EN) ? "ON" : "OFF",
+           gpio_get_level(PIN_5VHP_EN) ? "ON" : "OFF",
+           gpio_get_level(PIN_CHARGER_CE) == 0 ? "enabled" : "disabled");
+    printf("Eyes: left=%s right=%s  Mouth: %s\n",
+           g_displays[EYE_LEFT_INDEX].present ? "online" : "unknown/offline",
+           g_displays[EYE_RIGHT_INDEX].present ? "online" : "unknown/offline",
+           mouth.present ? "online" :
+               (g_mouth_initialized ? "awaiting response" : "disabled"));
+}
+
+static void cli_scan_i2c(void)
+{
+    printf("Scanning I2C addresses");
+    fflush(stdout);
+    unsigned found = 0;
+    if (xSemaphoreTake(g_display_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        printf("\n[FAIL] I2C bus is busy.\n");
+        return;
+    }
+    for (uint8_t address = 1; address < 0x7f; ++address) {
+        if (i2c_master_probe(g_i2c_bus, address, 30) == ESP_OK) {
+            printf("\n  0x%02X%s", address,
+                   address == ADDR_LEFT_EYE ? " left eye" :
+                   address == ADDR_RIGHT_EYE ? " right eye" : "");
+            ++found;
+        }
+    }
+    xSemaphoreGive(g_display_mutex);
+    printf("\n%s: %u device%s found.\n", found ? "[PASS]" : "[WARN]",
+           found, found == 1 ? "" : "s");
+}
+
+static void cli_test_eyes(void)
+{
+    for (size_t i = 0; i < EYE_COUNT; ++i) {
+        eye_protocol_status_t status;
+        esp_err_t err = eye_read_status(&g_displays[i], &status);
+        if (err == ESP_OK) {
+            printf("[PASS] %-9s firmware %u.%u animation=0x%02X frame=%u\n",
+                   g_displays[i].name, status.firmware_major,
+                   status.firmware_minor, status.active_animation,
+                   status.current_frame);
+        } else {
+            printf("[FAIL] %-9s %s\n", g_displays[i].name,
+                   esp_err_to_name(err));
+        }
+    }
+}
+
+static void cli_test_mouth(void)
+{
+    if (!g_mouth_initialized) {
+        printf("[FAIL] Mouth ESP-NOW is not initialized.\n");
+        return;
+    }
+    esp_err_t err = mouth_command(CMD_GET_INFO, NULL, 0);
+    mouth_espnow_status_t status = { 0 };
+    mouth_espnow_get_status(&status);
+    printf("[%s] Mouth ping: %s, present=%s, firmware=%u.%u, channel=%u\n",
+           err == ESP_OK ? "PASS" : "FAIL", esp_err_to_name(err),
+           status.present ? "yes" : "no", status.firmware_major,
+           status.firmware_minor, status.channel);
+}
+
+static void cli_network_status(void)
+{
+    cli_print_status();
+    if (g_wifi_connected) {
+        wifi_ap_record_t access_point = { 0 };
+        if (esp_wifi_sta_get_ap_info(&access_point) == ESP_OK) {
+            printf("Wi-Fi SSID: %s  RSSI: %d dBm  channel: %u\n",
+                   access_point.ssid, access_point.rssi,
+                   access_point.primary);
+        }
+    }
+}
+
+static void cli_run_tests(void)
+{
+    printf("\nRunning regular-firmware diagnostics...\n");
+    printf("[PASS] MCU uptime=%" PRIu32 " ms, free heap=%" PRIu32 " bytes\n",
+           uptime_ms(), esp_get_free_heap_size());
+    cli_print_status();
+    cli_scan_i2c();
+    cli_test_eyes();
+    cli_test_mouth();
+    cli_network_status();
+    printf("Diagnostics complete. Power rails still require a multimeter "
+           "for voltage verification.\n");
+}
+
+static void cli_list_animations(void)
+{
+    for (size_t i = 0;
+         i < sizeof(CLI_ANIMATIONS) / sizeof(CLI_ANIMATIONS[0]); ++i) {
+        printf("  0x%02X  %s\n", CLI_ANIMATIONS[i].id,
+               CLI_ANIMATIONS[i].name);
+    }
+}
+
+static esp_err_t cli_apply_wifi(void)
+{
+#if CONFIG_SARCASMOS_ENABLE_WIFI
+    g_wifi_should_connect = g_config.wifi_ssid[0] != '\0';
+    esp_wifi_disconnect();
+    wifi_config_t wifi_config = { 0 };
+    strlcpy((char *)wifi_config.sta.ssid, g_config.wifi_ssid,
+            sizeof(wifi_config.sta.ssid));
+    strlcpy((char *)wifi_config.sta.password, g_config.wifi_password,
+            sizeof(wifi_config.sta.password));
+    wifi_config.sta.threshold.authmode =
+        g_config.wifi_password[0] == '\0' ? WIFI_AUTH_OPEN :
+                                           WIFI_AUTH_WPA2_PSK;
+    ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_STA, &wifi_config),
+                        TAG, "Wi-Fi config apply failed");
+    if (g_wifi_should_connect) {
+        return esp_wifi_connect();
+    }
+    return ESP_OK;
+#else
+    return ESP_ERR_NOT_SUPPORTED;
+#endif
+}
+
+static void cli_show_config(void)
+{
+    printf("Wi-Fi SSID:       %s\n",
+           g_config.wifi_ssid[0] ? g_config.wifi_ssid : "<not set>");
+    printf("Wi-Fi password:   %s\n",
+           g_config.wifi_password[0] ? "<set>" : "<not set>");
+    printf("Workflow URL:     %s\n",
+           g_config.workflow_url[0] ? g_config.workflow_url : "<not set>");
+    printf("Workflow token:   %s\n",
+           g_config.workflow_token[0] ? "<set>" : "<not set>");
+    printf("Wake phrase:      %s\n",
+           g_config.wake_phrase[0] ? g_config.wake_phrase : "<not set>");
+    printf("Wake enabled:     %s\n", g_config.wake_enabled ? "yes" : "no");
+    printf("Silence timeout:  %u ms\n", g_config.silence_ms);
+    printf("VAD threshold:    %u\n", g_config.vad_threshold);
+    printf("Values stored from this page override blank or default build values.\n");
+}
+
+static void cli_set_config(char *arguments)
+{
+    char *key = arguments;
+    while (*arguments && !isspace((unsigned char)*arguments)) {
+        ++arguments;
+    }
+    if (*arguments) {
+        *arguments++ = '\0';
+    }
+    char *value = cli_trim(arguments);
+    esp_err_t err = ESP_ERR_INVALID_ARG;
+    if (strcmp(key, "ssid") == 0) {
+        err = brain_config_set_string(
+            &g_config, BRAIN_CONFIG_WIFI_SSID, value);
+    } else if (strcmp(key, "password") == 0) {
+        err = brain_config_set_string(
+            &g_config, BRAIN_CONFIG_WIFI_PASSWORD, value);
+    } else if (strcmp(key, "url") == 0) {
+        err = brain_config_set_string(
+            &g_config, BRAIN_CONFIG_WORKFLOW_URL, value);
+    } else if (strcmp(key, "token") == 0) {
+        err = brain_config_set_string(
+            &g_config, BRAIN_CONFIG_WORKFLOW_TOKEN, value);
+    } else if (strcmp(key, "wake") == 0) {
+        err = brain_config_set_string(
+            &g_config, BRAIN_CONFIG_WAKE_PHRASE, value);
+    } else if (strcmp(key, "wake-enabled") == 0) {
+        if (strcmp(value, "on") == 0 || strcmp(value, "true") == 0) {
+            err = brain_config_set_wake_enabled(&g_config, true);
+        } else if (strcmp(value, "off") == 0 ||
+                   strcmp(value, "false") == 0) {
+            err = brain_config_set_wake_enabled(&g_config, false);
+        }
+    } else if (strcmp(key, "silence-ms") == 0) {
+        char *end = NULL;
+        unsigned long parsed = strtoul(value, &end, 10);
+        if (end != value && *end == '\0' && parsed <= UINT16_MAX) {
+            err = brain_config_set_silence_ms(
+                &g_config, (uint16_t)parsed);
+        }
+    } else if (strcmp(key, "vad") == 0) {
+        char *end = NULL;
+        unsigned long parsed = strtoul(value, &end, 10);
+        if (end != value && *end == '\0' && parsed <= UINT16_MAX) {
+            err = brain_config_set_vad_threshold(
+                &g_config, (uint16_t)parsed);
+        }
+    } else {
+        printf("Unknown configuration key '%s'.\n", key);
+        return;
+    }
+    printf("%s: %s\n", err == ESP_OK ? "Saved" : "Not saved",
+           esp_err_to_name(err));
+}
+
+static void cli_handle_test(char *command)
+{
+    if (strcmp(command, "a") == 0) cli_run_tests();
+    else if (strcmp(command, "i") == 0) cli_scan_i2c();
+    else if (strcmp(command, "e") == 0) cli_test_eyes();
+    else if (strcmp(command, "m") == 0) cli_test_mouth();
+    else if (strcmp(command, "n") == 0) cli_network_status();
+    else if (strcmp(command, "g") == 0) cli_print_status();
+    else printf("Unknown test command. Enter h for this page.\n");
+}
+
+static void cli_handle_interact(char *command)
+{
+    if (strcmp(command, "states") == 0) {
+        cli_list_animations();
+    } else if (strncmp(command, "face ", 5) == 0) {
+        char *value = cli_trim(command + 5);
+        char *end = NULL;
+        unsigned long animation = strtoul(value, &end, 0);
+        esp_err_t err =
+            end != value && *end == '\0' &&
+                    animation < DISPLAY_ANIM_COUNT
+                ? request_face_state((uint8_t)animation, false)
+                : ESP_ERR_INVALID_ARG;
+        printf("Face state: %s\n", esp_err_to_name(err));
+    } else if (strncmp(command, "brightness ", 11) == 0) {
+        char *value = cli_trim(command + 11);
+        char *end = NULL;
+        unsigned long brightness = strtoul(value, &end, 10);
+        if (end != value && *end == '\0' && brightness <= UINT8_MAX) {
+            g_brightness = (uint8_t)brightness;
+            esp_err_t err = display_command_non_animation_all(
+                CMD_SET_BRIGHTNESS, &g_brightness, 1);
+            printf("Brightness: %s\n", esp_err_to_name(err));
+        } else {
+            printf("Brightness must be from 0 through 255.\n");
+        }
+    } else if (strcmp(command, "buck 5v on") == 0 ||
+               strcmp(command, "buck 5v off") == 0) {
+        gpio_set_level(PIN_5V_EN, strcmp(command, "buck 5v on") == 0);
+        printf("+5V buck %s.\n", gpio_get_level(PIN_5V_EN) ? "ON" : "OFF");
+    } else if (strcmp(command, "buck hp on") == 0 ||
+               strcmp(command, "buck hp off") == 0) {
+        gpio_set_level(PIN_5VHP_EN, strcmp(command, "buck hp on") == 0);
+        printf("5VHP buck %s.\n",
+               gpio_get_level(PIN_5VHP_EN) ? "ON" : "OFF");
+    } else if (strcmp(command, "listen") == 0) {
+        printf("AI voice transport is not ready yet; configure its URL/token "
+               "now, then use this command after the workflow module is enabled.\n");
+    } else {
+        printf("Unknown interaction command. Enter h for this page.\n");
+    }
+}
+
+static void cli_handle_config(char *command)
+{
+    if (strcmp(command, "show") == 0) {
+        cli_show_config();
+    } else if (strncmp(command, "set ", 4) == 0) {
+        cli_set_config(cli_trim(command + 4));
+    } else if (strcmp(command, "apply-wifi") == 0) {
+        esp_err_t err = cli_apply_wifi();
+        printf("Wi-Fi apply: %s\n", esp_err_to_name(err));
+    } else if (strcmp(command, "reset") == 0) {
+        esp_err_t err = brain_config_reset();
+        if (err == ESP_OK) {
+            err = brain_config_load(&g_config);
+        }
+        printf("Configuration reset: %s\n", esp_err_to_name(err));
+    } else {
+        printf("Unknown configuration command. Enter h for this page.\n");
+    }
+}
+
+static void cli_task(void *arg)
+{
+    (void)arg;
+    cli_page_t page = CLI_PAGE_HOME;
+    char input[256];
+    printf("\nUSB console ready. Enter h for the three-page menu.\n");
+    cli_print_home();
+    while (true) {
+        const char *prompt =
+            page == CLI_PAGE_TEST ? "brain/test> " :
+            page == CLI_PAGE_INTERACT ? "brain/interact> " :
+            page == CLI_PAGE_CONFIG ? "brain/config> " : "brain> ";
+        if (!cli_read_line(prompt, input, sizeof(input))) {
+            continue;
+        }
+        char *command = cli_trim(input);
+        if (strcmp(command, "0") == 0 || strcmp(command, "home") == 0) {
+            page = CLI_PAGE_HOME;
+            cli_print_home();
+        } else if (strcmp(command, "h") == 0 ||
+                   strcmp(command, "?") == 0 || command[0] == '\0') {
+            if (page == CLI_PAGE_TEST) cli_print_test();
+            else if (page == CLI_PAGE_INTERACT) cli_print_interact();
+            else if (page == CLI_PAGE_CONFIG) cli_print_config();
+            else cli_print_home();
+        } else if (page == CLI_PAGE_HOME) {
+            if (strcmp(command, "1") == 0) {
+                page = CLI_PAGE_TEST;
+                cli_print_test();
+            } else if (strcmp(command, "2") == 0) {
+                page = CLI_PAGE_INTERACT;
+                cli_print_interact();
+            } else if (strcmp(command, "3") == 0) {
+                page = CLI_PAGE_CONFIG;
+                cli_print_config();
+            } else if (strcmp(command, "s") == 0) {
+                cli_print_status();
+            } else {
+                printf("Unknown command. Enter 1, 2, 3, s or h.\n");
+            }
+        } else if (page == CLI_PAGE_TEST) {
+            cli_handle_test(command);
+        } else if (page == CLI_PAGE_INTERACT) {
+            cli_handle_interact(command);
+        } else {
+            cli_handle_config(command);
+        }
+    }
+}
+
 void app_main(void)
 {
+    vTaskDelay(pdMS_TO_TICKS(300));
+    usb_serial_jtag_driver_config_t usb_config =
+        USB_SERIAL_JTAG_DRIVER_CONFIG_DEFAULT();
+    esp_err_t usb_err = usb_serial_jtag_driver_install(&usb_config);
+    if (usb_err == ESP_OK) {
+        usb_serial_jtag_vfs_use_driver();
+        g_usb_driver_ready = true;
+    }
+    setvbuf(stdin, NULL, _IONBF, 0);
+    setvbuf(stdout, NULL, _IONBF, 0);
+
     esp_err_t nvs = nvs_flash_init();
     if (nvs == ESP_ERR_NVS_NO_FREE_PAGES || nvs == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
         ESP_ERROR_CHECK(nvs_flash_init());
     }
+    ESP_ERROR_CHECK(brain_config_load(&g_config));
     g_face_queue = xQueueCreate(1, sizeof(face_request_t));
     g_face_mutex = xSemaphoreCreateMutex();
     g_display_mutex = xSemaphoreCreateMutex();
@@ -1076,4 +1593,11 @@ void app_main(void)
     start_http_server();
 
     ESP_LOGI(TAG, "SarcasmOS brain ready");
+    if (usb_err != ESP_OK) {
+        ESP_LOGW(TAG, "USB byte driver unavailable: %s",
+                 esp_err_to_name(usb_err));
+    }
+    ESP_ERROR_CHECK(xTaskCreate(
+        cli_task, "brain_cli", 6144, NULL, 3, NULL) == pdPASS
+                        ? ESP_OK : ESP_ERR_NO_MEM);
 }

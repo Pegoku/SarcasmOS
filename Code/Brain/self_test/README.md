@@ -115,5 +115,9 @@ target to the selected eyes, waits for their matching active-token status,
 then sends the same target/token and five-tick (200 ms) blend duration to the
 mouth. Press `Q` or Escape to return to the main test menu.
 
+If either selected Eye times out while reaching READY or activating the
+committed state, the tester repeats the complete Eye transition once with a
+fresh token before it sends the mouth command or reports the final result.
+
 Enabling a buck only verifies the enable GPIO state. Measure the corresponding
 rail before treating it as electrically validated.

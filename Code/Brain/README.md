@@ -42,6 +42,11 @@ animation/token with no pending animation. The default barrier timeout is
 `SarcasmOS Brain`. Error, sleep, and battery-critical animations explicitly
 bypass the graceful barrier.
 
+If an Eye does not reach READY or confirm activation before the first barrier
+timeout, Brain resends the request to both Eyes with a fresh transition token
+and repeats the complete READY/commit barrier once. The mouth does not receive
+the animation until that retry finishes or also times out.
+
 `GET /api/status` includes `face_transition`, detailed active/pending Eye
 status, and Mouth transition token/progress. Mouth application-v2 status is
 accepted during migration but does not provide blend progress. Eye protocol-v1

@@ -727,6 +727,7 @@ static void face_transition_task(void *arg)
         if (xQueueReceive(g_face_queue, &request, portMAX_DELAY) != pdTRUE) {
             continue;
         }
+        unsigned eye_retry_count = 0;
 
 restart_transition:
         token = next_transition_token(token);
@@ -801,18 +802,29 @@ restart_transition:
             }
         }
         if (replaced) {
+            eye_retry_count = 0;
             goto restart_transition;
         }
 
         face_request_t newer;
         if (xQueueReceive(g_face_queue, &newer, 0) == pdTRUE) {
             request = newer;
+            eye_retry_count = 0;
             ESP_LOGI(TAG, "face request replaced at barrier");
             goto restart_transition;
         }
 
-        uint8_t incomplete_mask = eye_sent_mask & ~ready_mask;
+        uint8_t incomplete_mask = EYE_BOTH_MASK & ~ready_mask;
         if (incomplete_mask != 0) {
+            if (eye_retry_count == 0) {
+                ++eye_retry_count;
+                ESP_LOGW(
+                    TAG,
+                    "eye READY timeout target=0x%02X token=%u mask=0x%02X; "
+                    "retrying both eyes with a fresh token before mouth",
+                    request.animation, token, incomplete_mask);
+                goto restart_transition;
+            }
             degraded = true;
             for (size_t i = 0; i < EYE_COUNT; ++i) {
                 if ((incomplete_mask & (1U << i)) != 0) {
@@ -859,8 +871,18 @@ restart_transition:
             }
         }
         const uint8_t activation_timeout_mask =
-            committed_mask & ~activated_mask;
+            EYE_BOTH_MASK & ~activated_mask;
         if (activation_timeout_mask != 0) {
+            if (eye_retry_count == 0) {
+                ++eye_retry_count;
+                ESP_LOGW(
+                    TAG,
+                    "eye activation timeout target=0x%02X token=%u "
+                    "mask=0x%02X; retrying both eyes with a fresh token "
+                    "before mouth",
+                    request.animation, token, activation_timeout_mask);
+                goto restart_transition;
+            }
             degraded = true;
             for (size_t i = 0; i < EYE_COUNT; ++i) {
                 if ((activation_timeout_mask & (1U << i)) != 0) {

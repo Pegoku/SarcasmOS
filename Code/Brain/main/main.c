@@ -13,6 +13,7 @@
 #include "driver/usb_serial_jtag_vfs.h"
 #include "brain_audio.h"
 #include "brain_config.h"
+#include "brain_workflow.h"
 #include "display_protocol.h"
 #include "eye_protocol.h"
 #include "esp_check.h"
@@ -171,6 +172,7 @@ static QueueHandle_t g_face_queue;
 static SemaphoreHandle_t g_face_mutex;
 static SemaphoreHandle_t g_display_mutex;
 static brain_config_t g_config;
+static uint8_t g_post_speech_animation = ANIM_IDLE;
 static face_transition_status_t g_face_transition = {
     .desired_animation = ANIM_IDLE,
     .committed_animation = ANIM_IDLE,
@@ -1015,6 +1017,134 @@ static void start_http_server(void)
     ESP_ERROR_CHECK(httpd_register_uri_handler(server, &command_uri));
 }
 
+static uint8_t animation_for_expression(const char *expression);
+
+static void workflow_status_json(char *output, size_t capacity)
+{
+    mouth_espnow_status_t mouth = { 0 };
+    if (g_mouth_initialized) mouth_espnow_get_status(&mouth);
+    snprintf(
+        output, capacity,
+        "{\"wifi\":\"%s\",\"ethernet\":\"%s\","
+        "\"left_eye\":\"%s\",\"right_eye\":\"%s\","
+        "\"mouth\":\"%s\",\"microphone\":\"ICS-43434 ready\","
+        "\"speaker\":\"MAX98357A ready\"}",
+        g_wifi_connected ? "connected" : "offline",
+        g_ethernet_connected ? "connected" : "offline",
+        g_displays[EYE_LEFT_INDEX].present ? "connected" : "not responding",
+        g_displays[EYE_RIGHT_INDEX].present ? "connected" : "not responding",
+        mouth.present ? "connected" : "not responding");
+}
+
+static void workflow_event_handler(const brain_workflow_event_t *event,
+                                   void *context)
+{
+    (void)context;
+    if (event->message != NULL && event->message[0] != '\0') {
+        printf("\n[AI] %s\n", event->message);
+    }
+    switch (event->type) {
+    case BRAIN_WORKFLOW_EVENT_LISTENING:
+        g_state = STATE_LISTENING;
+        request_face_state(ANIM_LISTENING, false);
+        break;
+    case BRAIN_WORKFLOW_EVENT_TRANSCRIBING:
+        g_state = STATE_THINKING;
+        request_face_state(ANIM_THINKING_AUDIO, false);
+        break;
+    case BRAIN_WORKFLOW_EVENT_TRANSCRIPT:
+        g_state = STATE_THINKING;
+        request_face_state(ANIM_THINKING, false);
+        break;
+    case BRAIN_WORKFLOW_EVENT_TOOL_START:
+        g_state = STATE_THINKING;
+        request_face_state(DISPLAY_ANIM_TOOL, false);
+        break;
+    case BRAIN_WORKFLOW_EVENT_TOOL_RESULT:
+        if (event->has_temperature) {
+            uint8_t payload[2] = {
+                0x02, (uint8_t)event->temperature_c
+            };
+            esp_err_t err = mouth_command(
+                CMD_SET_PARAM, payload, sizeof(payload));
+            if (err != ESP_OK) {
+                ESP_LOGW(TAG, "mouth temperature update failed: %s",
+                         esp_err_to_name(err));
+            }
+        }
+        if (event->expression != NULL && event->expression[0] != '\0') {
+            g_post_speech_animation =
+                animation_for_expression(event->expression);
+            request_face_state(g_post_speech_animation, false);
+        }
+        break;
+    case BRAIN_WORKFLOW_EVENT_SYNTHESIZING:
+        g_state = STATE_THINKING;
+        request_face_state(ANIM_THINKING, false);
+        break;
+    case BRAIN_WORKFLOW_EVENT_SPEAKING:
+        if (event->has_temperature) {
+            uint8_t payload[2] = {
+                0x02, (uint8_t)event->temperature_c
+            };
+            mouth_command(CMD_SET_PARAM, payload, sizeof(payload));
+        }
+        if (event->expression != NULL && event->expression[0] != '\0') {
+            g_post_speech_animation =
+                animation_for_expression(event->expression);
+            if (g_post_speech_animation == ANIM_SPEAKING ||
+                g_post_speech_animation == ANIM_THINKING ||
+                g_post_speech_animation == DISPLAY_ANIM_TOOL) {
+                g_post_speech_animation = ANIM_IDLE;
+            }
+        }
+        g_state = STATE_SPEAKING;
+        request_face_state(ANIM_SPEAKING, false);
+        break;
+    case BRAIN_WORKFLOW_EVENT_AUDIO_LEVEL: {
+        uint8_t payload[2] = {
+            DISPLAY_PARAM_MOUTH_INTENSITY, event->audio_level
+        };
+        mouth_command(CMD_SET_PARAM, payload, sizeof(payload));
+        break;
+    }
+    case BRAIN_WORKFLOW_EVENT_COMPLETE:
+        g_state = STATE_IDLE;
+        request_face_state(g_post_speech_animation, false);
+        break;
+    case BRAIN_WORKFLOW_EVENT_ERROR:
+        g_state = STATE_ERROR;
+        request_face_state(ANIM_ERROR, true);
+        break;
+    }
+}
+
+static void workflow_wake_task(void *arg)
+{
+    (void)arg;
+    while (true) {
+        brain_config_t config = g_config;
+        if (!config.wake_enabled || !g_wifi_connected ||
+            config.workflow_url[0] == '\0') {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
+        bool detected = false;
+        esp_err_t err = brain_workflow_wait_for_wake(&config, &detected);
+        if (err == ESP_OK && detected) {
+            printf("\n[AI] Wake phrase detected. Listening for your request.\n");
+            g_post_speech_animation = ANIM_IDLE;
+            char status[320];
+            workflow_status_json(status, sizeof(status));
+            brain_workflow_run_voice(&config, status);
+        } else if (err != ESP_OK && err != ESP_ERR_TIMEOUT &&
+                   err != ESP_ERR_INVALID_STATE) {
+            ESP_LOGW(TAG, "wake listener: %s", esp_err_to_name(err));
+            vTaskDelay(pdMS_TO_TICKS(2000));
+        }
+    }
+}
+
 typedef enum {
     CLI_PAGE_HOME,
     CLI_PAGE_TEST,
@@ -1060,6 +1190,20 @@ static const animation_option_t CLI_ANIMATIONS[] = {
     { DISPLAY_ANIM_STORMY, "stormy" },
     { DISPLAY_ANIM_SNOWY, "snowy" },
 };
+
+static uint8_t animation_for_expression(const char *expression)
+{
+    if (expression == NULL || expression[0] == '\0') return ANIM_IDLE;
+    for (size_t i = 0;
+         i < sizeof(CLI_ANIMATIONS) / sizeof(CLI_ANIMATIONS[0]); ++i) {
+        if (strcmp(expression, CLI_ANIMATIONS[i].name) == 0) {
+            return CLI_ANIMATIONS[i].id;
+        }
+    }
+    if (strcmp(expression, "happy_fake") == 0) return ANIM_HAPPY;
+    if (strcmp(expression, "asleep") == 0) return ANIM_SLEEP;
+    return ANIM_IDLE;
+}
 
 static bool cli_read_serial_byte(uint8_t *input, TickType_t timeout)
 {
@@ -1452,8 +1596,19 @@ static void cli_handle_interact(char *command)
         printf("5VHP buck %s.\n",
                gpio_get_level(PIN_5VHP_EN) ? "ON" : "OFF");
     } else if (strcmp(command, "listen") == 0) {
-        printf("AI voice transport is not ready yet; configure its URL/token "
-               "now, then use this command after the workflow module is enabled.\n");
+        if (!g_wifi_connected) {
+            printf("AI voice requires an active Wi-Fi connection.\n");
+        } else if (g_config.workflow_url[0] == '\0') {
+            printf("Set the Workflow URL on the Configuration page first.\n");
+        } else {
+            printf("Listening. Start speaking; the request ends after %u ms "
+                   "of silence.\n", g_config.silence_ms);
+            g_post_speech_animation = ANIM_IDLE;
+            char status[320];
+            workflow_status_json(status, sizeof(status));
+            esp_err_t err = brain_workflow_run_voice(&g_config, status);
+            printf("AI interaction: %s\n", esp_err_to_name(err));
+        }
     } else {
         printf("Unknown interaction command. Enter h for this page.\n");
     }
@@ -1562,6 +1717,8 @@ void app_main(void)
         ESP_LOGE(TAG, "I2S audio init failed: %s",
                  esp_err_to_name(audio_err));
     }
+    ESP_ERROR_CHECK(brain_workflow_init(
+        workflow_event_handler, NULL));
     esp_err_t wifi_err = start_wifi();
     if (wifi_err != ESP_OK && wifi_err != ESP_ERR_NOT_SUPPORTED) {
         ESP_LOGE(TAG, "Wi-Fi radio start failed: %s", esp_err_to_name(wifi_err));
@@ -1595,6 +1752,9 @@ void app_main(void)
                  esp_err_to_name(usb_err));
     }
     ESP_ERROR_CHECK(xTaskCreate(
-        cli_task, "brain_cli", 6144, NULL, 3, NULL) == pdPASS
+        cli_task, "brain_cli", 16384, NULL, 3, NULL) == pdPASS
+                        ? ESP_OK : ESP_ERR_NO_MEM);
+    ESP_ERROR_CHECK(xTaskCreate(
+        workflow_wake_task, "workflow_wake", 16384, NULL, 3, NULL) == pdPASS
                         ? ESP_OK : ESP_ERR_NO_MEM);
 }

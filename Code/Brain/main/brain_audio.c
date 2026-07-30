@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "driver/i2s_std.h"
@@ -255,7 +256,12 @@ esp_err_t brain_audio_capture(const brain_audio_capture_config_t *config,
     memset(result, 0, sizeof(*result));
     int32_t input[AUDIO_BLOCK_FRAMES * 2];
     int16_t samples[AUDIO_BLOCK_FRAMES / 2];
-    int16_t preroll[AUDIO_PREROLL_SAMPLES];
+    int16_t *preroll = malloc(
+        AUDIO_PREROLL_SAMPLES * sizeof(*preroll));
+    if (preroll == NULL) {
+        xSemaphoreGive(s_audio_mutex);
+        return ESP_ERR_NO_MEM;
+    }
     size_t preroll_count = 0;
     size_t preroll_write = 0;
     uint64_t energy = 0;
@@ -334,6 +340,7 @@ esp_err_t brain_audio_capture(const brain_audio_capture_config_t *config,
         result->duration_ms =
             result->sample_count * 1000 / AUDIO_UPLOAD_SAMPLE_RATE;
     }
+    free(preroll);
     xSemaphoreGive(s_audio_mutex);
     return err;
 }

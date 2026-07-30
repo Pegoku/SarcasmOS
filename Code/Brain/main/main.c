@@ -11,6 +11,7 @@
 #include "driver/i2s_std.h"
 #include "driver/usb_serial_jtag.h"
 #include "driver/usb_serial_jtag_vfs.h"
+#include "brain_audio.h"
 #include "brain_config.h"
 #include "display_protocol.h"
 #include "eye_protocol.h"
@@ -454,30 +455,6 @@ static void configure_i2c(void)
         };
         ESP_ERROR_CHECK(i2c_master_bus_add_device(g_i2c_bus, &dev_cfg, &g_displays[i].i2c_handle));
     }
-}
-
-static void configure_audio(void)
-{
-    i2s_chan_handle_t tx_chan;
-    i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
-    if (i2s_new_channel(&chan_cfg, &tx_chan, NULL) != ESP_OK) {
-        ESP_LOGW(TAG, "I2S TX channel unavailable");
-        return;
-    }
-    i2s_std_config_t std_cfg = {
-        .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(16000),
-        .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
-        .gpio_cfg = {
-            .mclk = I2S_GPIO_UNUSED,
-            .bclk = PIN_I2S_BCLK,
-            .ws = PIN_I2S_LRCLK,
-            .dout = PIN_I2S_DOUT,
-            .din = PIN_I2S_DIN,
-            .invert_flags = { 0 },
-        },
-    };
-    ESP_ERROR_CHECK_WITHOUT_ABORT(i2s_channel_init_std_mode(tx_chan, &std_cfg));
-    ESP_ERROR_CHECK_WITHOUT_ABORT(i2s_channel_enable(tx_chan));
 }
 
 static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t event_id, void *event_data)
@@ -1173,6 +1150,7 @@ static void cli_print_test(void)
     printf("  a  run all checks       i  scan I2C bus\n");
     printf("  e  read both eyes       m  ping mouth\n");
     printf("  n  network status       g  GPIO/power status\n");
+    printf("  p  speaker tone         r  microphone level\n");
     printf("  0  home                 h/? show this page\n");
     printf("-----------------------------------------\n");
 }
@@ -1420,6 +1398,21 @@ static void cli_handle_test(char *command)
     else if (strcmp(command, "m") == 0) cli_test_mouth();
     else if (strcmp(command, "n") == 0) cli_network_status();
     else if (strcmp(command, "g") == 0) cli_print_status();
+    else if (strcmp(command, "p") == 0) {
+        printf("Playing 440 Hz for one second...\n");
+        esp_err_t err = brain_audio_play_tone(440, 1000, 12000);
+        printf("[%s] Speaker stream: %s (confirm it was audible)\n",
+               err == ESP_OK ? "PASS" : "FAIL", esp_err_to_name(err));
+    } else if (strcmp(command, "r") == 0) {
+        printf("Measuring microphone for one second; speak or clap now...\n");
+        brain_audio_capture_result_t result;
+        esp_err_t err = brain_audio_measure(1000, &result);
+        printf("[%s] Microphone: %s, samples=%" PRIu32
+               ", peak=%u, RMS=%u\n",
+               err == ESP_OK && result.peak > 0 ? "PASS" : "FAIL",
+               esp_err_to_name(err), result.sample_count,
+               result.peak, result.rms);
+    }
     else printf("Unknown test command. Enter h for this page.\n");
 }
 
@@ -1564,7 +1557,11 @@ void app_main(void)
 
     configure_gpio();
     configure_i2c();
-    configure_audio();
+    esp_err_t audio_err = brain_audio_init();
+    if (audio_err != ESP_OK) {
+        ESP_LOGE(TAG, "I2S audio init failed: %s",
+                 esp_err_to_name(audio_err));
+    }
     esp_err_t wifi_err = start_wifi();
     if (wifi_err != ESP_OK && wifi_err != ESP_ERR_NOT_SUPPORTED) {
         ESP_LOGE(TAG, "Wi-Fi radio start failed: %s", esp_err_to_name(wifi_err));

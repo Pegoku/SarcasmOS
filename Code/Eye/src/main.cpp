@@ -5,6 +5,7 @@
 #include "hardware/irq.h"
 #include "hardware/regs/i2c.h"
 #include "hardware/structs/i2c.h"
+#include "hardware/structs/watchdog.h"
 #include "hardware/sync.h"
 #include "hardware/watchdog.h"
 #include "pico/stdlib.h"
@@ -13,6 +14,7 @@
 #include "animation_playback.hpp"
 #include "animation_transition.hpp"
 #include "display_orientation.hpp"
+#include "device_identity.hpp"
 #include "eye_status.hpp"
 #include "generated/eye_assets.hpp"
 #include "protocol.hpp"
@@ -376,6 +378,7 @@ static void parse_command() {
 
 int main() {
     stdio_init_all();
+    watchdog_hw->scratch[0] = eye_device_identity::marker(DEVICE_ROLE);
     gpio_init(LED_PIN); gpio_set_dir(LED_PIN, GPIO_OUT);
     watchdog_enable(2000, true);
     display_init();

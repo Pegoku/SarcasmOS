@@ -9,11 +9,12 @@ show_help() {
 Build, upload, and monitor SarcasmOS eye firmware.
 
 Usage:
-  ./flash.sh (--left | --right) [firmware] [actions] [options]
+  ./flash.sh (--left | --right | --auto) [firmware] [actions] [options]
 
 Targets:
   --left                 Use the left-eye firmware (role 0, I2C address 0x30)
   --right                Use the right-eye firmware (role 1, I2C address 0x31)
+  --auto                 Detect the SWD-connected eye before building/flashing
 
 Firmware (default: --regular):
   --regular              Normal firmware controlled over I2C
@@ -43,6 +44,7 @@ Examples:
   ./flash.sh --left --regular --build --upload --swd-monitor
   ./flash.sh --left --self-test --build --upload --swd-monitor
   ./flash.sh --right --demo --build --upload --swd-monitor
+  ./flash.sh --auto --regular --build --upload
   ./flash.sh --right --demo --assets "png animations/eye_assets.json" --build
 
 For convenience, --monitor--left and --monitor--right are also accepted.
@@ -70,12 +72,16 @@ assets_selected=false
 while (($#)); do
     case "$1" in
         --left)
-            [[ -z "$eye" || "$eye" == left ]] || fail "choose only one of --left and --right"
+            [[ -z "$eye" || "$eye" == left ]] || fail "choose only one eye target"
             eye=left
             ;;
         --right)
-            [[ -z "$eye" || "$eye" == right ]] || fail "choose only one of --left and --right"
+            [[ -z "$eye" || "$eye" == right ]] || fail "choose only one eye target"
             eye=right
+            ;;
+        --auto)
+            [[ -z "$eye" || "$eye" == auto ]] || fail "choose only one eye target"
+            eye=auto
             ;;
         --regular|--self-test|--demo)
             requested_firmware=${1#--}
@@ -90,12 +96,12 @@ while (($#)); do
         --monitor) do_monitor=true ;;
         --swd-monitor) do_swd_monitor=true ;;
         --monitor--left)
-            [[ -z "$eye" || "$eye" == left ]] || fail "choose only one of --left and --right"
+            [[ -z "$eye" || "$eye" == left ]] || fail "choose only one eye target"
             eye=left
             do_monitor=true
             ;;
         --monitor--right)
-            [[ -z "$eye" || "$eye" == right ]] || fail "choose only one of --left and --right"
+            [[ -z "$eye" || "$eye" == right ]] || fail "choose only one eye target"
             eye=right
             do_monitor=true
             ;;
@@ -129,7 +135,7 @@ while (($#)); do
     shift
 done
 
-[[ -n "$eye" ]] || fail "select an eye with --left or --right"
+[[ -n "$eye" ]] || fail "select an eye with --left, --right, or --auto"
 $do_build || $do_upload || $do_monitor || $do_swd_monitor || \
     fail "select at least one action: --build, --upload, --monitor, or --swd-monitor"
 [[ "$baud" =~ ^[0-9]+$ ]] && ((baud > 0)) || fail "invalid baud rate: $baud"
@@ -140,6 +146,66 @@ $do_monitor && $do_swd_monitor && fail "choose only one of --monitor and --swd-m
 assets_file=$(realpath -- "$assets_file")
 if $assets_selected && [[ "$firmware" == self-test ]]; then
     fail "--self-test does not use animation assets"
+fi
+
+resolve_openocd() {
+    [[ -z "${openocd_bin:-}" ]] || return
+    openocd_bin=""
+    openocd_scripts=""
+    if [[ -n "${OPENOCD_ROOT:-}" ]]; then
+        openocd_bin="$OPENOCD_ROOT/bin/openocd"
+        openocd_scripts="$OPENOCD_ROOT/share/openocd/scripts"
+        [[ -x "$openocd_bin" ]] || fail "OpenOCD is not executable at $openocd_bin"
+        [[ -d "$openocd_scripts" ]] || fail "OpenOCD scripts not found at $openocd_scripts"
+    elif command -v openocd >/dev/null 2>&1; then
+        openocd_bin=$(command -v openocd)
+    else
+        shopt -s nullglob
+        openocd_candidates=("${HOME}"/.espressif/tools/openocd-esp32/*/openocd-esp32)
+        shopt -u nullglob
+        ((${#openocd_candidates[@]})) || fail "OpenOCD not found; set OPENOCD_ROOT"
+        openocd_root=${openocd_candidates[-1]}
+        openocd_bin="$openocd_root/bin/openocd"
+        openocd_scripts="$openocd_root/share/openocd/scripts"
+        [[ -x "$openocd_bin" ]] || fail "OpenOCD is not executable at $openocd_bin"
+        [[ -d "$openocd_scripts" ]] || fail "OpenOCD scripts not found at $openocd_scripts"
+    fi
+    openocd_args=()
+    [[ -z "$openocd_scripts" ]] || openocd_args+=(-s "$openocd_scripts")
+}
+
+if [[ "$eye" == auto ]]; then
+    resolve_openocd
+    printf 'Detecting the SWD-connected eye...\n'
+    if ! probe_output=$("$openocd_bin" "${openocd_args[@]}" \
+            -f interface/jlink.cfg \
+            -c "adapter speed 100" \
+            -c "set USE_CORE 0" \
+            -f target/rp2040.cfg \
+            -c "init" \
+            -c "mdw 0x4005800c 1" \
+            -c "mdw 0x40044008 1" \
+            -c "shutdown" 2>&1); then
+        printf '%s\n' "$probe_output" >&2
+        fail "could not probe the connected eye over SWD"
+    fi
+    identity=$(awk '/0x4005800c:/ { value=$2 } END { print value }' \
+        <<<"$probe_output")
+    slave_address=$(awk '/0x40044008:/ { value=$2 } END { print value }' \
+        <<<"$probe_output")
+    case "$identity:$slave_address" in
+        45594500:*|*:00000030) eye=left ;;
+        45594501:*|*:00000031) eye=right ;;
+        *)
+            printf '%s\n' "$probe_output" >&2
+            fail "connected firmware does not identify as a left or right eye"
+            ;;
+    esac
+    printf 'Detected %s eye.\n' "$eye"
+fi
+
+if $do_upload || $do_swd_monitor; then
+    resolve_openocd
 fi
 
 if [[ "$eye" == left ]]; then
@@ -211,28 +277,6 @@ if $do_upload || $do_swd_monitor; then
         fail "selected assets do not match $image; run with --build first"
     fi
 
-    openocd_bin=""
-    openocd_scripts=""
-    if [[ -n "${OPENOCD_ROOT:-}" ]]; then
-        openocd_bin="$OPENOCD_ROOT/bin/openocd"
-        openocd_scripts="$OPENOCD_ROOT/share/openocd/scripts"
-        [[ -x "$openocd_bin" ]] || fail "OpenOCD is not executable at $openocd_bin"
-        [[ -d "$openocd_scripts" ]] || fail "OpenOCD scripts not found at $openocd_scripts"
-    elif command -v openocd >/dev/null 2>&1; then
-        openocd_bin=$(command -v openocd)
-    else
-        shopt -s nullglob
-        openocd_candidates=("${HOME}"/.espressif/tools/openocd-esp32/*/openocd-esp32)
-        shopt -u nullglob
-        ((${#openocd_candidates[@]})) || fail "OpenOCD not found; set OPENOCD_ROOT"
-        openocd_root=${openocd_candidates[-1]}
-        openocd_bin="$openocd_root/bin/openocd"
-        openocd_scripts="$openocd_root/share/openocd/scripts"
-        [[ -x "$openocd_bin" ]] || fail "OpenOCD is not executable at $openocd_bin"
-        [[ -d "$openocd_scripts" ]] || fail "OpenOCD scripts not found at $openocd_scripts"
-    fi
-    openocd_args=()
-    [[ -z "$openocd_scripts" ]] || openocd_args+=(-s "$openocd_scripts")
 fi
 
 if $do_upload; then

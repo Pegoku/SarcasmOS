@@ -121,6 +121,7 @@ for either eye:
 ./flash.sh --left --self-test --build --upload --swd-monitor
 ./flash.sh --right --demo --build --upload --swd-monitor
 ./flash.sh --right --demo --assets "png animations/eye_assets.json" --build --upload
+./flash.sh --auto --regular --assets "png animations/eye_assets.json" --build --upload
 ```
 
 `--regular` is the default and receives animation commands over I2C.
@@ -134,6 +135,10 @@ monitor automatically uses the only connected `/dev/serial/by-id`,
 `/dev/ttyACM`, or `/dev/ttyUSB` device. If more than one is connected, select
 one with `--port /dev/ttyACM0` or set `EYE_LEFT_PORT` and `EYE_RIGHT_PORT`.
 Run `./flash.sh --help` for all options and environment overrides.
+`--auto` reads a role marker from current firmware over SWD, falling back to
+the active I2C slave address for older regular/demo images. It reports the
+detected eye before selecting the build directory and never guesses when the
+probe is inconclusive.
 
 Every activated animation starts at frame zero on its own local clock. A
 request for another state becomes the current animation's end signal. Regular

@@ -1,10 +1,12 @@
 #include <cstdio>
 
+#include "hardware/structs/watchdog.h"
 #include "hardware/watchdog.h"
 #include "pico/stdlib.h"
 
 #include "gc9a01.hpp"
 #include "display_orientation.hpp"
+#include "device_identity.hpp"
 #include "protocol.hpp"
 #include "swd_rtt.hpp"
 
@@ -114,6 +116,7 @@ static void draw_pattern(Pattern pattern) {
 
 int main() {
     stdio_init_all();
+    watchdog_hw->scratch[0] = eye_device_identity::marker(DEVICE_ROLE);
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
     watchdog_enable(2000, true);

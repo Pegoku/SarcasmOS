@@ -266,6 +266,45 @@ browser audio context's sample rate. Only one WebSocket listener is accepted.
 Wake detection is suspended while the endpoint is enabled, and the stream has
 exclusive microphone/audio access while a client is connected.
 
+### Local wake-word dataset and training TUI
+
+`tools/wakeword_tui.py` connects directly to that WebSocket and builds a
+resumable, labeled dataset from the microphone fitted to the Brain PCB. Enable
+the endpoint from the Testing page before starting it:
+
+```text
+brain/test> stream on
+```
+
+The collector has no third-party dependencies. Launch the TUI with:
+
+```bash
+python tools/wakeword_tui.py --device 192.168.1.125 \
+  --phrase "oye bender"
+```
+
+The guided collection covers positive wake-phrase examples, negative/confusing
+speech, varied background noise, and quiet microphone noise. Completed WAV
+files and progress survive disconnects under the ignored `wakeword_data/`
+directory. The configuration page can change every sample count and duration.
+
+Choose **Setup** once to clone the upstream Open Home Foundation
+microWakeWord trainer and create an isolated TensorFlow environment, then
+choose **Train**. TensorFlow requires Python 3.10 through 3.13; Setup prefers a
+compatible installed interpreter (override it with `MWW_PYTHON`) and otherwise
+uses `uv` to install an isolated Python 3.12 automatically. Training then:
+
+1. splits the recordings into training, validation, and test sets;
+2. augments positives with the captured noise environments;
+3. generates microWakeWord spectrogram features;
+4. trains and evaluates a streaming MixedNet model; and
+5. exports a quantized `.tflite` model plus ESPHome-compatible JSON metadata
+   under `wakeword_data/models/`.
+
+TensorFlow training can take hours without a supported GPU. The exported model
+is the input for the local ESP32 inference integration; producing it does not
+by itself replace the current Whisper-based wake listener in this firmware.
+
 ## PCB self-test firmware
 
 An independent bring-up firmware is available in [`self_test/`](self_test/).

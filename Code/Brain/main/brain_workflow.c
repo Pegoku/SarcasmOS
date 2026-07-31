@@ -26,6 +26,9 @@
 #define MAX_TOOL_RESULT 12288
 #define MAX_TOOL_ROUNDS 6
 #define AUDIO_BUFFER_SIZE 2048
+#define AUDIO_PLAYBACK_BUFFER_SIZE (32 * 1024)
+#define AUDIO_PLAYBACK_PREBUFFER_SIZE (16 * 1024)
+#define AUDIO_PLAYBACK_TASK_STACK_SIZE 8192
 #define STT_UPLOAD_BLOCK_SIZE 3072
 #define STT_STREAM_BUFFER_SIZE (64 * 1024)
 #define MANUAL_LOCK_WAIT_MS 6500
@@ -55,6 +58,15 @@ typedef struct {
     bool opened;
     esp_err_t result;
 } stt_upload_t;
+
+typedef struct {
+    StreamBufferHandle_t stream;
+    SemaphoreHandle_t done;
+    volatile bool download_done;
+    volatile bool abort;
+    volatile esp_err_t download_result;
+    volatile esp_err_t playback_result;
+} audio_playback_t;
 
 static brain_workflow_event_handler_t s_event_handler;
 static void *s_event_context;
@@ -842,6 +854,93 @@ static esp_err_t play_audio_samples(const int16_t *samples,
     return brain_audio_play_pcm16(samples, sample_count, 256);
 }
 
+static void audio_playback_task(void *argument)
+{
+    audio_playback_t *playback = argument;
+    while (!playback->abort && !playback->download_done &&
+           xStreamBufferBytesAvailable(playback->stream) <
+               AUDIO_PLAYBACK_PREBUFFER_SIZE) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    esp_err_t err = ESP_OK;
+    union {
+        int16_t samples[AUDIO_BUFFER_SIZE / sizeof(int16_t)];
+        uint8_t bytes[AUDIO_BUFFER_SIZE];
+    } audio;
+    size_t pending = 0;
+    while (!playback->abort) {
+        size_t received = xStreamBufferReceive(
+            playback->stream, audio.bytes + pending,
+            sizeof(audio.bytes) - pending, pdMS_TO_TICKS(100));
+        if (received == 0) {
+            if (playback->download_done) break;
+            continue;
+        }
+        size_t available = pending + received;
+        size_t playable = available & ~(size_t)1;
+        if (playable > 0) {
+            err = play_audio_samples(
+                audio.samples, playable / sizeof(int16_t));
+            if (err != ESP_OK) {
+                playback->abort = true;
+                break;
+            }
+        }
+        pending = available - playable;
+        if (pending > 0) audio.bytes[0] = audio.bytes[playable];
+    }
+    if (err == ESP_OK && playback->download_result != ESP_OK) {
+        err = playback->download_result;
+    }
+    playback->playback_result = err;
+    emit_audio_level(0);
+    xSemaphoreGive(playback->done);
+    vTaskDelete(NULL);
+}
+
+static esp_err_t audio_playback_start(audio_playback_t *playback)
+{
+    playback->stream = xStreamBufferCreate(AUDIO_PLAYBACK_BUFFER_SIZE, 1);
+    playback->done = xSemaphoreCreateBinary();
+    if (playback->stream == NULL || playback->done == NULL) {
+        if (playback->stream != NULL) {
+            vStreamBufferDelete(playback->stream);
+        }
+        if (playback->done != NULL) vSemaphoreDelete(playback->done);
+        playback->stream = NULL;
+        playback->done = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+    if (xTaskCreate(audio_playback_task, "audio_playback",
+                    AUDIO_PLAYBACK_TASK_STACK_SIZE, playback, 5, NULL) !=
+        pdPASS) {
+        vStreamBufferDelete(playback->stream);
+        vSemaphoreDelete(playback->done);
+        playback->stream = NULL;
+        playback->done = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
+}
+
+static esp_err_t audio_playback_send(audio_playback_t *playback,
+                                     const uint8_t *bytes, size_t length)
+{
+    while (length > 0) {
+        if (playback->abort) {
+            return playback->playback_result != ESP_OK
+                       ? playback->playback_result : ESP_FAIL;
+        }
+        size_t sent = xStreamBufferSend(
+            playback->stream, bytes, length, pdMS_TO_TICKS(100));
+        if (sent == 0) continue;
+        bytes += sent;
+        length -= sent;
+    }
+    return ESP_OK;
+}
+
 static esp_err_t play_audio_url(const char *url)
 {
     esp_http_client_handle_t client = create_http_client(url);
@@ -895,43 +994,41 @@ static esp_err_t play_audio_url(const char *url)
                           bits != 16 || sample_rate != 32000)) {
         err = ESP_ERR_NOT_SUPPORTED;
     }
-    union {
-        int16_t samples[AUDIO_BUFFER_SIZE / sizeof(int16_t)];
-        uint8_t bytes[AUDIO_BUFFER_SIZE];
-    } audio;
-    size_t pending = 0;
+    audio_playback_t playback = {
+        .download_result = ESP_OK,
+        .playback_result = ESP_OK,
+    };
+    if (err == ESP_OK) err = audio_playback_start(&playback);
     if (err == ESP_OK && header_length > data_offset) {
-        pending = header_length - data_offset;
-        memcpy(audio.bytes, header + data_offset, pending);
-        size_t playable = pending & ~(size_t)1;
-        if (playable) {
-            err = play_audio_samples(audio.samples,
-                                     playable / sizeof(int16_t));
-        }
-        pending -= playable;
-        if (pending) audio.bytes[0] = audio.bytes[playable];
+        err = audio_playback_send(
+            &playback, header + data_offset, header_length - data_offset);
     }
+    uint8_t audio[AUDIO_BUFFER_SIZE];
     while (err == ESP_OK) {
         int received = esp_http_client_read(
-            client, (char *)audio.bytes + pending,
-            sizeof(audio.bytes) - pending);
+            client, (char *)audio, sizeof(audio));
         if (received == 0) break;
         if (received < 0) {
             err = ESP_FAIL;
             break;
         }
-        size_t available = pending + (size_t)received;
-        size_t playable = available & ~(size_t)1;
-        if (playable) {
-            err = play_audio_samples(audio.samples,
-                                     playable / sizeof(int16_t));
-        }
-        pending = available - playable;
-        if (pending) audio.bytes[0] = audio.bytes[playable];
+        err = audio_playback_send(&playback, audio, (size_t)received);
     }
-    emit_audio_level(0);
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
+    if (playback.stream != NULL) {
+        playback.download_result = err;
+        if (err != ESP_OK) playback.abort = true;
+        playback.download_done = true;
+        if (xSemaphoreTake(playback.done, portMAX_DELAY) != pdTRUE &&
+            err == ESP_OK) {
+            err = ESP_FAIL;
+        } else if (err == ESP_OK) {
+            err = playback.playback_result;
+        }
+        vStreamBufferDelete(playback.stream);
+        vSemaphoreDelete(playback.done);
+    }
     return err;
 }
 

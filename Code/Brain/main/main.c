@@ -1010,8 +1010,55 @@ static esp_err_t mic_stream_post_handshake(httpd_req_t *req)
     return err;
 }
 
+static const char MIC_STREAM_PAGE[] =
+    "<!doctype html><html><head><meta charset='utf-8'>"
+    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+    "<title>SarcasmOS microphone</title><style>"
+    "body{font:16px system-ui;max-width:42rem;margin:3rem auto;padding:0 1rem;"
+    "background:#111;color:#eee}button{font:inherit;padding:.7rem 1rem;"
+    "margin-right:.5rem}code{color:#7ee787}#level{height:1rem;background:#333;"
+    "margin-top:1rem}#meter{height:100%;width:0;background:#39d353}"
+    "</style></head><body><h1>SarcasmOS live microphone</h1>"
+    "<p id='status'>Ready. Press Start to permit audio playback.</p>"
+    "<button id='start'>Start listening</button>"
+    "<button id='stop' disabled>Stop</button>"
+    "<div id='level'><div id='meter'></div></div>"
+    "<p><code>16 kHz / mono / PCM16 LE</code></p><script>"
+    "let ws,ctx,nextTime=0;const status=document.getElementById('status');"
+    "const meter=document.getElementById('meter');"
+    "const start=document.getElementById('start'),stop=document.getElementById('stop');"
+    "function closeStream(){if(ws){ws.close();ws=null;}"
+    "if(ctx){ctx.close();ctx=null;}nextTime=0;start.disabled=false;"
+    "stop.disabled=true;meter.style.width='0';}"
+    "start.onclick=async()=>{start.disabled=true;"
+    "ctx=new(window.AudioContext||window.webkitAudioContext)();await ctx.resume();"
+    "const scheme=location.protocol==='https:'?'wss://':'ws://';"
+    "ws=new WebSocket(scheme+location.host+'/api/audio/mic');"
+    "ws.binaryType='arraybuffer';ws.onopen=()=>{status.textContent='Connected';"
+    "stop.disabled=false;nextTime=ctx.currentTime+.12;};"
+    "ws.onmessage=e=>{if(typeof e.data==='string'){status.textContent='Connected: '+e.data;return;}"
+    "const pcm=new Int16Array(e.data),audio=ctx.createBuffer(1,pcm.length,16000);"
+    "const out=audio.getChannelData(0);let peak=0;for(let i=0;i<pcm.length;i++){"
+    "out[i]=pcm[i]/32768;peak=Math.max(peak,Math.abs(out[i]));}"
+    "meter.style.width=Math.min(100,peak*100)+'%';const source=ctx.createBufferSource();"
+    "source.buffer=audio;source.connect(ctx.destination);"
+    "const at=Math.max(nextTime,ctx.currentTime+.04);source.start(at);"
+    "nextTime=at+audio.duration;};"
+    "ws.onerror=()=>status.textContent='WebSocket error';"
+    "ws.onclose=()=>{status.textContent='Disconnected';closeStream();};};"
+    "stop.onclick=()=>{status.textContent='Stopped';closeStream();};"
+    "</script></body></html>";
+
 static esp_err_t mic_stream_handler(httpd_req_t *req)
 {
+    int socket = httpd_req_to_sockfd(req);
+    if (httpd_ws_get_fd_info(req->handle, socket) !=
+        HTTPD_WS_CLIENT_WEBSOCKET) {
+        httpd_resp_set_type(req, "text/html; charset=utf-8");
+        httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+        return httpd_resp_send(
+            req, MIC_STREAM_PAGE, sizeof(MIC_STREAM_PAGE) - 1);
+    }
     httpd_ws_frame_t frame = { 0 };
     esp_err_t err = httpd_ws_recv_frame(req, &frame, 0);
     if (err != ESP_OK || frame.len == 0) return err;

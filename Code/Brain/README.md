@@ -196,6 +196,14 @@ microphone/speaker at a time.
 After enabling it from the Testing page, connect to:
 
 ```text
+http://DEVICE_IP/api/audio/mic
+```
+
+That URL serves a small built-in player. Press **Start listening** to satisfy
+the browser's audio permission/autoplay requirement. A custom website can
+connect directly to:
+
+```text
 ws://DEVICE_IP/api/audio/mic
 ```
 

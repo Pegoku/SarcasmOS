@@ -65,6 +65,8 @@
 #define WIFI_CONNECTED_BIT BIT0
 #define AI_TASK_STACK_SIZE 24576
 #define WORKFLOW_ANSWER_SIZE 8192
+#define CLI_INPUT_SIZE 256
+#define CLI_HISTORY_DEPTH 12
 
 #define ADDR_LEFT_EYE 0x30
 #define ADDR_RIGHT_EYE 0x31
@@ -1744,6 +1746,66 @@ static bool cli_read_serial_byte(uint8_t *input, TickType_t timeout)
     return true;
 }
 
+static char s_cli_history[CLI_HISTORY_DEPTH][CLI_INPUT_SIZE];
+static size_t s_cli_history_count;
+
+static size_t cli_previous_character(const char *buffer, size_t cursor)
+{
+    if (cursor == 0) return 0;
+    --cursor;
+    while (cursor > 0 &&
+           ((unsigned char)buffer[cursor] & 0xc0U) == 0x80U) {
+        --cursor;
+    }
+    return cursor;
+}
+
+static size_t cli_next_character(const char *buffer, size_t length,
+                                 size_t cursor)
+{
+    if (cursor >= length) return length;
+    ++cursor;
+    while (cursor < length &&
+           ((unsigned char)buffer[cursor] & 0xc0U) == 0x80U) {
+        ++cursor;
+    }
+    return cursor;
+}
+
+static size_t cli_character_count(const char *buffer, size_t begin,
+                                  size_t end)
+{
+    size_t count = 0;
+    for (size_t position = begin; position < end; ++position) {
+        if (((unsigned char)buffer[position] & 0xc0U) != 0x80U) ++count;
+    }
+    return count;
+}
+
+static void cli_redraw_line(const char *prompt, const char *buffer,
+                            size_t length, size_t cursor)
+{
+    printf("\r\033[2K%s%s", prompt, buffer);
+    size_t columns = cli_character_count(buffer, cursor, length);
+    if (columns > 0) printf("\033[%uD", (unsigned)columns);
+    fflush(stdout);
+}
+
+static void cli_remember_command(const char *command)
+{
+    if (command[0] == '\0' ||
+        (s_cli_history_count > 0 &&
+         strcmp(s_cli_history[s_cli_history_count - 1], command) == 0)) {
+        return;
+    }
+    if (s_cli_history_count == CLI_HISTORY_DEPTH) {
+        memmove(s_cli_history, s_cli_history + 1,
+                sizeof(s_cli_history[0]) * (CLI_HISTORY_DEPTH - 1));
+        --s_cli_history_count;
+    }
+    strlcpy(s_cli_history[s_cli_history_count++], command, CLI_INPUT_SIZE);
+}
+
 static tui_key_t cli_read_tui_key(void)
 {
     while (true) {
@@ -1787,6 +1849,9 @@ static void cli_clear_screen(void)
 static bool cli_read_line(const char *prompt, char *buffer, size_t capacity)
 {
     size_t length = 0;
+    size_t cursor = 0;
+    size_t history_index = s_cli_history_count;
+    char draft[CLI_INPUT_SIZE] = "";
     if (capacity == 0) {
         return false;
     }
@@ -1809,21 +1874,73 @@ static bool cli_read_line(const char *prompt, char *buffer, size_t capacity)
             buffer[length] = '\0';
             printf("\n");
             fflush(stdout);
+            cli_remember_command(buffer);
             return true;
         }
+        if (input == 0x03) {
+            buffer[0] = '\0';
+            printf("\r\033[2K^C\n");
+            fflush(stdout);
+            return false;
+        }
         if (input == '\b' || input == 0x7f) {
-            if (length > 0) {
-                buffer[--length] = '\0';
-                printf("\b \b");
-                fflush(stdout);
+            if (cursor > 0) {
+                size_t previous = cli_previous_character(buffer, cursor);
+                memmove(buffer + previous, buffer + cursor,
+                        length - cursor + 1);
+                length -= cursor - previous;
+                cursor = previous;
+                history_index = s_cli_history_count;
+                strlcpy(draft, buffer, sizeof(draft));
+                cli_redraw_line(prompt, buffer, length, cursor);
+            }
+            continue;
+        }
+        if (input == 0x1b) {
+            uint8_t prefix;
+            uint8_t arrow;
+            if (!cli_read_serial_byte(&prefix, pdMS_TO_TICKS(30)) ||
+                (prefix != '[' && prefix != 'O') ||
+                !cli_read_serial_byte(&arrow, pdMS_TO_TICKS(30))) {
+                continue;
+            }
+            if (arrow == 'A' && s_cli_history_count > 0) {
+                if (history_index == s_cli_history_count) {
+                    strlcpy(draft, buffer, sizeof(draft));
+                }
+                if (history_index > 0) --history_index;
+                strlcpy(buffer, s_cli_history[history_index], capacity);
+                length = strlen(buffer);
+                cursor = length;
+                cli_redraw_line(prompt, buffer, length, cursor);
+            } else if (arrow == 'B' &&
+                       history_index < s_cli_history_count) {
+                ++history_index;
+                strlcpy(buffer,
+                        history_index == s_cli_history_count
+                            ? draft : s_cli_history[history_index],
+                        capacity);
+                length = strlen(buffer);
+                cursor = length;
+                cli_redraw_line(prompt, buffer, length, cursor);
+            } else if (arrow == 'C') {
+                cursor = cli_next_character(buffer, length, cursor);
+                cli_redraw_line(prompt, buffer, length, cursor);
+            } else if (arrow == 'D') {
+                cursor = cli_previous_character(buffer, cursor);
+                cli_redraw_line(prompt, buffer, length, cursor);
             }
             continue;
         }
         if (input >= 0x20 && length + 1 < capacity) {
-            buffer[length++] = (char)input;
+            memmove(buffer + cursor + 1, buffer + cursor,
+                    length - cursor + 1);
+            buffer[cursor++] = (char)input;
+            ++length;
             buffer[length] = '\0';
-            putchar(input);
-            fflush(stdout);
+            history_index = s_cli_history_count;
+            strlcpy(draft, buffer, sizeof(draft));
+            cli_redraw_line(prompt, buffer, length, cursor);
         }
     }
 }
@@ -2622,7 +2739,7 @@ static void cli_task(void *arg)
 {
     (void)arg;
     cli_page_t page = CLI_PAGE_HOME;
-    char input[256];
+    char input[CLI_INPUT_SIZE];
     printf("\nUSB console ready. Enter h for the three-page menu.\n");
     cli_print_home();
     while (true) {

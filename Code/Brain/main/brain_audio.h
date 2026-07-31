@@ -29,8 +29,10 @@ typedef struct {
 esp_err_t brain_audio_init(void);
 esp_err_t brain_audio_set_mic_gain_q8(uint16_t gain_q8);
 uint16_t brain_audio_get_mic_gain_q8(void);
+esp_err_t brain_audio_set_speaker_gain_q8(uint16_t gain_q8);
+uint16_t brain_audio_get_speaker_gain_q8(void);
 esp_err_t brain_audio_play_tone(uint16_t frequency_hz, uint16_t duration_ms,
-                                uint16_t level);
+                                uint16_t speaker_gain_q8);
 esp_err_t brain_audio_measure(uint16_t duration_ms,
                               brain_audio_capture_result_t *result);
 esp_err_t brain_audio_capture(const brain_audio_capture_config_t *config,

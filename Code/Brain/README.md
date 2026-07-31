@@ -76,6 +76,14 @@ mic sensitivity 600
 stream off
 ```
 
+Enter `p` on the Testing page for the interactive speaker controller. Use
+Up/Down or `W`/`S` to choose approximately 0.05 W through 3.2 W, Space/Enter
+to preview a one-second tone, `A` to apply and save that level as the default
+for tests and TTS, and `Q`/Esc to return. Levels above 1.5 W require explicit
+confirmation. Power estimates assume a 4-ohm speaker, 5 V amplifier supply,
+and the PCB's fixed 9 dB MAX98357A gain. `GAIN_SLOT` is not connected to the
+ESP32, so firmware changes digital amplitude/dBFS rather than hardware gain.
+
 The `/api/audio/mic` route does not exist until `stream on` is entered. Turning
 it off unregisters the route and disconnects its client. This setting is
 intentionally runtime-only and returns to disabled after a reboot.

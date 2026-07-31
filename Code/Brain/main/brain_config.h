@@ -35,6 +35,7 @@ typedef struct {
     uint16_t silence_ms;
     uint16_t vad_threshold;
     uint16_t mic_gain_q8;
+    uint16_t speaker_gain_q8;
 } brain_config_t;
 
 typedef enum {
@@ -66,4 +67,6 @@ esp_err_t brain_config_set_vad_threshold(brain_config_t *config,
                                          uint16_t threshold);
 esp_err_t brain_config_set_mic_gain_q8(brain_config_t *config,
                                        uint16_t gain_q8);
+esp_err_t brain_config_set_speaker_gain_q8(brain_config_t *config,
+                                           uint16_t gain_q8);
 esp_err_t brain_config_reset(void);

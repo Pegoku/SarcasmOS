@@ -25,6 +25,7 @@ static i2s_chan_handle_t s_tx_channel;
 static i2s_chan_handle_t s_rx_channel;
 static SemaphoreHandle_t s_audio_mutex;
 static volatile uint16_t s_mic_gain_q8 = 256;
+static volatile uint16_t s_speaker_gain_q8 = 128;
 
 static uint16_t magnitude16(int16_t sample)
 {
@@ -105,8 +106,22 @@ uint16_t brain_audio_get_mic_gain_q8(void)
     return s_mic_gain_q8;
 }
 
-static esp_err_t write_pcm16(const int16_t *samples, size_t sample_count,
-                             uint16_t gain_q8)
+esp_err_t brain_audio_set_speaker_gain_q8(uint16_t gain_q8)
+{
+    if (gain_q8 < 32 || gain_q8 > 256) return ESP_ERR_INVALID_ARG;
+    s_speaker_gain_q8 = gain_q8;
+    return ESP_OK;
+}
+
+uint16_t brain_audio_get_speaker_gain_q8(void)
+{
+    return s_speaker_gain_q8;
+}
+
+static esp_err_t write_pcm16_scaled(const int16_t *samples,
+                                    size_t sample_count,
+                                    uint16_t gain_q8,
+                                    uint16_t speaker_gain_q8)
 {
     if (samples == NULL || sample_count == 0) {
         return ESP_ERR_INVALID_ARG;
@@ -119,8 +134,9 @@ static esp_err_t write_pcm16(const int16_t *samples, size_t sample_count,
             count = AUDIO_BLOCK_FRAMES;
         }
         for (size_t i = 0; i < count; ++i) {
-            int32_t amplified =
-                ((int32_t)samples[offset + i] * gain_q8) / 256;
+            int32_t amplified = (int32_t)(
+                (int64_t)samples[offset + i] * gain_q8 *
+                speaker_gain_q8 / (256 * 256));
             if (amplified > INT16_MAX) amplified = INT16_MAX;
             if (amplified < INT16_MIN) amplified = INT16_MIN;
             int32_t frame = amplified << 16;
@@ -140,6 +156,13 @@ static esp_err_t write_pcm16(const int16_t *samples, size_t sample_count,
     return ESP_OK;
 }
 
+static esp_err_t write_pcm16(const int16_t *samples, size_t sample_count,
+                             uint16_t gain_q8)
+{
+    return write_pcm16_scaled(
+        samples, sample_count, gain_q8, s_speaker_gain_q8);
+}
+
 esp_err_t brain_audio_play_pcm16(const int16_t *samples, size_t sample_count,
                                  uint16_t gain_q8)
 {
@@ -155,9 +178,10 @@ esp_err_t brain_audio_play_pcm16(const int16_t *samples, size_t sample_count,
 }
 
 esp_err_t brain_audio_play_tone(uint16_t frequency_hz, uint16_t duration_ms,
-                                uint16_t level)
+                                uint16_t speaker_gain_q8)
 {
-    if (frequency_hz == 0 || duration_ms == 0 || level == 0) {
+    if (frequency_hz == 0 || duration_ms == 0 ||
+        speaker_gain_q8 < 32 || speaker_gain_q8 > 256) {
         return ESP_ERR_INVALID_ARG;
     }
     esp_err_t err = audio_lock();
@@ -176,14 +200,16 @@ esp_err_t brain_audio_play_tone(uint16_t frequency_hz, uint16_t duration_ms,
         for (size_t i = 0; i < count; ++i) {
             samples[i] = (int16_t)(
                 sin((double)phase * 6.283185307179586 / 4294967296.0) *
-                level);
+                INT16_MAX);
             phase += step;
         }
-        err = write_pcm16(samples, count, 256);
+        err = write_pcm16_scaled(
+            samples, count, 256, speaker_gain_q8);
         remaining -= count;
     }
     memset(samples, 0, sizeof(samples));
-    write_pcm16(samples, AUDIO_BLOCK_FRAMES, 256);
+    write_pcm16_scaled(
+        samples, AUDIO_BLOCK_FRAMES, 256, speaker_gain_q8);
     xSemaphoreGive(s_audio_mutex);
     return err;
 }

@@ -75,6 +75,11 @@ config SARCASMOS_MIC_GAIN_Q8
     range 64 2048
     default 256
 
+config SARCASMOS_SPEAKER_GAIN_Q8
+    int "Default speaker digital level (Q8; 128 = 50%)"
+    range 32 256
+    default 128
+
 config SARCASMOS_ENABLE_WIFI
     bool "Enable Wi-Fi station at boot"
     default y

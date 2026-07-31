@@ -1639,6 +1639,36 @@ typedef enum {
     CLI_PAGE_CONFIG,
 } cli_page_t;
 
+typedef enum {
+    TUI_KEY_NONE,
+    TUI_KEY_UP,
+    TUI_KEY_DOWN,
+    TUI_KEY_ENTER,
+    TUI_KEY_SPACE,
+    TUI_KEY_ESCAPE,
+    TUI_KEY_QUIT,
+    TUI_KEY_APPLY,
+} tui_key_t;
+
+typedef struct {
+    uint16_t gain_q8;
+    const char *label;
+    const char *power;
+} speaker_level_t;
+
+#define SPEAKER_1_5W_LEVEL 3
+
+static const speaker_level_t SPEAKER_LEVELS[] = {
+    { 32, "quiet (12.5%, -18 dBFS)", "~0.05 W" },
+    { 64, "low (25%, -12 dBFS)", "~0.20 W" },
+    { 128, "normal (50%, -6 dBFS)", "~0.80 W" },
+    { 176, "1.5 W speaker limit (69%, -3.3 dBFS)", "~1.5 W" },
+    { 202, "high (79%, -2.0 dBFS)", "~2.0 W" },
+    { 226, "very high (88%, -1.1 dBFS)", "~2.5 W" },
+    { 248, "near clipping (97%, -0.3 dBFS)", "~3.0 W" },
+    { 256, "amplifier limit (100%, 0 dBFS)", "~3.2 W, clipped" },
+};
+
 typedef struct {
     uint8_t id;
     const char *name;
@@ -1707,6 +1737,46 @@ static bool cli_read_serial_byte(uint8_t *input, TickType_t timeout)
     }
     *input = (uint8_t)character;
     return true;
+}
+
+static tui_key_t cli_read_tui_key(void)
+{
+    while (true) {
+        uint8_t input;
+        if (!cli_read_serial_byte(&input, pdMS_TO_TICKS(20))) continue;
+        if (g_discard_line_feed) {
+            g_discard_line_feed = false;
+            if (input == '\n') continue;
+        }
+        if (input == '\r' || input == '\n') {
+            g_discard_line_feed = input == '\r';
+            return TUI_KEY_ENTER;
+        }
+        if (input == ' ') return TUI_KEY_SPACE;
+        if (input == 'q' || input == 'Q') return TUI_KEY_QUIT;
+        if (input == 'a' || input == 'A') return TUI_KEY_APPLY;
+        if (input == 'w' || input == 'W') return TUI_KEY_UP;
+        if (input == 's' || input == 'S') return TUI_KEY_DOWN;
+        if (input != 0x1b) continue;
+
+        uint8_t prefix;
+        if (!cli_read_serial_byte(&prefix, pdMS_TO_TICKS(30))) {
+            return TUI_KEY_ESCAPE;
+        }
+        if (prefix != '[' && prefix != 'O') return TUI_KEY_ESCAPE;
+        uint8_t arrow;
+        if (!cli_read_serial_byte(&arrow, pdMS_TO_TICKS(30))) {
+            return TUI_KEY_ESCAPE;
+        }
+        if (arrow == 'A') return TUI_KEY_UP;
+        if (arrow == 'B') return TUI_KEY_DOWN;
+        return TUI_KEY_NONE;
+    }
+}
+
+static void cli_clear_screen(void)
+{
+    printf("\033[2J\033[H");
 }
 
 static bool cli_read_line(const char *prompt, char *buffer, size_t capacity)
@@ -1992,6 +2062,8 @@ static void cli_show_config(void)
     printf("Silence timeout:  %u ms\n", g_config.silence_ms);
     printf("VAD threshold:    %u\n", g_config.vad_threshold);
     printf("Microphone gain:  %.2fx\n", g_config.mic_gain_q8 / 256.0);
+    printf("Speaker level:    %.1f%% digital scale\n",
+           g_config.speaker_gain_q8 * 100.0 / 256.0);
     printf("Values stored from this page override blank or default build values.\n");
 }
 
@@ -2100,6 +2172,116 @@ static void cli_set_config(char *arguments)
            esp_err_to_name(err));
 }
 
+static size_t cli_speaker_level_for_gain(uint16_t gain_q8)
+{
+    size_t closest = 0;
+    unsigned closest_distance = UINT16_MAX;
+    for (size_t i = 0;
+         i < sizeof(SPEAKER_LEVELS) / sizeof(SPEAKER_LEVELS[0]); ++i) {
+        unsigned distance = SPEAKER_LEVELS[i].gain_q8 > gain_q8
+                                ? SPEAKER_LEVELS[i].gain_q8 - gain_q8
+                                : gain_q8 - SPEAKER_LEVELS[i].gain_q8;
+        if (distance < closest_distance) {
+            closest = i;
+            closest_distance = distance;
+        }
+    }
+    return closest;
+}
+
+static bool cli_confirm_high_speaker_level(size_t level,
+                                           const char *action)
+{
+    if (level <= SPEAKER_1_5W_LEVEL) return true;
+    printf("\nDANGER: %s can permanently damage a 1.5 W speaker.\n",
+           SPEAKER_LEVELS[level].power);
+    printf("Press Space or Enter to confirm %s; any other key cancels.\n",
+           action);
+    tui_key_t confirmation = cli_read_tui_key();
+    return confirmation == TUI_KEY_ENTER || confirmation == TUI_KEY_SPACE;
+}
+
+static void cli_test_speaker_tui(void)
+{
+    if (mic_stream_active()) {
+        printf("Disable or disconnect the microphone stream first.\n");
+        return;
+    }
+    const size_t level_count =
+        sizeof(SPEAKER_LEVELS) / sizeof(SPEAKER_LEVELS[0]);
+    size_t level = cli_speaker_level_for_gain(g_config.speaker_gain_q8);
+    char status[128] = "Ready";
+
+    while (true) {
+        cli_clear_screen();
+        printf("Speaker tone control\n");
+        printf("====================\n\n");
+        printf("Level: %s\n", SPEAKER_LEVELS[level].label);
+        printf("Estimated 4-ohm power at 5 V: %s\n",
+               SPEAKER_LEVELS[level].power);
+        printf("MAX98357A hardware gain: fixed 9 dB by PCB wiring\n");
+        printf("Digital gain: %.1f%% (Q8 %u)%s\n",
+               SPEAKER_LEVELS[level].gain_q8 * 100.0 / 256.0,
+               SPEAKER_LEVELS[level].gain_q8,
+               SPEAKER_LEVELS[level].gain_q8 ==
+                       g_config.speaker_gain_q8
+                   ? " [DEFAULT]" : "");
+        printf("\nW/Up: louder   S/Down: quieter   Space/Enter: play\n");
+        printf("A: apply and save as default      Q/Esc: return\n");
+        if (level > SPEAKER_1_5W_LEVEL) {
+            printf("\nDANGER: This exceeds a 1.5 W speaker's continuous rating.\n");
+        } else if (level == SPEAKER_1_5W_LEVEL) {
+            printf("\nWARNING: Do not use this with speakers rated below 1.5 W.\n");
+        }
+        printf("\n%s\n", status);
+
+        tui_key_t key = cli_read_tui_key();
+        if (key == TUI_KEY_UP && level + 1 < level_count) {
+            ++level;
+        } else if (key == TUI_KEY_DOWN && level > 0) {
+            --level;
+        } else if (key == TUI_KEY_ENTER || key == TUI_KEY_SPACE) {
+            if (!cli_confirm_high_speaker_level(level, "playback")) {
+                strlcpy(status, "Playback cancelled", sizeof(status));
+                continue;
+            }
+            printf("\nPlaying 440 Hz for one second at %s...\n",
+                   SPEAKER_LEVELS[level].label);
+            esp_err_t err = brain_audio_play_tone(
+                440, 1000, SPEAKER_LEVELS[level].gain_q8);
+            snprintf(status, sizeof(status), "Speaker test: %s",
+                     esp_err_to_name(err));
+            printf("%s\nPress a key to continue.\n", status);
+            tui_key_t continue_key = cli_read_tui_key();
+            if (continue_key == TUI_KEY_QUIT ||
+                continue_key == TUI_KEY_ESCAPE) {
+                cli_clear_screen();
+                return;
+            }
+        } else if (key == TUI_KEY_APPLY) {
+            if (!cli_confirm_high_speaker_level(level, "saving")) {
+                strlcpy(status, "Default not changed", sizeof(status));
+                continue;
+            }
+            uint16_t gain_q8 = SPEAKER_LEVELS[level].gain_q8;
+            esp_err_t err = brain_config_set_speaker_gain_q8(
+                &g_config, gain_q8);
+            if (err == ESP_OK) {
+                err = brain_audio_set_speaker_gain_q8(gain_q8);
+            }
+            snprintf(status, sizeof(status),
+                     err == ESP_OK
+                         ? "Saved as default for tests and TTS: %s"
+                         : "Could not save default: %s",
+                     err == ESP_OK ? SPEAKER_LEVELS[level].label
+                                   : esp_err_to_name(err));
+        } else if (key == TUI_KEY_QUIT || key == TUI_KEY_ESCAPE) {
+            cli_clear_screen();
+            return;
+        }
+    }
+}
+
 static void cli_handle_test(char *command)
 {
     if (strcmp(command, "a") == 0) cli_run_tests();
@@ -2151,14 +2333,7 @@ static void cli_handle_test(char *command)
         printf("\n");
     }
     else if (strcmp(command, "p") == 0) {
-        if (mic_stream_active()) {
-            printf("Disable or disconnect the microphone stream first.\n");
-            return;
-        }
-        printf("Playing 440 Hz for one second...\n");
-        esp_err_t err = brain_audio_play_tone(440, 1000, 12000);
-        printf("[%s] Speaker stream: %s (confirm it was audible)\n",
-               err == ESP_OK ? "PASS" : "FAIL", esp_err_to_name(err));
+        cli_test_speaker_tui();
     } else if (strcmp(command, "r") == 0) {
         if (mic_stream_active()) {
             printf("Disable or disconnect the microphone stream first.\n");
@@ -2275,6 +2450,10 @@ static void cli_handle_config(char *command)
         if (err == ESP_OK) {
             err = brain_audio_set_mic_gain_q8(g_config.mic_gain_q8);
         }
+        if (err == ESP_OK) {
+            err = brain_audio_set_speaker_gain_q8(
+                g_config.speaker_gain_q8);
+        }
         printf("Configuration reset: %s\n", esp_err_to_name(err));
     } else {
         printf("Unknown configuration command. Enter h for this page.\n");
@@ -2351,6 +2530,8 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(brain_config_load(&g_config));
     ESP_ERROR_CHECK(brain_audio_set_mic_gain_q8(g_config.mic_gain_q8));
+    ESP_ERROR_CHECK(brain_audio_set_speaker_gain_q8(
+        g_config.speaker_gain_q8));
     g_face_queue = xQueueCreate(1, sizeof(face_request_t));
     g_face_mutex = xSemaphoreCreateMutex();
     g_display_mutex = xSemaphoreCreateMutex();

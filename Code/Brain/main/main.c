@@ -2033,29 +2033,35 @@ static esp_err_t cli_apply_wifi(void)
 
 static void cli_show_config(void)
 {
+    printf("WARNING: configuration output includes plaintext credentials.\n");
     printf("Wi-Fi SSID:       %s\n",
            g_config.wifi_ssid[0] ? g_config.wifi_ssid : "<not set>");
     printf("Wi-Fi password:   %s\n",
-           g_config.wifi_password[0] ? "<set>" : "<not set>");
+           g_config.wifi_password[0] ? g_config.wifi_password : "<not set>");
     printf("Shared AI token:  %s\n",
-           g_config.ai_token[0] ? "<set>" : "<not set>");
+           g_config.ai_token[0] ? g_config.ai_token : "<not set>");
     printf("LLM token:        %s%s\n",
-           g_config.llm_token[0] ? "<set>" : "<shared token>",
-           !g_config.llm_token[0] && !g_config.ai_token[0]
-               ? " (not set)" : "");
+           g_config.llm_token[0] ? g_config.llm_token
+                                 : g_config.ai_token[0] ? g_config.ai_token
+                                                        : "<not set>",
+           !g_config.llm_token[0] && g_config.ai_token[0]
+               ? " (shared fallback)" : "");
     printf("Replicate token:  %s%s\n",
-           g_config.replicate_token[0] ? "<set>" : "<shared token>",
-           !g_config.replicate_token[0] && !g_config.ai_token[0]
-               ? " (not set)" : "");
+           g_config.replicate_token[0]
+               ? g_config.replicate_token
+               : g_config.ai_token[0] ? g_config.ai_token : "<not set>",
+           !g_config.replicate_token[0] && g_config.ai_token[0]
+               ? " (shared fallback)" : "");
     printf("LLM URL:          %s\n", g_config.llm_url);
     printf("Replicate URL:    %s\n", g_config.replicate_url);
     printf("LLM model:        %s\n", g_config.llm_model);
     printf("STT model:        %s\n", g_config.stt_model);
     printf("TTS model:        %s\n", g_config.tts_model);
     printf("Voice ID:         %s\n",
-           g_config.voice_id[0] ? "<set>" : "<not set>");
+           g_config.voice_id[0] ? g_config.voice_id : "<not set>");
     printf("Calendar token:   %s\n",
-           g_config.google_calendar_token[0] ? "<set>" : "<not set>");
+           g_config.google_calendar_token[0]
+               ? g_config.google_calendar_token : "<not set>");
     printf("Timezone:         %s\n", g_config.timezone);
     printf("Wake phrase:      %s\n",
            g_config.wake_phrase[0] ? g_config.wake_phrase : "<not set>");
@@ -2075,20 +2081,25 @@ static void cli_view_config(const char *key)
                g_config.wifi_ssid[0] ? g_config.wifi_ssid : "<not set>");
     } else if (strcmp(key, "password") == 0) {
         printf("password: %s\n",
-               g_config.wifi_password[0] ? "<set>" : "<not set>");
+               g_config.wifi_password[0]
+                   ? g_config.wifi_password : "<not set>");
     } else if (strcmp(key, "ai-token") == 0) {
         printf("ai-token: %s\n",
-               g_config.ai_token[0] ? "<set>" : "<not set>");
+               g_config.ai_token[0] ? g_config.ai_token : "<not set>");
     } else if (strcmp(key, "llm-token") == 0) {
-        printf("llm-token: %s\n",
+        printf("llm-token: %s%s\n",
                g_config.llm_token[0]
-                   ? "<set>"
-                   : g_config.ai_token[0] ? "<shared token>" : "<not set>");
+                   ? g_config.llm_token
+                   : g_config.ai_token[0] ? g_config.ai_token : "<not set>",
+               !g_config.llm_token[0] && g_config.ai_token[0]
+                   ? " (shared fallback)" : "");
     } else if (strcmp(key, "replicate-token") == 0) {
-        printf("replicate-token: %s\n",
+        printf("replicate-token: %s%s\n",
                g_config.replicate_token[0]
-                   ? "<set>"
-                   : g_config.ai_token[0] ? "<shared token>" : "<not set>");
+                   ? g_config.replicate_token
+                   : g_config.ai_token[0] ? g_config.ai_token : "<not set>",
+               !g_config.replicate_token[0] && g_config.ai_token[0]
+                   ? " (shared fallback)" : "");
     } else if (strcmp(key, "llm-url") == 0) {
         printf("llm-url: %s\n", g_config.llm_url);
     } else if (strcmp(key, "replicate-url") == 0) {
@@ -2101,10 +2112,11 @@ static void cli_view_config(const char *key)
         printf("tts-model: %s\n", g_config.tts_model);
     } else if (strcmp(key, "voice-id") == 0) {
         printf("voice-id: %s\n",
-               g_config.voice_id[0] ? "<set>" : "<not set>");
+               g_config.voice_id[0] ? g_config.voice_id : "<not set>");
     } else if (strcmp(key, "calendar-token") == 0) {
         printf("calendar-token: %s\n",
-               g_config.google_calendar_token[0] ? "<set>" : "<not set>");
+               g_config.google_calendar_token[0]
+                   ? g_config.google_calendar_token : "<not set>");
     } else if (strcmp(key, "timezone") == 0) {
         printf("timezone: %s\n", g_config.timezone);
     } else if (strcmp(key, "wake") == 0) {

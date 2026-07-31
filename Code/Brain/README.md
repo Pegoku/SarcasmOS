@@ -126,7 +126,8 @@ apply-wifi
 ```
 
 The specific LLM and Replicate tokens fall back to `ai-token` when blank.
-Passwords and tokens are never printed by `show`. Wi-Fi changes can be
+`show` and `view <key>` print actual values, including passwords, tokens, and
+voice IDs; avoid sharing or recording that serial output. Wi-Fi changes can be
 applied immediately; AI settings are picked up by the next interaction.
 Configuration is stored in NVS. Enable NVS encryption for a production unit
 because provider and Calendar tokens otherwise remain plaintext in flash.

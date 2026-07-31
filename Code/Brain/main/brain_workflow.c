@@ -12,6 +12,7 @@
 #include "esp_log.h"
 #include "esp_random.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/stream_buffer.h"
 #include "freertos/task.h"
@@ -30,6 +31,10 @@
 #define AUDIO_BUFFER_SIZE 2048
 #define AUDIO_PLAYBACK_BUFFER_SIZE (32 * 1024)
 #define AUDIO_PLAYBACK_PREBUFFER_SIZE (16 * 1024)
+#define AUDIO_PLAYBACK_QUEUE_LENGTH \
+    (AUDIO_PLAYBACK_BUFFER_SIZE / AUDIO_BUFFER_SIZE)
+#define AUDIO_PLAYBACK_PREBUFFER_CHUNKS \
+    (AUDIO_PLAYBACK_PREBUFFER_SIZE / AUDIO_BUFFER_SIZE)
 #define AUDIO_PLAYBACK_TASK_STACK_SIZE 12288
 #define AUDIO_PLAYBACK_SILENT_TAIL_SAMPLES 320
 #define STT_UPLOAD_BLOCK_SIZE 3072
@@ -63,8 +68,14 @@ typedef struct {
 } stt_upload_t;
 
 typedef struct {
-    StreamBufferHandle_t stream;
+    size_t length;
+    uint8_t bytes[AUDIO_BUFFER_SIZE];
+} audio_chunk_t;
+
+typedef struct {
+    QueueHandle_t queue;
     SemaphoreHandle_t done;
+    audio_chunk_t *write_chunk;
     volatile bool download_done;
     volatile bool abort;
     volatile esp_err_t download_result;
@@ -868,15 +879,15 @@ static void audio_playback_task(void *argument)
 {
     audio_playback_t *playback = argument;
     while (!playback->abort && !playback->download_done &&
-           xStreamBufferBytesAvailable(playback->stream) <
-               AUDIO_PLAYBACK_PREBUFFER_SIZE) {
+           uxQueueMessagesWaiting(playback->queue) <
+               AUDIO_PLAYBACK_PREBUFFER_CHUNKS) {
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 
     esp_err_t err = ESP_OK;
     union {
-        int16_t samples[AUDIO_BUFFER_SIZE / sizeof(int16_t)];
-        uint8_t bytes[AUDIO_BUFFER_SIZE];
+        int16_t samples[AUDIO_BUFFER_SIZE / sizeof(int16_t) + 1];
+        uint8_t bytes[AUDIO_BUFFER_SIZE + 1];
     } audio;
     int16_t tail[AUDIO_PLAYBACK_SILENT_TAIL_SAMPLES];
     int16_t combined[
@@ -885,14 +896,15 @@ static void audio_playback_task(void *argument)
     size_t pending = 0;
     size_t tail_count = 0;
     while (!playback->abort) {
-        size_t received = xStreamBufferReceive(
-            playback->stream, audio.bytes + pending,
-            sizeof(audio.bytes) - pending, pdMS_TO_TICKS(100));
-        if (received == 0) {
+        audio_chunk_t *chunk = NULL;
+        if (xQueueReceive(playback->queue, &chunk,
+                          pdMS_TO_TICKS(100)) != pdTRUE) {
             if (playback->download_done) break;
             continue;
         }
-        size_t available = pending + received;
+        memcpy(audio.bytes + pending, chunk->bytes, chunk->length);
+        size_t available = pending + chunk->length;
+        free(chunk);
         size_t playable = available & ~(size_t)1;
         if (playable > 0) {
             size_t sample_count = playable / sizeof(int16_t);
@@ -932,21 +944,20 @@ static void audio_playback_task(void *argument)
 
 static esp_err_t audio_playback_start(audio_playback_t *playback)
 {
-    playback->stream = xStreamBufferCreate(AUDIO_PLAYBACK_BUFFER_SIZE, 1);
+    playback->queue = xQueueCreate(
+        AUDIO_PLAYBACK_QUEUE_LENGTH, sizeof(audio_chunk_t *));
     playback->done = xSemaphoreCreateBinary();
-    if (playback->stream == NULL || playback->done == NULL) {
+    if (playback->queue == NULL || playback->done == NULL) {
         ESP_LOGE(TAG,
-                 "audio playback allocation failed: stream=%s done=%s "
+                 "audio playback allocation failed: queue=%s done=%s "
                  "free=%zu largest=%zu",
-                 playback->stream != NULL ? "yes" : "no",
+                 playback->queue != NULL ? "yes" : "no",
                  playback->done != NULL ? "yes" : "no",
                  heap_caps_get_free_size(MALLOC_CAP_8BIT),
                  heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
-        if (playback->stream != NULL) {
-            vStreamBufferDelete(playback->stream);
-        }
+        if (playback->queue != NULL) vQueueDelete(playback->queue);
         if (playback->done != NULL) vSemaphoreDelete(playback->done);
-        playback->stream = NULL;
+        playback->queue = NULL;
         playback->done = NULL;
         return ESP_ERR_NO_MEM;
     }
@@ -958,13 +969,28 @@ static esp_err_t audio_playback_start(audio_playback_t *playback)
                  "largest=%zu",
                  heap_caps_get_free_size(MALLOC_CAP_8BIT),
                  heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
-        vStreamBufferDelete(playback->stream);
+        vQueueDelete(playback->queue);
         vSemaphoreDelete(playback->done);
-        playback->stream = NULL;
+        playback->queue = NULL;
         playback->done = NULL;
         return ESP_ERR_NO_MEM;
     }
     return ESP_OK;
+}
+
+static esp_err_t audio_playback_enqueue_write_chunk(
+    audio_playback_t *playback)
+{
+    while (!playback->abort) {
+        audio_chunk_t *chunk = playback->write_chunk;
+        if (xQueueSend(playback->queue, &chunk,
+                       pdMS_TO_TICKS(100)) == pdTRUE) {
+            playback->write_chunk = NULL;
+            return ESP_OK;
+        }
+    }
+    return playback->playback_result != ESP_OK
+               ? playback->playback_result : ESP_FAIL;
 }
 
 static esp_err_t audio_playback_send(audio_playback_t *playback,
@@ -975,13 +1001,40 @@ static esp_err_t audio_playback_send(audio_playback_t *playback,
             return playback->playback_result != ESP_OK
                        ? playback->playback_result : ESP_FAIL;
         }
-        size_t sent = xStreamBufferSend(
-            playback->stream, bytes, length, pdMS_TO_TICKS(100));
-        if (sent == 0) continue;
-        bytes += sent;
-        length -= sent;
+        if (playback->write_chunk == NULL) {
+            playback->write_chunk = malloc(sizeof(*playback->write_chunk));
+            if (playback->write_chunk == NULL) {
+                ESP_LOGE(TAG,
+                         "audio chunk allocation failed: free=%zu "
+                         "largest=%zu",
+                         heap_caps_get_free_size(MALLOC_CAP_8BIT),
+                         heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+                return ESP_ERR_NO_MEM;
+            }
+            playback->write_chunk->length = 0;
+        }
+        size_t available = AUDIO_BUFFER_SIZE -
+                           playback->write_chunk->length;
+        size_t copied = length < available ? length : available;
+        memcpy(playback->write_chunk->bytes +
+                   playback->write_chunk->length,
+               bytes, copied);
+        playback->write_chunk->length += copied;
+        bytes += copied;
+        length -= copied;
+        if (playback->write_chunk->length == AUDIO_BUFFER_SIZE) {
+            esp_err_t err =
+                audio_playback_enqueue_write_chunk(playback);
+            if (err != ESP_OK) return err;
+        }
     }
     return ESP_OK;
+}
+
+static esp_err_t audio_playback_flush(audio_playback_t *playback)
+{
+    if (playback->write_chunk == NULL) return ESP_OK;
+    return audio_playback_enqueue_write_chunk(playback);
 }
 
 static esp_err_t play_audio_url(const char *url)
@@ -1057,9 +1110,10 @@ static esp_err_t play_audio_url(const char *url)
         }
         err = audio_playback_send(&playback, audio, (size_t)received);
     }
+    if (err == ESP_OK) err = audio_playback_flush(&playback);
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
-    if (playback.stream != NULL) {
+    if (playback.queue != NULL) {
         playback.download_result = err;
         if (err != ESP_OK) playback.abort = true;
         playback.download_done = true;
@@ -1069,7 +1123,12 @@ static esp_err_t play_audio_url(const char *url)
         } else if (err == ESP_OK) {
             err = playback.playback_result;
         }
-        vStreamBufferDelete(playback.stream);
+        audio_chunk_t *chunk = NULL;
+        while (xQueueReceive(playback.queue, &chunk, 0) == pdTRUE) {
+            free(chunk);
+        }
+        free(playback.write_chunk);
+        vQueueDelete(playback.queue);
         vSemaphoreDelete(playback.done);
     }
     return err;

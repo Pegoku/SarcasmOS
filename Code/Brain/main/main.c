@@ -63,6 +63,8 @@
 
 #define I2C_TIMEOUT_MS 80
 #define WIFI_CONNECTED_BIT BIT0
+#define AI_TASK_STACK_SIZE 24576
+#define WORKFLOW_ANSWER_SIZE 8192
 
 #define ADDR_LEFT_EYE 0x30
 #define ADDR_RIGHT_EYE 0x31
@@ -1371,15 +1373,17 @@ static esp_err_t ai_text_handler(httpd_req_t *req)
         return httpd_resp_sendstr(req, response);
     }
     char status[320];
-    char answer[8192];
+    char *answer = malloc(WORKFLOW_ANSWER_SIZE);
+    if (answer == NULL) return ESP_ERR_NO_MEM;
     workflow_status_json(status, sizeof(status));
     esp_err_t err = brain_workflow_run_text(
-        &config, message, status, answer, sizeof(answer));
+        &config, message, status, answer, WORKFLOW_ANSWER_SIZE);
     if (err != ESP_OK) {
         char response[160];
         snprintf(response, sizeof(response),
                  "{\"ok\":false,\"error\":\"%s\"}",
                  esp_err_to_name(err));
+        free(answer);
         httpd_resp_set_status(req, err == ESP_ERR_INVALID_STATE
                                       ? "409 Conflict"
                                       : "502 Bad Gateway");
@@ -1387,6 +1391,7 @@ static esp_err_t ai_text_handler(httpd_req_t *req)
         return httpd_resp_sendstr(req, response);
     }
     char *escaped = http_json_escape(answer);
+    free(answer);
     if (escaped == NULL) return ESP_ERR_NO_MEM;
     size_t capacity = strlen(escaped) + 64;
     char *response = malloc(capacity);
@@ -2568,11 +2573,16 @@ static void cli_handle_interact(char *command)
             return;
         }
         char status[320];
-        char answer[8192];
+        char *answer = malloc(WORKFLOW_ANSWER_SIZE);
+        if (answer == NULL) {
+            printf("AI interaction: ESP_ERR_NO_MEM\n");
+            return;
+        }
         workflow_status_json(status, sizeof(status));
         esp_err_t err = brain_workflow_run_text(
             &g_config, cli_trim(command + 4), status,
-            answer, sizeof(answer));
+            answer, WORKFLOW_ANSWER_SIZE);
+        free(answer);
         printf("AI interaction: %s\n", esp_err_to_name(err));
     } else {
         printf("Unknown interaction command. Enter h for this page.\n");
@@ -2729,9 +2739,10 @@ void app_main(void)
                  esp_err_to_name(usb_err));
     }
     ESP_ERROR_CHECK(xTaskCreate(
-        cli_task, "brain_cli", 16384, NULL, 3, NULL) == pdPASS
+        cli_task, "brain_cli", AI_TASK_STACK_SIZE, NULL, 3, NULL) == pdPASS
                         ? ESP_OK : ESP_ERR_NO_MEM);
     ESP_ERROR_CHECK(xTaskCreate(
-        workflow_wake_task, "workflow_wake", 16384, NULL, 3, NULL) == pdPASS
+        workflow_wake_task, "workflow_wake", AI_TASK_STACK_SIZE,
+        NULL, 3, NULL) == pdPASS
                         ? ESP_OK : ESP_ERR_NO_MEM);
 }

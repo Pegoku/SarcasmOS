@@ -101,6 +101,9 @@ Configuration is stored in NVS and overrides build-time defaults, including
 when those defaults are blank:
 
 ```text
+show
+view stt-model
+view mic-gain
 set ssid MyNetwork
 set password MyPassword
 set ai-token your-shared-Hack-Club-AI-token

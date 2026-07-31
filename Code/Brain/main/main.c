@@ -1875,7 +1875,8 @@ static void cli_print_interact(void)
 static void cli_print_config(void)
 {
     printf("\n------------- Configuration -------------\n");
-    printf("  show\n");
+    printf("  show                     view all effective values\n");
+    printf("  view <key>               view one effective value\n");
     printf("  set ssid <value>          set password <value>\n");
     printf("  set ai-token <value>      set llm-token <value>\n");
     printf("  set replicate-token <value>\n");
@@ -2065,6 +2066,68 @@ static void cli_show_config(void)
     printf("Speaker level:    %.1f%% digital scale\n",
            g_config.speaker_gain_q8 * 100.0 / 256.0);
     printf("Values stored from this page override blank or default build values.\n");
+}
+
+static void cli_view_config(const char *key)
+{
+    if (strcmp(key, "ssid") == 0) {
+        printf("ssid: %s\n",
+               g_config.wifi_ssid[0] ? g_config.wifi_ssid : "<not set>");
+    } else if (strcmp(key, "password") == 0) {
+        printf("password: %s\n",
+               g_config.wifi_password[0] ? "<set>" : "<not set>");
+    } else if (strcmp(key, "ai-token") == 0) {
+        printf("ai-token: %s\n",
+               g_config.ai_token[0] ? "<set>" : "<not set>");
+    } else if (strcmp(key, "llm-token") == 0) {
+        printf("llm-token: %s\n",
+               g_config.llm_token[0]
+                   ? "<set>"
+                   : g_config.ai_token[0] ? "<shared token>" : "<not set>");
+    } else if (strcmp(key, "replicate-token") == 0) {
+        printf("replicate-token: %s\n",
+               g_config.replicate_token[0]
+                   ? "<set>"
+                   : g_config.ai_token[0] ? "<shared token>" : "<not set>");
+    } else if (strcmp(key, "llm-url") == 0) {
+        printf("llm-url: %s\n", g_config.llm_url);
+    } else if (strcmp(key, "replicate-url") == 0) {
+        printf("replicate-url: %s\n", g_config.replicate_url);
+    } else if (strcmp(key, "llm-model") == 0) {
+        printf("llm-model: %s\n", g_config.llm_model);
+    } else if (strcmp(key, "stt-model") == 0) {
+        printf("stt-model: %s\n", g_config.stt_model);
+    } else if (strcmp(key, "tts-model") == 0) {
+        printf("tts-model: %s\n", g_config.tts_model);
+    } else if (strcmp(key, "voice-id") == 0) {
+        printf("voice-id: %s\n",
+               g_config.voice_id[0] ? "<set>" : "<not set>");
+    } else if (strcmp(key, "calendar-token") == 0) {
+        printf("calendar-token: %s\n",
+               g_config.google_calendar_token[0] ? "<set>" : "<not set>");
+    } else if (strcmp(key, "timezone") == 0) {
+        printf("timezone: %s\n", g_config.timezone);
+    } else if (strcmp(key, "wake") == 0) {
+        printf("wake: %s\n",
+               g_config.wake_phrase[0] ? g_config.wake_phrase : "<not set>");
+    } else if (strcmp(key, "wake-enabled") == 0) {
+        printf("wake-enabled: %s\n", g_config.wake_enabled ? "on" : "off");
+    } else if (strcmp(key, "silence-ms") == 0) {
+        printf("silence-ms: %u\n", g_config.silence_ms);
+    } else if (strcmp(key, "vad") == 0 ||
+               strcmp(key, "mic-sensitivity") == 0) {
+        printf("mic-sensitivity: %u\n", g_config.vad_threshold);
+    } else if (strcmp(key, "mic-gain") == 0) {
+        printf("mic-gain: %.2fx (Q8 %u)\n",
+               g_config.mic_gain_q8 / 256.0, g_config.mic_gain_q8);
+    } else if (strcmp(key, "speaker-level") == 0) {
+        printf("speaker-level: %.1f%% (Q8 %u)\n",
+               g_config.speaker_gain_q8 * 100.0 / 256.0,
+               g_config.speaker_gain_q8);
+    } else {
+        printf("Unknown configuration key '%s'. Enter h for the key list.\n",
+               key);
+    }
 }
 
 static bool cli_parse_mic_gain(const char *value, uint16_t *gain_q8)
@@ -2437,6 +2500,8 @@ static void cli_handle_config(char *command)
 {
     if (strcmp(command, "show") == 0) {
         cli_show_config();
+    } else if (strncmp(command, "view ", 5) == 0) {
+        cli_view_config(cli_trim(command + 5));
     } else if (strncmp(command, "set ", 4) == 0) {
         cli_set_config(cli_trim(command + 4));
     } else if (strcmp(command, "apply-wifi") == 0) {

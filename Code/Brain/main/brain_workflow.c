@@ -36,11 +36,8 @@
     (AUDIO_PLAYBACK_PREBUFFER_SIZE / AUDIO_BUFFER_SIZE)
 #define AUDIO_PLAYBACK_TASK_STACK_SIZE 12288
 #define AUDIO_PLAYBACK_SILENT_TAIL_SAMPLES 320
-#define STT_UPLOAD_BLOCK_SIZE 3072
-#define STT_UPLOAD_BUFFER_SIZE (64 * 1024)
-#define STT_UPLOAD_QUEUE_LENGTH \
-    ((STT_UPLOAD_BUFFER_SIZE + STT_UPLOAD_BLOCK_SIZE - 1) / \
-     STT_UPLOAD_BLOCK_SIZE)
+#define STT_UPLOAD_BLOCK_SIZE 2048
+#define STT_UPLOAD_POOL_CHUNKS 3
 #define MANUAL_LOCK_WAIT_MS 6500
 #define CONVERSATION_HISTORY_SIZE 8192
 
@@ -63,6 +60,7 @@ typedef struct {
     uint8_t carry[3];
     size_t carry_length;
     QueueHandle_t queue;
+    QueueHandle_t free_queue;
     SemaphoreHandle_t done;
     stt_chunk_t *write_chunk;
     char *transcript;
@@ -727,13 +725,14 @@ static esp_err_t stt_send_bytes(stt_upload_t *upload,
                        ? upload->result : ESP_ERR_INVALID_STATE;
         }
         if (upload->write_chunk == NULL) {
-            upload->write_chunk = malloc(sizeof(*upload->write_chunk));
+            while (!upload->abort && !upload->finished &&
+                   xQueueReceive(upload->free_queue,
+                                 &upload->write_chunk,
+                                 pdMS_TO_TICKS(100)) != pdTRUE) {
+            }
             if (upload->write_chunk == NULL) {
-                ESP_LOGE(TAG,
-                         "STT chunk allocation failed: free=%zu largest=%zu",
-                         heap_caps_get_free_size(MALLOC_CAP_8BIT),
-                         heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
-                return ESP_ERR_NO_MEM;
+                return upload->finished
+                           ? upload->result : ESP_ERR_INVALID_STATE;
             }
             upload->write_chunk->length = 0;
         }
@@ -769,7 +768,8 @@ static void stt_upload_task(void *argument)
                           pdMS_TO_TICKS(100)) == pdTRUE) {
             err = base64_write(
                 upload, chunk->bytes, chunk->length, false);
-            free(chunk);
+            chunk->length = 0;
+            xQueueSend(upload->free_queue, &chunk, portMAX_DELAY);
         } else if (upload->capture_done) {
             break;
         }
@@ -786,6 +786,12 @@ static void stt_upload_task(void *argument)
     }
     if (err == ESP_OK && !upload->abort) {
         err = write_all(upload->client, "0\r\n\r\n", 5);
+    }
+    if (err == ESP_OK && !upload->abort) {
+        stt_chunk_t *chunk = NULL;
+        while (xQueueReceive(upload->free_queue, &chunk, 0) == pdTRUE) {
+            free(chunk);
+        }
     }
     response_buffer_t prediction = { 0 };
     int status = 0;
@@ -819,21 +825,54 @@ static esp_err_t stt_start(stt_upload_t *upload)
 {
     if (upload->started) return ESP_OK;
     upload->queue = xQueueCreate(
-        STT_UPLOAD_QUEUE_LENGTH, sizeof(stt_chunk_t *));
+        STT_UPLOAD_POOL_CHUNKS, sizeof(stt_chunk_t *));
+    upload->free_queue = xQueueCreate(
+        STT_UPLOAD_POOL_CHUNKS, sizeof(stt_chunk_t *));
     upload->done = xSemaphoreCreateBinary();
-    if (upload->queue == NULL || upload->done == NULL) {
+    if (upload->queue == NULL || upload->free_queue == NULL ||
+        upload->done == NULL) {
         ESP_LOGE(TAG,
-                 "STT upload allocation failed: queue=%s done=%s "
-                 "free=%zu largest=%zu",
+                 "STT upload allocation failed: queue=%s free_queue=%s "
+                 "done=%s free=%zu largest=%zu",
                  upload->queue != NULL ? "yes" : "no",
+                 upload->free_queue != NULL ? "yes" : "no",
                  upload->done != NULL ? "yes" : "no",
                  heap_caps_get_free_size(MALLOC_CAP_8BIT),
                  heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
         if (upload->queue != NULL) vQueueDelete(upload->queue);
+        if (upload->free_queue != NULL) {
+            vQueueDelete(upload->free_queue);
+        }
         if (upload->done != NULL) vSemaphoreDelete(upload->done);
         upload->queue = NULL;
+        upload->free_queue = NULL;
         upload->done = NULL;
         return ESP_ERR_NO_MEM;
+    }
+    for (size_t i = 0; i < STT_UPLOAD_POOL_CHUNKS; ++i) {
+        stt_chunk_t *chunk = malloc(sizeof(*chunk));
+        if (chunk == NULL ||
+            xQueueSend(upload->free_queue, &chunk, 0) != pdTRUE) {
+            free(chunk);
+            ESP_LOGE(TAG,
+                     "STT pool allocation failed at %zu/%u: free=%zu "
+                     "largest=%zu",
+                     i, STT_UPLOAD_POOL_CHUNKS,
+                     heap_caps_get_free_size(MALLOC_CAP_8BIT),
+                     heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+            stt_chunk_t *allocated = NULL;
+            while (xQueueReceive(upload->free_queue,
+                                 &allocated, 0) == pdTRUE) {
+                free(allocated);
+            }
+            vQueueDelete(upload->queue);
+            vQueueDelete(upload->free_queue);
+            vSemaphoreDelete(upload->done);
+            upload->queue = NULL;
+            upload->free_queue = NULL;
+            upload->done = NULL;
+            return ESP_ERR_NO_MEM;
+        }
     }
     BaseType_t created = xTaskCreate(
         stt_upload_task, "stt_upload", 12288, upload, 5, NULL);
@@ -842,9 +881,15 @@ static esp_err_t stt_start(stt_upload_t *upload)
                  "STT upload task allocation failed: free=%zu largest=%zu",
                  heap_caps_get_free_size(MALLOC_CAP_8BIT),
                  heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+        stt_chunk_t *chunk = NULL;
+        while (xQueueReceive(upload->free_queue, &chunk, 0) == pdTRUE) {
+            free(chunk);
+        }
         vQueueDelete(upload->queue);
+        vQueueDelete(upload->free_queue);
         vSemaphoreDelete(upload->done);
         upload->queue = NULL;
+        upload->free_queue = NULL;
         upload->done = NULL;
         return ESP_ERR_NO_MEM;
     }
@@ -888,6 +933,7 @@ static esp_err_t transcribe(const brain_config_t *config,
         .max_recording_ms = max_ms,
         .wait_for_voice_ms = wait_ms,
     };
+    if (err == ESP_OK) err = stt_start(&upload);
     if (err == ESP_OK) {
         err = brain_audio_capture(&capture_config, stt_pcm_sink,
                                   &upload, &capture);
@@ -907,7 +953,11 @@ static esp_err_t transcribe(const brain_config_t *config,
             free(chunk);
         }
         free(upload.write_chunk);
+        while (xQueueReceive(upload.free_queue, &chunk, 0) == pdTRUE) {
+            free(chunk);
+        }
         vQueueDelete(upload.queue);
+        vQueueDelete(upload.free_queue);
         vSemaphoreDelete(upload.done);
     } else if (err == ESP_OK) {
         err = ESP_ERR_INVALID_STATE;

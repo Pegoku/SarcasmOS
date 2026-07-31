@@ -171,6 +171,11 @@ static i2c_master_bus_handle_t g_i2c_bus;
 static QueueHandle_t g_face_queue;
 static SemaphoreHandle_t g_face_mutex;
 static SemaphoreHandle_t g_display_mutex;
+static httpd_handle_t g_http_server;
+static portMUX_TYPE g_mic_stream_lock = portMUX_INITIALIZER_UNLOCKED;
+static bool g_mic_stream_enabled;
+static bool g_mic_stream_active;
+static bool g_mic_stream_stop;
 static brain_config_t g_config;
 static uint8_t g_post_speech_animation = ANIM_IDLE;
 static face_transition_status_t g_face_transition = {
@@ -901,6 +906,156 @@ static void state_led_task(void *arg)
 
 static void workflow_status_json(char *output, size_t capacity);
 
+typedef struct {
+    httpd_handle_t server;
+    int socket;
+} mic_stream_context_t;
+
+static bool mic_stream_enabled(void)
+{
+    portENTER_CRITICAL(&g_mic_stream_lock);
+    bool enabled = g_mic_stream_enabled;
+    portEXIT_CRITICAL(&g_mic_stream_lock);
+    return enabled;
+}
+
+static bool mic_stream_active(void)
+{
+    portENTER_CRITICAL(&g_mic_stream_lock);
+    bool active = g_mic_stream_active;
+    portEXIT_CRITICAL(&g_mic_stream_lock);
+    return active;
+}
+
+static bool mic_stream_should_continue(void *context)
+{
+    mic_stream_context_t *stream = context;
+    portENTER_CRITICAL(&g_mic_stream_lock);
+    bool keep_streaming = g_mic_stream_enabled && !g_mic_stream_stop;
+    portEXIT_CRITICAL(&g_mic_stream_lock);
+    return keep_streaming &&
+           httpd_ws_get_fd_info(stream->server, stream->socket) ==
+               HTTPD_WS_CLIENT_WEBSOCKET;
+}
+
+static esp_err_t mic_stream_send(const int16_t *samples,
+                                 size_t sample_count, void *context)
+{
+    mic_stream_context_t *stream = context;
+    httpd_ws_frame_t frame = {
+        .type = HTTPD_WS_TYPE_BINARY,
+        .payload = (uint8_t *)samples,
+        .len = sample_count * sizeof(*samples),
+    };
+    return httpd_ws_send_data(stream->server, stream->socket, &frame);
+}
+
+static void mic_stream_task(void *argument)
+{
+    mic_stream_context_t *stream = argument;
+    esp_err_t err = brain_audio_stream(
+        mic_stream_send, mic_stream_should_continue, stream);
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE &&
+        err != ESP_FAIL) {
+        ESP_LOGW(TAG, "microphone WebSocket ended: %s",
+                 esp_err_to_name(err));
+    }
+    httpd_sess_trigger_close(stream->server, stream->socket);
+    portENTER_CRITICAL(&g_mic_stream_lock);
+    g_mic_stream_active = false;
+    portEXIT_CRITICAL(&g_mic_stream_lock);
+    free(stream);
+    vTaskDelete(NULL);
+}
+
+static esp_err_t mic_stream_post_handshake(httpd_req_t *req)
+{
+    portENTER_CRITICAL(&g_mic_stream_lock);
+    bool accepted = g_mic_stream_enabled && !g_mic_stream_active;
+    if (accepted) {
+        g_mic_stream_active = true;
+        g_mic_stream_stop = false;
+    }
+    portEXIT_CRITICAL(&g_mic_stream_lock);
+    if (!accepted) return ESP_ERR_INVALID_STATE;
+
+    static const char metadata[] =
+        "{\"format\":\"pcm_s16le\",\"sample_rate\":16000,"
+        "\"channels\":1,\"frame_samples\":1600}";
+    httpd_ws_frame_t frame = {
+        .type = HTTPD_WS_TYPE_TEXT,
+        .payload = (uint8_t *)metadata,
+        .len = sizeof(metadata) - 1,
+    };
+    esp_err_t err = httpd_ws_send_frame(req, &frame);
+    mic_stream_context_t *stream = NULL;
+    if (err == ESP_OK) {
+        stream = malloc(sizeof(*stream));
+        if (stream == NULL) err = ESP_ERR_NO_MEM;
+    }
+    if (err == ESP_OK) {
+        stream->server = req->handle;
+        stream->socket = httpd_req_to_sockfd(req);
+        if (xTaskCreate(mic_stream_task, "mic_ws", 8192,
+                        stream, 5, NULL) != pdPASS) {
+            err = ESP_ERR_NO_MEM;
+        }
+    }
+    if (err != ESP_OK) {
+        free(stream);
+        portENTER_CRITICAL(&g_mic_stream_lock);
+        g_mic_stream_active = false;
+        portEXIT_CRITICAL(&g_mic_stream_lock);
+    }
+    return err;
+}
+
+static esp_err_t mic_stream_handler(httpd_req_t *req)
+{
+    httpd_ws_frame_t frame = { 0 };
+    esp_err_t err = httpd_ws_recv_frame(req, &frame, 0);
+    if (err != ESP_OK || frame.len == 0) return err;
+    if (frame.len > 64) return ESP_ERR_INVALID_SIZE;
+    uint8_t payload[64];
+    frame.payload = payload;
+    return httpd_ws_recv_frame(req, &frame, sizeof(payload));
+}
+
+static const httpd_uri_t MIC_STREAM_URI = {
+    .uri = "/api/audio/mic",
+    .method = HTTP_GET,
+    .handler = mic_stream_handler,
+    .is_websocket = true,
+    .ws_post_handshake_cb = mic_stream_post_handshake,
+};
+
+static esp_err_t set_mic_stream_enabled(bool enabled)
+{
+    if (g_http_server == NULL) return ESP_ERR_INVALID_STATE;
+    if (enabled == mic_stream_enabled()) return ESP_OK;
+    if (enabled) {
+        if (mic_stream_active()) return ESP_ERR_INVALID_STATE;
+        portENTER_CRITICAL(&g_mic_stream_lock);
+        g_mic_stream_enabled = true;
+        g_mic_stream_stop = false;
+        portEXIT_CRITICAL(&g_mic_stream_lock);
+        esp_err_t err = httpd_register_uri_handler(
+            g_http_server, &MIC_STREAM_URI);
+        if (err != ESP_OK) {
+            portENTER_CRITICAL(&g_mic_stream_lock);
+            g_mic_stream_enabled = false;
+            portEXIT_CRITICAL(&g_mic_stream_lock);
+        }
+        return err;
+    }
+    portENTER_CRITICAL(&g_mic_stream_lock);
+    g_mic_stream_enabled = false;
+    g_mic_stream_stop = true;
+    portEXIT_CRITICAL(&g_mic_stream_lock);
+    return httpd_unregister_uri_handler(
+        g_http_server, MIC_STREAM_URI.uri, MIC_STREAM_URI.method);
+}
+
 static esp_err_t status_handler(httpd_req_t *req)
 {
     display_device_t eyes[EYE_COUNT];
@@ -923,15 +1078,21 @@ static esp_err_t status_handler(httpd_req_t *req)
         face.waiting_mask == EYE_LEFT_MASK ? "\"left_eye\"" :
         face.waiting_mask == EYE_RIGHT_MASK ? "\"right_eye\"" : "";
 
-    char json[1536];
+    char json[1792];
     int pos = snprintf(json, sizeof(json),
         "{\"state\":\"%s\",\"uptime_ms\":%llu,\"wifi_connected\":%s,"
         "\"ethernet_connected\":%s,\"brightness\":%u,"
+        "\"microphone_stream\":{\"enabled\":%s,\"active\":%s,"
+        "\"endpoint\":\"/api/audio/mic\","
+        "\"format\":\"pcm_s16le\",\"sample_rate\":16000,"
+        "\"channels\":1},"
         "\"face_transition\":{\"desired_animation\":%u,"
         "\"committed_animation\":%u,\"token\":%u,\"waiting_for\":[%s],"
         "\"started_ms\":%" PRIu32 ",\"degraded\":%s},\"displays\":[",
         state_name(g_state), esp_timer_get_time() / 1000ULL, g_wifi_connected ? "true" : "false",
         g_ethernet_connected ? "true" : "false", g_brightness,
+        mic_stream_enabled() ? "true" : "false",
+        mic_stream_active() ? "true" : "false",
         face.desired_animation, face.committed_animation, face.token, waiting,
         face.started_ms, face.degraded ? "true" : "false");
     for (size_t i = 0; i < EYE_COUNT; ++i) {
@@ -1060,6 +1221,11 @@ static char *http_json_escape(const char *value)
 
 static esp_err_t ai_text_handler(httpd_req_t *req)
 {
+    if (mic_stream_active()) {
+        httpd_resp_set_status(req, "409 Conflict");
+        return httpd_resp_sendstr(
+            req, "{\"ok\":false,\"error\":\"microphone stream active\"}");
+    }
     char body[2048];
     if (req->content_len == 0) {
         httpd_resp_set_status(req, "400 Bad Request");
@@ -1128,6 +1294,11 @@ static esp_err_t ai_text_handler(httpd_req_t *req)
 
 static esp_err_t ai_listen_handler(httpd_req_t *req)
 {
+    if (mic_stream_active()) {
+        httpd_resp_set_status(req, "409 Conflict");
+        return httpd_resp_sendstr(
+            req, "{\"ok\":false,\"error\":\"microphone stream active\"}");
+    }
     brain_config_t config = g_config;
     const char *missing = NULL;
     if (!brain_workflow_config_ready(&config, &missing)) {
@@ -1193,8 +1364,7 @@ static void start_http_server(void)
     config.server_port = CONFIG_SARCASMOS_HTTP_PORT;
     config.stack_size = 20480;
     config.max_uri_handlers = 8;
-    httpd_handle_t server = NULL;
-    ESP_ERROR_CHECK(httpd_start(&server, &config));
+    ESP_ERROR_CHECK(httpd_start(&g_http_server, &config));
     httpd_uri_t status_uri = { .uri = "/api/status", .method = HTTP_GET, .handler = status_handler };
     httpd_uri_t command_uri = { .uri = "/api/command", .method = HTTP_POST, .handler = command_handler };
     httpd_uri_t ai_text_uri = {
@@ -1209,11 +1379,11 @@ static void start_http_server(void)
         .uri = "/api/config", .method = HTTP_GET,
         .handler = config_status_handler
     };
-    ESP_ERROR_CHECK(httpd_register_uri_handler(server, &status_uri));
-    ESP_ERROR_CHECK(httpd_register_uri_handler(server, &command_uri));
-    ESP_ERROR_CHECK(httpd_register_uri_handler(server, &ai_text_uri));
-    ESP_ERROR_CHECK(httpd_register_uri_handler(server, &ai_listen_uri));
-    ESP_ERROR_CHECK(httpd_register_uri_handler(server, &config_uri));
+    ESP_ERROR_CHECK(httpd_register_uri_handler(g_http_server, &status_uri));
+    ESP_ERROR_CHECK(httpd_register_uri_handler(g_http_server, &command_uri));
+    ESP_ERROR_CHECK(httpd_register_uri_handler(g_http_server, &ai_text_uri));
+    ESP_ERROR_CHECK(httpd_register_uri_handler(g_http_server, &ai_listen_uri));
+    ESP_ERROR_CHECK(httpd_register_uri_handler(g_http_server, &config_uri));
 }
 
 static uint8_t animation_for_expression(const char *expression);
@@ -1323,7 +1493,8 @@ static void workflow_wake_task(void *arg)
     (void)arg;
     while (true) {
         brain_config_t config = g_config;
-        if (!config.wake_enabled || !g_wifi_connected ||
+        if (mic_stream_enabled() || !config.wake_enabled ||
+            !g_wifi_connected ||
             !brain_workflow_config_ready(&config, NULL)) {
             vTaskDelay(pdMS_TO_TICKS(1000));
             continue;
@@ -1496,6 +1667,7 @@ static void cli_print_test(void)
     printf("  e  read both eyes       m  ping mouth\n");
     printf("  n  network status       g  GPIO/power status\n");
     printf("  p  speaker tone         r  microphone level\n");
+    printf("  stream on|off|status    WebSocket microphone endpoint\n");
     printf("  0  home                 h/? show this page\n");
     printf("-----------------------------------------\n");
 }
@@ -1793,12 +1965,34 @@ static void cli_handle_test(char *command)
     else if (strcmp(command, "m") == 0) cli_test_mouth();
     else if (strcmp(command, "n") == 0) cli_network_status();
     else if (strcmp(command, "g") == 0) cli_print_status();
+    else if (strcmp(command, "stream on") == 0 ||
+             strcmp(command, "stream off") == 0) {
+        bool enable = strcmp(command, "stream on") == 0;
+        esp_err_t err = set_mic_stream_enabled(enable);
+        printf("Microphone WebSocket: %s (%s)\n",
+               err == ESP_OK
+                   ? (enable ? "ENABLED at /api/audio/mic" : "DISABLED")
+                   : "unchanged",
+               esp_err_to_name(err));
+    } else if (strcmp(command, "stream status") == 0) {
+        printf("Microphone WebSocket: %s, client: %s\n",
+               mic_stream_enabled() ? "ENABLED" : "DISABLED",
+               mic_stream_active() ? "connected" : "none");
+    }
     else if (strcmp(command, "p") == 0) {
+        if (mic_stream_active()) {
+            printf("Disable or disconnect the microphone stream first.\n");
+            return;
+        }
         printf("Playing 440 Hz for one second...\n");
         esp_err_t err = brain_audio_play_tone(440, 1000, 12000);
         printf("[%s] Speaker stream: %s (confirm it was audible)\n",
                err == ESP_OK ? "PASS" : "FAIL", esp_err_to_name(err));
     } else if (strcmp(command, "r") == 0) {
+        if (mic_stream_active()) {
+            printf("Disable or disconnect the microphone stream first.\n");
+            return;
+        }
         printf("Measuring microphone for one second; speak or clap now...\n");
         brain_audio_capture_result_t result;
         esp_err_t err = brain_audio_measure(1000, &result);
@@ -1847,7 +2041,9 @@ static void cli_handle_interact(char *command)
         printf("5VHP buck %s.\n",
                gpio_get_level(PIN_5VHP_EN) ? "ON" : "OFF");
     } else if (strcmp(command, "listen") == 0) {
-        if (!g_wifi_connected) {
+        if (mic_stream_active()) {
+            printf("Disable or disconnect the microphone stream first.\n");
+        } else if (!g_wifi_connected) {
             printf("AI voice requires an active Wi-Fi connection.\n");
         } else {
             const char *missing = NULL;
@@ -1865,6 +2061,10 @@ static void cli_handle_interact(char *command)
             printf("AI interaction: %s\n", esp_err_to_name(err));
         }
     } else if (strncmp(command, "ask ", 4) == 0) {
+        if (mic_stream_active()) {
+            printf("Disable or disconnect the microphone stream first.\n");
+            return;
+        }
         if (!g_wifi_connected) {
             printf("AI requires an active Wi-Fi connection.\n");
             return;

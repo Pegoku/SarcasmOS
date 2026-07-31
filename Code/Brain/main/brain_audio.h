@@ -9,6 +9,7 @@
 typedef esp_err_t (*brain_audio_sink_t)(const int16_t *samples,
                                         size_t sample_count,
                                         void *context);
+typedef bool (*brain_audio_continue_t)(void *context);
 
 typedef struct {
     uint16_t vad_threshold;
@@ -33,5 +34,8 @@ esp_err_t brain_audio_measure(uint16_t duration_ms,
 esp_err_t brain_audio_capture(const brain_audio_capture_config_t *config,
                               brain_audio_sink_t sink, void *context,
                               brain_audio_capture_result_t *result);
+esp_err_t brain_audio_stream(brain_audio_sink_t sink,
+                             brain_audio_continue_t should_continue,
+                             void *context);
 esp_err_t brain_audio_play_pcm16(const int16_t *samples, size_t sample_count,
                                  uint16_t gain_q8);

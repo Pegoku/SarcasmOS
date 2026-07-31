@@ -66,6 +66,18 @@ immediately and one prompt is printed per command. Enter `h` at `brain>`:
 
 The Testing page scans I2C, reads both Eyes, pings the ESP-NOW Mouth, reports
 network and power status, plays a speaker tone, and measures the microphone.
+It also gates the live microphone WebSocket:
+
+```text
+stream on
+stream status
+stream off
+```
+
+The `/api/audio/mic` route does not exist until `stream on` is entered. Turning
+it off unregisters the route and disconnects its client. This setting is
+intentionally runtime-only and returns to disabled after a reboot.
+
 The Interact page sends face states, changes brightness, controls both bucks,
 starts a microphone request with `listen`, and accepts a typed request with
 `ask <message>`.
@@ -178,6 +190,28 @@ curl -X POST http://DEVICE_IP/api/ai/listen
 answer as JSON after it has played it. `/api/ai/listen` records from the
 device microphone and does the same. Only one voice workflow can own the
 microphone/speaker at a time.
+
+### Live microphone WebSocket
+
+After enabling it from the Testing page, connect to:
+
+```text
+ws://DEVICE_IP/api/audio/mic
+```
+
+The first WebSocket message is JSON describing the stream. Following messages
+are binary frames containing signed little-endian PCM with this fixed format:
+
+```json
+{"format":"pcm_s16le","sample_rate":16000,"channels":1,"frame_samples":1600}
+```
+
+That is one 100 ms, 3,200-byte frame under normal operation. A browser should
+set `binaryType = "arraybuffer"`, convert each message to `Int16Array`, scale
+samples by `1 / 32768`, and queue them in an `AudioWorklet` running at the
+browser audio context's sample rate. Only one WebSocket listener is accepted.
+Wake detection is suspended while the endpoint is enabled, and the stream has
+exclusive microphone/audio access while a client is connected.
 
 ## PCB self-test firmware
 

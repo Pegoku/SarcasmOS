@@ -14,6 +14,7 @@
 #define AUDIO_BLOCK_FRAMES 128
 #define AUDIO_TIMEOUT_MS 250
 #define AUDIO_PREROLL_SAMPLES 8000
+#define AUDIO_STREAM_SAMPLES 1600
 
 #define PIN_I2S_BCLK GPIO_NUM_39
 #define PIN_I2S_LRCLK GPIO_NUM_40
@@ -234,6 +235,60 @@ esp_err_t brain_audio_measure(uint16_t duration_ms,
             (uint16_t)sqrt((double)energy / result->sample_count);
         result->duration_ms =
             result->sample_count * 1000 / AUDIO_SAMPLE_RATE;
+    }
+    xSemaphoreGive(s_audio_mutex);
+    return err;
+}
+
+esp_err_t brain_audio_stream(brain_audio_sink_t sink,
+                             brain_audio_continue_t should_continue,
+                             void *context)
+{
+    if (sink == NULL || should_continue == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    while (should_continue(context)) {
+        if (s_audio_mutex == NULL || s_rx_channel == NULL) {
+            return ESP_ERR_INVALID_STATE;
+        }
+        if (xSemaphoreTake(s_audio_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            break;
+        }
+    }
+    if (!should_continue(context)) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    esp_err_t err = ESP_OK;
+    int32_t input[AUDIO_BLOCK_FRAMES * 2];
+    int16_t converted[AUDIO_BLOCK_FRAMES / 2];
+    int16_t stream[AUDIO_STREAM_SAMPLES];
+    size_t stream_count = 0;
+    while (err == ESP_OK && should_continue(context)) {
+        size_t bytes_read = 0;
+        err = i2s_channel_read(
+            s_rx_channel, input, sizeof(input), &bytes_read,
+            pdMS_TO_TICKS(AUDIO_TIMEOUT_MS));
+        if (err != ESP_OK) break;
+        size_t frames = bytes_read / (sizeof(int32_t) * 2);
+        size_t count = extract_mic_samples(
+            input, frames, converted, true);
+        size_t offset = 0;
+        while (offset < count && err == ESP_OK) {
+            size_t copy = AUDIO_STREAM_SAMPLES - stream_count;
+            if (copy > count - offset) copy = count - offset;
+            memcpy(stream + stream_count, converted + offset,
+                   copy * sizeof(*stream));
+            stream_count += copy;
+            offset += copy;
+            if (stream_count == AUDIO_STREAM_SAMPLES) {
+                err = sink(stream, stream_count, context);
+                stream_count = 0;
+            }
+        }
+    }
+    if (err == ESP_OK && stream_count > 0 && should_continue(context)) {
+        err = sink(stream, stream_count, context);
     }
     xSemaphoreGive(s_audio_mutex);
     return err;

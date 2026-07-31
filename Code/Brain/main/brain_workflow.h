@@ -44,3 +44,13 @@ esp_err_t brain_workflow_run_text(const brain_config_t *config,
                                   char *answer, size_t answer_capacity);
 esp_err_t brain_workflow_wait_for_wake(const brain_config_t *config,
                                        bool *detected);
+esp_err_t brain_workflow_test_stt(const brain_config_t *config,
+                                  uint16_t seconds,
+                                  char *transcript,
+                                  size_t transcript_capacity);
+esp_err_t brain_workflow_test_llm(const brain_config_t *config,
+                                  const char *message,
+                                  char *response,
+                                  size_t response_capacity);
+esp_err_t brain_workflow_test_tts(const brain_config_t *config,
+                                  const char *text);

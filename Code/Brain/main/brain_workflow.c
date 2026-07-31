@@ -1376,6 +1376,109 @@ esp_err_t brain_workflow_init(brain_workflow_event_handler_t handler,
     return s_workflow_mutex != NULL ? ESP_OK : ESP_ERR_NO_MEM;
 }
 
+esp_err_t brain_workflow_test_stt(const brain_config_t *config,
+                                  uint16_t seconds,
+                                  char *transcript,
+                                  size_t transcript_capacity)
+{
+    if (config == NULL || seconds == 0 || seconds > 60 ||
+        transcript == NULL || transcript_capacity == 0 ||
+        replicate_token(config)[0] == '\0' ||
+        config->replicate_url[0] == '\0' || config->stt_model[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (s_workflow_mutex == NULL) return ESP_ERR_INVALID_STATE;
+    if (xSemaphoreTake(s_workflow_mutex,
+                       pdMS_TO_TICKS(MANUAL_LOCK_WAIT_MS)) != pdTRUE) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    transcript[0] = '\0';
+    uint16_t duration_ms = (uint16_t)(seconds * 1000U);
+    esp_err_t err = transcribe(config, duration_ms, duration_ms,
+                               duration_ms, transcript,
+                               transcript_capacity);
+    xSemaphoreGive(s_workflow_mutex);
+    return err;
+}
+
+esp_err_t brain_workflow_test_llm(const brain_config_t *config,
+                                  const char *message,
+                                  char *response_text,
+                                  size_t response_capacity)
+{
+    if (config == NULL || message == NULL || message[0] == '\0' ||
+        response_text == NULL || response_capacity == 0 ||
+        llm_token(config)[0] == '\0' || config->llm_url[0] == '\0' ||
+        config->llm_model[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (s_workflow_mutex == NULL) return ESP_ERR_INVALID_STATE;
+    if (xSemaphoreTake(s_workflow_mutex,
+                       pdMS_TO_TICKS(MANUAL_LOCK_WAIT_MS)) != pdTRUE) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    response_text[0] = '\0';
+    char *escaped_message = json_escape(message);
+    char *escaped_model = json_escape(config->llm_model);
+    esp_err_t err = ESP_OK;
+    if (escaped_message == NULL || escaped_model == NULL) {
+        err = ESP_ERR_NO_MEM;
+    }
+    size_t body_size = escaped_message != NULL && escaped_model != NULL
+                           ? strlen(escaped_message) +
+                                 strlen(escaped_model) + 192
+                           : 0;
+    char *body = err == ESP_OK ? malloc(body_size) : NULL;
+    if (err == ESP_OK && body == NULL) err = ESP_ERR_NO_MEM;
+    if (err == ESP_OK) {
+        snprintf(body, body_size,
+                 "{\"model\":\"%s\",\"temperature\":0,\"messages\":["
+                 "{\"role\":\"user\",\"content\":\"%s\"}]}",
+                 escaped_model, escaped_message);
+        char url[MAX_URL];
+        err = join_url(url, sizeof(url), config->llm_url,
+                       "/chat/completions");
+        response_buffer_t http_response = { 0 };
+        if (err == ESP_OK) {
+            err = checked_http_request(
+                HTTP_METHOD_POST, url, llm_token(config),
+                "application/json", body, &http_response);
+        }
+        if (err == ESP_OK &&
+            !json_get_string(http_response.data, "content",
+                             response_text, response_capacity)) {
+            err = ESP_ERR_INVALID_RESPONSE;
+        }
+        free(http_response.data);
+    }
+    free(body);
+    free(escaped_message);
+    free(escaped_model);
+    xSemaphoreGive(s_workflow_mutex);
+    return err;
+}
+
+esp_err_t brain_workflow_test_tts(const brain_config_t *config,
+                                  const char *text)
+{
+    if (config == NULL || text == NULL || text[0] == '\0' ||
+        replicate_token(config)[0] == '\0' ||
+        config->replicate_url[0] == '\0' || config->tts_model[0] == '\0' ||
+        config->voice_id[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (s_workflow_mutex == NULL) return ESP_ERR_INVALID_STATE;
+    if (xSemaphoreTake(s_workflow_mutex,
+                       pdMS_TO_TICKS(MANUAL_LOCK_WAIT_MS)) != pdTRUE) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    char audio_url[MAX_URL];
+    esp_err_t err = synthesize(config, text, audio_url, sizeof(audio_url));
+    if (err == ESP_OK) err = play_audio_url(audio_url);
+    xSemaphoreGive(s_workflow_mutex);
+    return err;
+}
+
 esp_err_t brain_workflow_run_text(const brain_config_t *config,
                                   const char *message,
                                   const char *robot_status_json,

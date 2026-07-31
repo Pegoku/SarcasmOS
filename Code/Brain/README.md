@@ -95,7 +95,18 @@ quieter speech.
 
 The Interact page sends face states, changes brightness, controls both bucks,
 starts a microphone request with `listen`, and accepts a typed request with
-`ask <message>`.
+`ask <message>`. Individual provider stages can be tested without running the
+rest of the workflow:
+
+```text
+stt-test 5
+llm-test Responde solamente con la palabra funciona
+tts-test Esto es una prueba de la voz de Bender
+```
+
+The STT command records for up to the requested number of seconds and prints
+the transcript. LLM prints the provider response without tools or TTS. TTS
+synthesizes and plays the supplied text without calling STT or the LLM.
 
 Configuration is stored in NVS and overrides build-time defaults, including
 when those defaults are blank:

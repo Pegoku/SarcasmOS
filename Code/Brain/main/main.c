@@ -1868,6 +1868,9 @@ static void cli_print_interact(void)
     printf("  buck 5v on|off   buck hp on|off\n");
     printf("  listen           start one assistant voice interaction\n");
     printf("  ask <message>    ask through the ESP32-native AI workflow\n");
+    printf("  stt-test <1-60>  record and test only speech-to-text\n");
+    printf("  llm-test <text>  test only the configured language model\n");
+    printf("  tts-test <text>  synthesize and play only configured TTS\n");
     printf("  0  home          h/? show this page\n");
     printf("-----------------------------------------\n");
 }
@@ -2461,6 +2464,74 @@ static void cli_handle_interact(char *command)
         gpio_set_level(PIN_5VHP_EN, strcmp(command, "buck hp on") == 0);
         printf("5VHP buck %s.\n",
                gpio_get_level(PIN_5VHP_EN) ? "ON" : "OFF");
+    } else if (strncmp(command, "stt-test ", 9) == 0) {
+        char *value = cli_trim(command + 9);
+        char *end = NULL;
+        unsigned long seconds = strtoul(value, &end, 10);
+        if (end == value || *end != '\0' || seconds < 1 || seconds > 60) {
+            printf("Usage: stt-test <seconds from 1 through 60>\n");
+            return;
+        }
+        if (mic_stream_active()) {
+            printf("Disable or disconnect the microphone stream first.\n");
+            return;
+        }
+        if (!g_wifi_connected) {
+            printf("STT test requires an active Wi-Fi connection.\n");
+            return;
+        }
+        char *transcript = malloc(4096);
+        if (transcript == NULL) {
+            printf("STT test: ESP_ERR_NO_MEM\n");
+            return;
+        }
+        printf("STT model: %s\nSpeak now; listening for up to %lu seconds...\n",
+               g_config.stt_model, seconds);
+        esp_err_t err = brain_workflow_test_stt(
+            &g_config, (uint16_t)seconds, transcript, 4096);
+        printf("STT test: %s\n", esp_err_to_name(err));
+        if (err == ESP_OK) printf("Transcript: %s\n", transcript);
+        free(transcript);
+    } else if (strncmp(command, "llm-test ", 9) == 0) {
+        char *message = cli_trim(command + 9);
+        if (message[0] == '\0') {
+            printf("Usage: llm-test <text>\n");
+            return;
+        }
+        if (!g_wifi_connected) {
+            printf("LLM test requires an active Wi-Fi connection.\n");
+            return;
+        }
+        char *response = malloc(4096);
+        if (response == NULL) {
+            printf("LLM test: ESP_ERR_NO_MEM\n");
+            return;
+        }
+        printf("LLM model: %s\n", g_config.llm_model);
+        esp_err_t err = brain_workflow_test_llm(
+            &g_config, message, response, 4096);
+        printf("LLM test: %s\n", esp_err_to_name(err));
+        if (err == ESP_OK) printf("Response: %s\n", response);
+        free(response);
+    } else if (strncmp(command, "tts-test ", 9) == 0) {
+        char *text = cli_trim(command + 9);
+        if (text[0] == '\0') {
+            printf("Usage: tts-test <text>\n");
+            return;
+        }
+        if (mic_stream_active()) {
+            printf("Disable or disconnect the microphone stream first.\n");
+            return;
+        }
+        if (!g_wifi_connected) {
+            printf("TTS test requires an active Wi-Fi connection.\n");
+            return;
+        }
+        printf("TTS model: %s\nVoice ID: %s\n",
+               g_config.tts_model,
+               g_config.voice_id[0] ? g_config.voice_id : "<not set>");
+        esp_err_t err = brain_workflow_test_tts(&g_config, text);
+        printf("TTS test: %s\n", esp_err_to_name(err));
     } else if (strcmp(command, "listen") == 0) {
         if (mic_stream_active()) {
             printf("Disable or disconnect the microphone stream first.\n");

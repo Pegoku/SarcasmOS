@@ -29,7 +29,7 @@
 #define AUDIO_PLAYBACK_BUFFER_SIZE (32 * 1024)
 #define AUDIO_PLAYBACK_PREBUFFER_SIZE (16 * 1024)
 #define AUDIO_PLAYBACK_TASK_STACK_SIZE 12288
-#define AUDIO_PLAYBACK_FADE_SAMPLES 320
+#define AUDIO_PLAYBACK_SILENT_TAIL_SAMPLES 320
 #define STT_UPLOAD_BLOCK_SIZE 3072
 #define STT_STREAM_BUFFER_SIZE (64 * 1024)
 #define MANUAL_LOCK_WAIT_MS 6500
@@ -855,14 +855,10 @@ static esp_err_t play_audio_samples(const int16_t *samples,
     return brain_audio_play_pcm16(samples, sample_count, 256);
 }
 
-static esp_err_t play_audio_fade_out(int16_t *samples, size_t sample_count)
+static esp_err_t play_audio_silent_tail(int16_t *samples,
+                                        size_t sample_count)
 {
-    for (size_t i = 0; i < sample_count; ++i) {
-        size_t remaining = sample_count - i - 1;
-        samples[i] = (int16_t)(
-            (int32_t)samples[i] * (int32_t)remaining /
-            (int32_t)sample_count);
-    }
+    memset(samples, 0, sample_count * sizeof(*samples));
     return play_audio_samples(samples, sample_count);
 }
 
@@ -880,9 +876,10 @@ static void audio_playback_task(void *argument)
         int16_t samples[AUDIO_BUFFER_SIZE / sizeof(int16_t)];
         uint8_t bytes[AUDIO_BUFFER_SIZE];
     } audio;
-    int16_t tail[AUDIO_PLAYBACK_FADE_SAMPLES];
+    int16_t tail[AUDIO_PLAYBACK_SILENT_TAIL_SAMPLES];
     int16_t combined[
-        AUDIO_BUFFER_SIZE / sizeof(int16_t) + AUDIO_PLAYBACK_FADE_SAMPLES];
+        AUDIO_BUFFER_SIZE / sizeof(int16_t) +
+        AUDIO_PLAYBACK_SILENT_TAIL_SAMPLES];
     size_t pending = 0;
     size_t tail_count = 0;
     while (!playback->abort) {
@@ -901,10 +898,10 @@ static void audio_playback_task(void *argument)
             memcpy(combined + tail_count, audio.samples,
                    sample_count * sizeof(*audio.samples));
             size_t combined_count = tail_count + sample_count;
-            size_t output_count = combined_count > AUDIO_PLAYBACK_FADE_SAMPLES
-                                      ? combined_count -
-                                            AUDIO_PLAYBACK_FADE_SAMPLES
-                                      : 0;
+            size_t output_count =
+                combined_count > AUDIO_PLAYBACK_SILENT_TAIL_SAMPLES
+                    ? combined_count - AUDIO_PLAYBACK_SILENT_TAIL_SAMPLES
+                    : 0;
             if (output_count > 0) {
                 err = play_audio_samples(combined, output_count);
                 if (err != ESP_OK) {
@@ -920,7 +917,7 @@ static void audio_playback_task(void *argument)
         if (pending > 0) audio.bytes[0] = audio.bytes[playable];
     }
     if (!playback->abort && err == ESP_OK && tail_count > 0) {
-        err = play_audio_fade_out(tail, tail_count);
+        err = play_audio_silent_tail(tail, tail_count);
     }
     if (err == ESP_OK && playback->download_result != ESP_OK) {
         err = playback->download_result;

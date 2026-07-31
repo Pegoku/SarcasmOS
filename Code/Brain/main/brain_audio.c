@@ -54,6 +54,14 @@ esp_err_t brain_audio_init(void)
 
     i2s_chan_config_t channel_config =
         I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
+    /*
+     * TX remains enabled so RX can be used at any time. Clear every completed
+     * TX descriptor or an underrun can replay the last non-zero samples
+     * indefinitely. Use the same frame count as write_pcm16() so each normal
+     * write replaces a complete descriptor.
+     */
+    channel_config.dma_frame_num = AUDIO_BLOCK_FRAMES;
+    channel_config.auto_clear_after_cb = true;
     esp_err_t err = i2s_new_channel(
         &channel_config, &s_tx_channel, &s_rx_channel);
     if (err != ESP_OK) {

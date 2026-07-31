@@ -35,6 +35,8 @@ int8_t temperatureCelsius();
 
 void setSyncPhase(uint32_t phaseMs);
 
+void showChannel(uint8_t channel, uint16_t durationMs = 1200);
+
 void showSolid(uint8_t red, uint8_t green, uint8_t blue);
 void showColorBars();
 void showRgbRows();

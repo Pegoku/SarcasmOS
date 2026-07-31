@@ -54,8 +54,15 @@ int8_t currentTemperatureCelsius = kTemperatureUnavailable;
 uint32_t syncPhaseMs = 0;
 uint32_t lastFrameMs = 0;
 uint32_t animationStartedMs = 0;
+uint8_t channelNotice = 0;
+uint32_t channelNoticeUntilMs = 0;
 Canvas transitionSource = {};
 Canvas destinationCanvas = {};
+
+constexpr uint8_t kChannelGlyphH[kGlyphHeight] = {
+    0b10001, 0b10001, 0b10001, 0b11111,
+    0b10001, 0b10001, 0b10001,
+};
 
 struct TransitionState {
     bool active = false;
@@ -162,6 +169,53 @@ void drawTemperatureOverlay(uint8_t animationId, Canvas &canvas) {
     drawGlyph(canvas, x, y, kCelsiusGlyph);
 }
 
+void drawScaledGlyph(
+    Canvas &canvas, int x, int y, const uint8_t *rows,
+    uint16_t color, uint8_t scale
+) {
+    for (uint8_t row = 0; row < kGlyphHeight; ++row) {
+        for (uint8_t column = 0; column < kGlyphWidth; ++column) {
+            if ((rows[row] & (1u << (kGlyphWidth - column - 1))) == 0) {
+                continue;
+            }
+            for (uint8_t dy = 0; dy < scale; ++dy) {
+                for (uint8_t dx = 0; dx < scale; ++dx) {
+                    canvas[(y + row * scale + dy) * kPanelWidth +
+                           x + column * scale + dx] = color;
+                }
+            }
+        }
+    }
+}
+
+void renderChannelNotice(Canvas &canvas) {
+    canvas.fill(0);
+    char digits[3] = {};
+    std::snprintf(digits, sizeof(digits), "%u", channelNotice);
+    const size_t digitCount = strlen(digits);
+    constexpr uint8_t scale = 2;
+    constexpr int glyphWidth = kGlyphWidth * scale;
+    constexpr int glyphSpacing = kGlyphSpacing * scale;
+    constexpr int glyphHeight = kGlyphHeight * scale;
+    const size_t glyphCount = digitCount + 2;
+    const int textWidth =
+        glyphCount * glyphWidth + (glyphCount - 1) * glyphSpacing;
+    int x = (kPanelWidth - textWidth) / 2;
+    constexpr int y = (kPanelHeight - glyphHeight) / 2;
+    const uint16_t yellow = mouth_transition::packRgb565(255, 220, 32);
+
+    drawScaledGlyph(canvas, x, y, kCelsiusGlyph, yellow, scale);
+    x += glyphWidth + glyphSpacing;
+    drawScaledGlyph(canvas, x, y, kChannelGlyphH, yellow, scale);
+    x += glyphWidth + glyphSpacing;
+    for (size_t index = 0; index < digitCount; ++index) {
+        drawScaledGlyph(
+            canvas, x, y, glyphFor(digits[index]), yellow, scale
+        );
+        x += glyphWidth + glyphSpacing;
+    }
+}
+
 void renderAnimation(
     uint8_t animationId, uint32_t now, Canvas &canvas
 ) {
@@ -236,6 +290,13 @@ void captureVisible(uint32_t now) {
 
 void drawMouth(uint32_t now) {
     renderAnimation(currentAnimation, now, destinationCanvas);
+    if (channelNotice != 0 &&
+        static_cast<int32_t>(channelNoticeUntilMs - now) > 0) {
+        renderChannelNotice(destinationCanvas);
+        presentCanvas(destinationCanvas);
+        return;
+    }
+    channelNotice = 0;
     if (transition.active) {
         const uint8_t amount = transitionProgressAt(now);
         if (amount < 255) {
@@ -359,6 +420,12 @@ int8_t temperatureCelsius() {
 
 void setSyncPhase(uint32_t phaseMs) {
     syncPhaseMs = phaseMs;
+}
+
+void showChannel(uint8_t channel, uint16_t durationMs) {
+    channelNotice = channel;
+    channelNoticeUntilMs = millis() + durationMs;
+    showNow();
 }
 
 void showSolid(uint8_t red, uint8_t green, uint8_t blue) {

@@ -36,9 +36,22 @@ pio run -e custom_esp32s3_mini_n8 --target upload
 At boot the serial monitor prints the mouth's Wi-Fi station MAC address and
 ESP-NOW channel. Record that MAC for the brain configuration.
 
-The channel defaults to `1`. Change `-DESPNOW_CHANNEL=1` in `platformio.ini`
-if the brain uses another 2.4 GHz channel. Both devices must use the same
-channel.
+The factory channel defaults to `1`. Change `-DESPNOW_CHANNEL=1` in
+`platformio.ini` to build with a different initial value. The regular ESP-NOW
+firmware also uses the PCB's active-low GPIO0 button:
+
+- release a short press to advance one channel (`1` through `13`, wrapping
+  from `13` to `1`);
+- hold it for 1.2 seconds to reset the channel to `1`; the reset occurs while
+  the button is still held and does not advance again on release.
+
+The selected channel is stored in NVS and overrides the build default on later
+boots. Each successful change displays a centered yellow `CH n` notice on the
+LED matrix for 1.2 seconds. GPIO0 is also the ESP32 boot strap: perform a long
+press only after the board has booted, not while resetting or applying power.
+
+Changing the mouth channel immediately retunes its radio. The Brain must use
+the same channel or communication stops until their channels match again.
 
 ### Local animation-test firmware
 

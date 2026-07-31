@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 
 #include <Arduino.h>
+#include <Preferences.h>
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
 
 #include "mouth_display.hpp"
+#include "channel_button.hpp"
 #include "protocol.hpp"
 
 #ifndef ESPNOW_CHANNEL
@@ -17,7 +19,10 @@ namespace {
 using namespace mouth_protocol;
 
 constexpr uint8_t kFirmwareMajor = 3;
-constexpr uint8_t kFirmwareMinor = 2;
+constexpr uint8_t kFirmwareMinor = 3;
+constexpr uint8_t kChannelButtonPin = 0;
+constexpr char kPreferencesNamespace[] = "mouth-radio";
+constexpr char kChannelPreferenceKey[] = "channel";
 
 struct PendingPacket {
     uint8_t source[6];
@@ -33,6 +38,11 @@ uint8_t lastSequence = 0;
 uint8_t lastError = kErrorNone;
 uint8_t lastSender[6] = {};
 bool haveLastSender = false;
+bool espNowReady = false;
+bool preferencesReady = false;
+uint8_t espNowChannel = ESPNOW_CHANNEL;
+Preferences preferences;
+mouth_channel::ButtonState channelButton;
 
 bool sameMac(const uint8_t *left, const uint8_t *right) {
     return memcmp(left, right, 6) == 0;
@@ -48,7 +58,7 @@ bool ensurePeer(const uint8_t *mac) {
 
     esp_now_peer_info_t peer = {};
     memcpy(peer.peer_addr, mac, 6);
-    peer.channel = ESPNOW_CHANNEL;
+    peer.channel = espNowChannel;
     peer.ifidx = WIFI_IF_STA;
     peer.encrypt = false;
     const esp_err_t result = esp_now_add_peer(&peer);
@@ -72,7 +82,7 @@ void sendStatus(const uint8_t *destination, uint8_t command) {
         lastError,
         mouth_display::brightness(),
         mouth_display::mouthIntensity(),
-        ESPNOW_CHANNEL,
+        espNowChannel,
         mouth_display::transitionToken(),
         static_cast<uint8_t>(mouth_display::transitionActive() ? 1 : 0),
         mouth_display::transitionProgress(),
@@ -216,15 +226,68 @@ void handlePacket(const PendingPacket &received) {
     }
 }
 
+uint8_t loadEspNowChannel() {
+    preferencesReady = preferences.begin(kPreferencesNamespace, false);
+    const uint8_t stored = preferencesReady
+                               ? preferences.getUChar(
+                                     kChannelPreferenceKey, ESPNOW_CHANNEL)
+                               : ESPNOW_CHANNEL;
+    return mouth_channel::isValidChannel(stored)
+               ? stored
+               : mouth_channel::kMinimumChannel;
+}
+
+void clearCurrentPeer() {
+    if (haveLastSender && esp_now_is_peer_exist(lastSender)) {
+        esp_now_del_peer(lastSender);
+    }
+    haveLastSender = false;
+}
+
+bool applyEspNowChannel(uint8_t channel, bool persist) {
+    if (!mouth_channel::isValidChannel(channel)) return false;
+    clearCurrentPeer();
+    const esp_err_t result =
+        esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+    if (result != ESP_OK) {
+        Serial.printf(
+            "ESP-NOW channel %u failed: %s\n",
+            channel, esp_err_to_name(result)
+        );
+        return false;
+    }
+    espNowChannel = channel;
+    if (persist && preferencesReady) {
+        preferences.putUChar(kChannelPreferenceKey, channel);
+    }
+    mouth_display::showChannel(channel);
+    Serial.printf("ESP-NOW channel %u\n", channel);
+    return true;
+}
+
+void updateChannelButton() {
+    const mouth_channel::ButtonAction action = mouth_channel::updateButton(
+        channelButton, digitalRead(kChannelButtonPin) == LOW, millis()
+    );
+    if (action == mouth_channel::ButtonAction::NextChannel) {
+        applyEspNowChannel(mouth_channel::nextChannel(espNowChannel), true);
+    } else if (action == mouth_channel::ButtonAction::ResetChannel) {
+        applyEspNowChannel(mouth_channel::kMinimumChannel, true);
+    }
+}
+
 bool initializeEspNow() {
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
     WiFi.setSleep(false);
-    if (esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE) != ESP_OK) {
+    // Spain permits 2.4 GHz channels 1 through 13.
+    if (esp_wifi_set_country_code("ES", true) != ESP_OK ||
+        esp_wifi_set_channel(espNowChannel, WIFI_SECOND_CHAN_NONE) != ESP_OK) {
         return false;
     }
     if (esp_now_init() != ESP_OK) return false;
-    return esp_now_register_recv_cb(onDataReceived) == ESP_OK;
+    espNowReady = esp_now_register_recv_cb(onDataReceived) == ESP_OK;
+    return espNowReady;
 }
 
 }  // namespace
@@ -233,6 +296,11 @@ void setup() {
     Serial.begin(115200);
     delay(250);
     Serial.println("\nSarcasmOS ESP-NOW mouth starting");
+    pinMode(kChannelButtonPin, INPUT_PULLUP);
+    espNowChannel = loadEspNowChannel();
+    if (!preferencesReady) {
+        Serial.println("WARNING: channel preference storage unavailable");
+    }
 
     if (!mouth_display::begin()) {
         Serial.println("ERROR: matrix DMA initialization failed");
@@ -244,12 +312,13 @@ void setup() {
     } else {
         Serial.print("ESP-NOW mouth MAC ");
         Serial.print(WiFi.macAddress());
-        Serial.printf(", channel %d\n", ESPNOW_CHANNEL);
+        Serial.printf(", channel %u\n", espNowChannel);
     }
     mouth_display::showNow();
 }
 
 void loop() {
+    updateChannelButton();
     PendingPacket received = {};
     while (takePendingPacket(received)) {
         handlePacket(received);

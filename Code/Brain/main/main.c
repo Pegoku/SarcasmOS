@@ -182,6 +182,7 @@ static bool g_mic_stream_active;
 static bool g_mic_stream_stop;
 static brain_config_t g_config;
 static uint8_t g_post_speech_animation = ANIM_IDLE;
+static bool g_weather_post_speech_animation;
 static face_transition_status_t g_face_transition = {
     .desired_animation = ANIM_IDLE,
     .committed_animation = ANIM_IDLE,
@@ -1510,6 +1511,15 @@ static void start_http_server(void)
 
 static uint8_t animation_for_expression(const char *expression);
 
+static bool weather_animation(uint8_t animation)
+{
+    return animation == DISPLAY_ANIM_SUNNY ||
+           animation == DISPLAY_ANIM_RAINY ||
+           animation == DISPLAY_ANIM_CLOUDY ||
+           animation == DISPLAY_ANIM_STORMY ||
+           animation == DISPLAY_ANIM_SNOWY;
+}
+
 static void workflow_status_json(char *output, size_t capacity)
 {
     mouth_espnow_status_t mouth = { 0 };
@@ -1535,6 +1545,10 @@ static void workflow_event_handler(const brain_workflow_event_t *event,
         printf("\n[AI] %s\n", event->message);
     }
     switch (event->type) {
+    case BRAIN_WORKFLOW_EVENT_START:
+        g_post_speech_animation = ANIM_IDLE;
+        g_weather_post_speech_animation = false;
+        break;
     case BRAIN_WORKFLOW_EVENT_LISTENING:
         g_state = STATE_LISTENING;
         request_face_state(ANIM_LISTENING, false);
@@ -1564,9 +1578,14 @@ static void workflow_event_handler(const brain_workflow_event_t *event,
             }
         }
         if (event->expression != NULL && event->expression[0] != '\0') {
-            g_post_speech_animation =
+            uint8_t animation =
                 animation_for_expression(event->expression);
-            request_face_state(g_post_speech_animation, false);
+            g_post_speech_animation = animation;
+            g_weather_post_speech_animation =
+                weather_animation(animation);
+            if (!g_weather_post_speech_animation) {
+                request_face_state(animation, false);
+            }
         }
         break;
     case BRAIN_WORKFLOW_EVENT_SYNTHESIZING:
@@ -1580,7 +1599,8 @@ static void workflow_event_handler(const brain_workflow_event_t *event,
             };
             mouth_command(CMD_SET_PARAM, payload, sizeof(payload));
         }
-        if (event->expression != NULL && event->expression[0] != '\0') {
+        if (!g_weather_post_speech_animation &&
+            event->expression != NULL && event->expression[0] != '\0') {
             g_post_speech_animation =
                 animation_for_expression(event->expression);
             if (g_post_speech_animation == ANIM_SPEAKING ||

@@ -7,7 +7,9 @@
 
 #include "brain_audio.h"
 #include "esp_crt_bundle.h"
+#include "esp_heap_caps.h"
 #include "esp_http_client.h"
+#include "esp_log.h"
 #include "esp_random.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -933,6 +935,13 @@ static esp_err_t audio_playback_start(audio_playback_t *playback)
     playback->stream = xStreamBufferCreate(AUDIO_PLAYBACK_BUFFER_SIZE, 1);
     playback->done = xSemaphoreCreateBinary();
     if (playback->stream == NULL || playback->done == NULL) {
+        ESP_LOGE(TAG,
+                 "audio playback allocation failed: stream=%s done=%s "
+                 "free=%zu largest=%zu",
+                 playback->stream != NULL ? "yes" : "no",
+                 playback->done != NULL ? "yes" : "no",
+                 heap_caps_get_free_size(MALLOC_CAP_8BIT),
+                 heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
         if (playback->stream != NULL) {
             vStreamBufferDelete(playback->stream);
         }
@@ -944,6 +953,11 @@ static esp_err_t audio_playback_start(audio_playback_t *playback)
     if (xTaskCreate(audio_playback_task, "audio_playback",
                     AUDIO_PLAYBACK_TASK_STACK_SIZE, playback, 5, NULL) !=
         pdPASS) {
+        ESP_LOGE(TAG,
+                 "audio playback task allocation failed: free=%zu "
+                 "largest=%zu",
+                 heap_caps_get_free_size(MALLOC_CAP_8BIT),
+                 heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
         vStreamBufferDelete(playback->stream);
         vSemaphoreDelete(playback->done);
         playback->stream = NULL;
@@ -1443,6 +1457,12 @@ static esp_err_t process_text(const brain_config_t *config,
             }
             json_get_string(directive, "expression",
                             expression, sizeof(expression));
+            free(directive);
+            directive = NULL;
+            free(history);
+            history = NULL;
+            free(result);
+            result = NULL;
             err = speak(config, answer, expression);
             if (err == ESP_OK) remember_conversation(message, answer);
             break;
@@ -1652,6 +1672,8 @@ esp_err_t brain_workflow_run_text(const brain_config_t *config,
                        pdMS_TO_TICKS(MANUAL_LOCK_WAIT_MS)) != pdTRUE) {
         return ESP_ERR_INVALID_STATE;
     }
+    emit_event(BRAIN_WORKFLOW_EVENT_START,
+               NULL, NULL, NULL, false, 0);
     answer[0] = '\0';
     esp_err_t err = process_text(
         config, message, robot_status_json, answer, answer_capacity);
@@ -1674,6 +1696,8 @@ esp_err_t brain_workflow_run_voice(const brain_config_t *config,
                        pdMS_TO_TICKS(MANUAL_LOCK_WAIT_MS)) != pdTRUE) {
         return ESP_ERR_INVALID_STATE;
     }
+    emit_event(BRAIN_WORKFLOW_EVENT_START,
+               NULL, NULL, NULL, false, 0);
     char *transcript = malloc(MAX_TRANSCRIPT);
     char *answer = malloc(MAX_ANSWER);
     if (transcript == NULL || answer == NULL) {

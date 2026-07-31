@@ -71,12 +71,19 @@ It also gates the live microphone WebSocket:
 ```text
 stream on
 stream status
+mic gain 2.00
+mic sensitivity 600
 stream off
 ```
 
 The `/api/audio/mic` route does not exist until `stream on` is entered. Turning
 it off unregisters the route and disconnects its client. This setting is
 intentionally runtime-only and returns to disabled after a reboot.
+Microphone gain and sensitivity are persistent and shared by the level test,
+live stream, wake detection, and STT capture. Gain accepts `0.25` to `8.00`;
+larger values make the PCM louder but also amplify noise and may clip. The
+sensitivity value is the VAD amplitude threshold, so a lower value detects
+quieter speech.
 
 The Interact page sends face states, changes brightness, controls both bucks,
 starts a microphone request with `listen`, and accepts a typed request with
@@ -103,6 +110,7 @@ set wake oye bender
 set wake-enabled on
 set silence-ms 5000
 set vad 1200
+set mic-gain 1.00
 apply-wifi
 ```
 
@@ -207,11 +215,21 @@ connect directly to:
 ws://DEVICE_IP/api/audio/mic
 ```
 
-The first WebSocket message is JSON describing the stream. Following messages
-are binary frames containing signed little-endian PCM with this fixed format:
+The page also exposes persistent gain and speech-threshold controls. They take
+effect immediately after **Apply and save** and stay synchronized with values
+changed from USB serial. The first WebSocket message is JSON describing the
+stream and current settings. Following messages are binary frames containing
+signed little-endian PCM with this fixed format:
 
 ```json
-{"format":"pcm_s16le","sample_rate":16000,"channels":1,"frame_samples":1600}
+{"format":"pcm_s16le","sample_rate":16000,"channels":1,"frame_samples":1600,"gain_q8":256,"gain":1.00,"vad_threshold":1200}
+```
+
+A custom WebSocket client can update both values with a text frame. Values are
+saved in NVS, and the server replies with the resulting settings:
+
+```json
+{"gain_q8":512,"vad_threshold":600}
 ```
 
 That is one 100 ms, 3,200-byte frame under normal operation. A browser should

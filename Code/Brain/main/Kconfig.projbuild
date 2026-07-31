@@ -70,6 +70,11 @@ config SARCASMOS_VAD_THRESHOLD
     range 1 65535
     default 1200
 
+config SARCASMOS_MIC_GAIN_Q8
+    int "Microphone digital gain (Q8; 256 = 1.0x)"
+    range 64 2048
+    default 256
+
 config SARCASMOS_ENABLE_WIFI
     bool "Enable Wi-Fi station at boot"
     default y

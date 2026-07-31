@@ -145,6 +145,7 @@ esp_err_t brain_config_load(brain_config_t *config)
 #endif
     config->silence_ms = CONFIG_SARCASMOS_LISTEN_SILENCE_MS;
     config->vad_threshold = CONFIG_SARCASMOS_VAD_THRESHOLD;
+    config->mic_gain_q8 = CONFIG_SARCASMOS_MIC_GAIN_Q8;
 
     nvs_handle_t handle = 0;
     esp_err_t err = nvs_open(CONFIG_NAMESPACE, NVS_READONLY, &handle);
@@ -162,6 +163,7 @@ esp_err_t brain_config_load(brain_config_t *config)
     uint8_t wake_enabled = config->wake_enabled;
     uint16_t silence_ms = config->silence_ms;
     uint16_t vad_threshold = config->vad_threshold;
+    uint16_t mic_gain_q8 = config->mic_gain_q8;
     if (nvs_get_u8(handle, "wake_enabled", &wake_enabled) == ESP_OK) {
         config->wake_enabled = wake_enabled != 0;
     }
@@ -170,6 +172,10 @@ esp_err_t brain_config_load(brain_config_t *config)
     }
     if (nvs_get_u16(handle, "vad_threshold", &vad_threshold) == ESP_OK) {
         config->vad_threshold = vad_threshold;
+    }
+    if (nvs_get_u16(handle, "mic_gain_q8", &mic_gain_q8) == ESP_OK &&
+        mic_gain_q8 >= 64 && mic_gain_q8 <= 2048) {
+        config->mic_gain_q8 = mic_gain_q8;
     }
     nvs_close(handle);
     return ESP_OK;
@@ -262,6 +268,15 @@ esp_err_t brain_config_set_vad_threshold(brain_config_t *config,
         return ESP_ERR_INVALID_ARG;
     }
     return set_u16(&config->vad_threshold, "vad_threshold", threshold);
+}
+
+esp_err_t brain_config_set_mic_gain_q8(brain_config_t *config,
+                                       uint16_t gain_q8)
+{
+    if (config == NULL || gain_q8 < 64 || gain_q8 > 2048) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    return set_u16(&config->mic_gain_q8, "mic_gain_q8", gain_q8);
 }
 
 esp_err_t brain_config_reset(void)

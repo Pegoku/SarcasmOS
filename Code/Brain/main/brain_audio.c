@@ -24,6 +24,7 @@
 static i2s_chan_handle_t s_tx_channel;
 static i2s_chan_handle_t s_rx_channel;
 static SemaphoreHandle_t s_audio_mutex;
+static volatile uint16_t s_mic_gain_q8 = 256;
 
 static uint16_t magnitude16(int16_t sample)
 {
@@ -82,6 +83,18 @@ esp_err_t brain_audio_init(void)
         err = i2s_channel_enable(s_tx_channel);
     }
     return err;
+}
+
+esp_err_t brain_audio_set_mic_gain_q8(uint16_t gain_q8)
+{
+    if (gain_q8 < 64 || gain_q8 > 2048) return ESP_ERR_INVALID_ARG;
+    s_mic_gain_q8 = gain_q8;
+    return ESP_OK;
+}
+
+uint16_t brain_audio_get_mic_gain_q8(void)
+{
+    return s_mic_gain_q8;
 }
 
 static esp_err_t write_pcm16(const int16_t *samples, size_t sample_count,
@@ -182,8 +195,11 @@ static size_t extract_mic_samples(const int32_t *input, size_t frames,
     size_t output_count = 0;
     size_t step = decimate ? 2 : 1;
     for (size_t i = 0; i < frames; i += step) {
-        output[output_count++] =
-            (int16_t)(input[i * 2 + channel] >> 16);
+        int32_t sample = input[i * 2 + channel] >> 16;
+        sample = sample * s_mic_gain_q8 / 256;
+        if (sample > INT16_MAX) sample = INT16_MAX;
+        if (sample < INT16_MIN) sample = INT16_MIN;
+        output[output_count++] = (int16_t)sample;
     }
     return output_count;
 }

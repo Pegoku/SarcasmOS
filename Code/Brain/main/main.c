@@ -968,6 +968,27 @@ static void mic_stream_task(void *argument)
     vTaskDelete(NULL);
 }
 
+static esp_err_t mic_stream_send_settings(httpd_req_t *req)
+{
+    char metadata[192];
+    int length = snprintf(
+        metadata, sizeof(metadata),
+        "{\"format\":\"pcm_s16le\",\"sample_rate\":16000,"
+        "\"channels\":1,\"frame_samples\":1600,"
+        "\"gain_q8\":%u,\"gain\":%.2f,\"vad_threshold\":%u}",
+        g_config.mic_gain_q8, g_config.mic_gain_q8 / 256.0,
+        g_config.vad_threshold);
+    if (length <= 0 || (size_t)length >= sizeof(metadata)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    httpd_ws_frame_t frame = {
+        .type = HTTPD_WS_TYPE_TEXT,
+        .payload = (uint8_t *)metadata,
+        .len = (size_t)length,
+    };
+    return httpd_ws_send_frame(req, &frame);
+}
+
 static esp_err_t mic_stream_post_handshake(httpd_req_t *req)
 {
     portENTER_CRITICAL(&g_mic_stream_lock);
@@ -979,15 +1000,7 @@ static esp_err_t mic_stream_post_handshake(httpd_req_t *req)
     portEXIT_CRITICAL(&g_mic_stream_lock);
     if (!accepted) return ESP_ERR_INVALID_STATE;
 
-    static const char metadata[] =
-        "{\"format\":\"pcm_s16le\",\"sample_rate\":16000,"
-        "\"channels\":1,\"frame_samples\":1600}";
-    httpd_ws_frame_t frame = {
-        .type = HTTPD_WS_TYPE_TEXT,
-        .payload = (uint8_t *)metadata,
-        .len = sizeof(metadata) - 1,
-    };
-    esp_err_t err = httpd_ws_send_frame(req, &frame);
+    esp_err_t err = mic_stream_send_settings(req);
     mic_stream_context_t *stream = NULL;
     if (err == ESP_OK) {
         stream = malloc(sizeof(*stream));
@@ -1015,28 +1028,40 @@ static const char MIC_STREAM_PAGE[] =
     "<meta name='viewport' content='width=device-width,initial-scale=1'>"
     "<title>SarcasmOS microphone</title><style>"
     "body{font:16px system-ui;max-width:42rem;margin:3rem auto;padding:0 1rem;"
-    "background:#111;color:#eee}button{font:inherit;padding:.7rem 1rem;"
-    "margin-right:.5rem}code{color:#7ee787}#level{height:1rem;background:#333;"
+    "background:#111;color:#eee}button,input{font:inherit}button{padding:.7rem 1rem;"
+    "margin-right:.5rem}label{display:block;margin:1rem 0}input[type=range]{width:18rem;"
+    "vertical-align:middle}code{color:#7ee787}#level{height:1rem;background:#333;"
     "margin-top:1rem}#meter{height:100%;width:0;background:#39d353}"
     "</style></head><body><h1>SarcasmOS live microphone</h1>"
     "<p id='status'>Ready. Press Start to permit audio playback.</p>"
     "<button id='start'>Start listening</button>"
     "<button id='stop' disabled>Stop</button>"
     "<div id='level'><div id='meter'></div></div>"
+    "<fieldset><legend>Microphone settings</legend>"
+    "<label>Digital gain <input id='gain' type='range' min='.25' max='8' step='.25' value='1'> "
+    "<output id='gainOut'>1.00x</output></label>"
+    "<label>Speech threshold <input id='vad' type='number' min='1' max='65535' value='1200'></label>"
+    "<p>Lower threshold = more sensitive. Gain amplifies speech and noise.</p>"
+    "<button id='apply' disabled>Apply and save</button></fieldset>"
     "<p><code>16 kHz / mono / PCM16 LE</code></p><script>"
     "let ws,ctx,nextTime=0;const status=document.getElementById('status');"
     "const meter=document.getElementById('meter');"
     "const start=document.getElementById('start'),stop=document.getElementById('stop');"
+    "const gain=document.getElementById('gain'),gainOut=document.getElementById('gainOut');"
+    "const vad=document.getElementById('vad'),apply=document.getElementById('apply');"
+    "gain.oninput=()=>gainOut.value=Number(gain.value).toFixed(2)+'x';"
     "function closeStream(){if(ws){ws.close();ws=null;}"
     "if(ctx){ctx.close();ctx=null;}nextTime=0;start.disabled=false;"
-    "stop.disabled=true;meter.style.width='0';}"
+    "stop.disabled=true;apply.disabled=true;meter.style.width='0';}"
     "start.onclick=async()=>{start.disabled=true;"
     "ctx=new(window.AudioContext||window.webkitAudioContext)();await ctx.resume();"
     "const scheme=location.protocol==='https:'?'wss://':'ws://';"
     "ws=new WebSocket(scheme+location.host+'/api/audio/mic');"
     "ws.binaryType='arraybuffer';ws.onopen=()=>{status.textContent='Connected';"
-    "stop.disabled=false;nextTime=ctx.currentTime+.12;};"
-    "ws.onmessage=e=>{if(typeof e.data==='string'){status.textContent='Connected: '+e.data;return;}"
+    "stop.disabled=false;apply.disabled=false;nextTime=ctx.currentTime+.12;};"
+    "ws.onmessage=e=>{if(typeof e.data==='string'){const m=JSON.parse(e.data);"
+    "if(m.gain_q8){gain.value=m.gain_q8/256;gain.oninput();}"
+    "if(m.vad_threshold)vad.value=m.vad_threshold;status.textContent='Settings synchronized';return;}"
     "const pcm=new Int16Array(e.data),audio=ctx.createBuffer(1,pcm.length,16000);"
     "const out=audio.getChannelData(0);let peak=0;for(let i=0;i<pcm.length;i++){"
     "out[i]=pcm[i]/32768;peak=Math.max(peak,Math.abs(out[i]));}"
@@ -1046,6 +1071,9 @@ static const char MIC_STREAM_PAGE[] =
     "nextTime=at+audio.duration;};"
     "ws.onerror=()=>status.textContent='WebSocket error';"
     "ws.onclose=()=>{status.textContent='Disconnected';closeStream();};};"
+    "apply.onclick=()=>{if(!ws||ws.readyState!==1)return;"
+    "ws.send(JSON.stringify({gain_q8:Math.round(Number(gain.value)*256),"
+    "vad_threshold:Number(vad.value)}));status.textContent='Saving settings...';};"
     "stop.onclick=()=>{status.textContent='Stopped';closeStream();};"
     "</script></body></html>";
 
@@ -1061,11 +1089,44 @@ static esp_err_t mic_stream_handler(httpd_req_t *req)
     }
     httpd_ws_frame_t frame = { 0 };
     esp_err_t err = httpd_ws_recv_frame(req, &frame, 0);
-    if (err != ESP_OK || frame.len == 0) return err;
-    if (frame.len > 64) return ESP_ERR_INVALID_SIZE;
-    uint8_t payload[64];
+    if (err != ESP_OK) return err;
+    if (frame.len == 0) return ESP_ERR_INVALID_ARG;
+    if (frame.len > 128) return ESP_ERR_INVALID_SIZE;
+    uint8_t payload[129];
     frame.payload = payload;
-    return httpd_ws_recv_frame(req, &frame, sizeof(payload));
+    err = httpd_ws_recv_frame(req, &frame, sizeof(payload) - 1);
+    if (err != ESP_OK) return err;
+    if (frame.type != HTTPD_WS_TYPE_TEXT) return ESP_ERR_NOT_SUPPORTED;
+    payload[frame.len] = '\0';
+
+    const char *gain_key = strstr((char *)payload, "\"gain_q8\"");
+    const char *vad_key = strstr((char *)payload, "\"vad_threshold\"");
+    bool changed = false;
+    if (gain_key != NULL) {
+        const char *value = strchr(gain_key, ':');
+        unsigned long gain_q8 = value != NULL ? strtoul(value + 1, NULL, 10) : 0;
+        if (gain_q8 < 64 || gain_q8 > 2048) return ESP_ERR_INVALID_ARG;
+        err = brain_config_set_mic_gain_q8(
+            &g_config, (uint16_t)gain_q8);
+        if (err == ESP_OK) {
+            err = brain_audio_set_mic_gain_q8((uint16_t)gain_q8);
+        }
+        if (err != ESP_OK) return err;
+        changed = true;
+    }
+    if (vad_key != NULL) {
+        const char *value = strchr(vad_key, ':');
+        unsigned long threshold =
+            value != NULL ? strtoul(value + 1, NULL, 10) : 0;
+        if (threshold == 0 || threshold > UINT16_MAX) {
+            return ESP_ERR_INVALID_ARG;
+        }
+        err = brain_config_set_vad_threshold(
+            &g_config, (uint16_t)threshold);
+        if (err != ESP_OK) return err;
+        changed = true;
+    }
+    return changed ? mic_stream_send_settings(req) : ESP_ERR_INVALID_ARG;
 }
 
 static const httpd_uri_t MIC_STREAM_URI = {
@@ -1132,7 +1193,8 @@ static esp_err_t status_handler(httpd_req_t *req)
         "\"microphone_stream\":{\"enabled\":%s,\"active\":%s,"
         "\"endpoint\":\"/api/audio/mic\","
         "\"format\":\"pcm_s16le\",\"sample_rate\":16000,"
-        "\"channels\":1},"
+        "\"channels\":1,\"gain_q8\":%u,\"gain\":%.2f,"
+        "\"vad_threshold\":%u},"
         "\"face_transition\":{\"desired_animation\":%u,"
         "\"committed_animation\":%u,\"token\":%u,\"waiting_for\":[%s],"
         "\"started_ms\":%" PRIu32 ",\"degraded\":%s},\"displays\":[",
@@ -1140,6 +1202,8 @@ static esp_err_t status_handler(httpd_req_t *req)
         g_ethernet_connected ? "true" : "false", g_brightness,
         mic_stream_enabled() ? "true" : "false",
         mic_stream_active() ? "true" : "false",
+        g_config.mic_gain_q8, g_config.mic_gain_q8 / 256.0,
+        g_config.vad_threshold,
         face.desired_animation, face.committed_animation, face.token, waiting,
         face.started_ms, face.degraded ? "true" : "false");
     for (size_t i = 0; i < EYE_COUNT; ++i) {
@@ -1376,7 +1440,7 @@ static esp_err_t config_status_handler(httpd_req_t *req)
 {
     const char *missing = NULL;
     bool ready = brain_workflow_config_ready(&g_config, &missing);
-    char json[1536];
+    char json[2048];
     snprintf(
         json, sizeof(json),
         "{\"ai_ready\":%s,\"missing\":\"%s\","
@@ -1388,6 +1452,8 @@ static esp_err_t config_status_handler(httpd_req_t *req)
         "\"voice_id_set\":%s,\"calendar_token_set\":%s},"
         "\"wake\":{\"enabled\":%s,\"phrase\":\"%s\","
         "\"silence_ms\":%u,\"vad_threshold\":%u},"
+        "\"microphone\":{\"gain_q8\":%u,\"gain\":%.2f,"
+        "\"vad_threshold\":%u},"
         "\"timezone\":\"%s\"}",
         ready ? "true" : "false", missing != NULL ? missing : "",
         g_config.wifi_ssid,
@@ -1400,7 +1466,9 @@ static esp_err_t config_status_handler(httpd_req_t *req)
         g_config.voice_id[0] ? "true" : "false",
         g_config.google_calendar_token[0] ? "true" : "false",
         g_config.wake_enabled ? "true" : "false", g_config.wake_phrase,
-        g_config.silence_ms, g_config.vad_threshold, g_config.timezone);
+        g_config.silence_ms, g_config.vad_threshold,
+        g_config.mic_gain_q8, g_config.mic_gain_q8 / 256.0,
+        g_config.vad_threshold, g_config.timezone);
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, json);
 }
@@ -1715,6 +1783,8 @@ static void cli_print_test(void)
     printf("  n  network status       g  GPIO/power status\n");
     printf("  p  speaker tone         r  microphone level\n");
     printf("  stream on|off|status    WebSocket microphone endpoint\n");
+    printf("  mic gain <0.25-8.00>    digital microphone gain\n");
+    printf("  mic sensitivity <1-65535>  lower is more sensitive\n");
     printf("  0  home                 h/? show this page\n");
     printf("-----------------------------------------\n");
 }
@@ -1746,7 +1816,9 @@ static void cli_print_config(void)
     printf("  set timezone <IANA name>\n");
     printf("  set wake <phrase>         set wake-enabled on|off\n");
     printf("  set silence-ms <500-15000>\n");
-    printf("  set vad <1-65535>         reset\n");
+    printf("  set vad <1-65535>         set mic-gain <0.25-8.00>\n");
+    printf("  set mic-sensitivity <1-65535>\n");
+    printf("  reset\n");
     printf("  apply-wifi                apply Wi-Fi without rebooting\n");
     printf("  0  home                   h/? show this page\n");
     printf("-----------------------------------------\n");
@@ -1919,7 +1991,25 @@ static void cli_show_config(void)
     printf("Wake enabled:     %s\n", g_config.wake_enabled ? "yes" : "no");
     printf("Silence timeout:  %u ms\n", g_config.silence_ms);
     printf("VAD threshold:    %u\n", g_config.vad_threshold);
+    printf("Microphone gain:  %.2fx\n", g_config.mic_gain_q8 / 256.0);
     printf("Values stored from this page override blank or default build values.\n");
+}
+
+static bool cli_parse_mic_gain(const char *value, uint16_t *gain_q8)
+{
+    char *end = NULL;
+    float gain = strtof(value, &end);
+    if (end == value || *end != '\0' || gain < 0.25f || gain > 8.0f) {
+        return false;
+    }
+    *gain_q8 = (uint16_t)(gain * 256.0f + 0.5f);
+    return true;
+}
+
+static esp_err_t cli_save_mic_gain(uint16_t gain_q8)
+{
+    esp_err_t err = brain_config_set_mic_gain_q8(&g_config, gain_q8);
+    return err == ESP_OK ? brain_audio_set_mic_gain_q8(gain_q8) : err;
 }
 
 static void cli_set_config(char *arguments)
@@ -1989,12 +2079,18 @@ static void cli_set_config(char *arguments)
             err = brain_config_set_silence_ms(
                 &g_config, (uint16_t)parsed);
         }
-    } else if (strcmp(key, "vad") == 0) {
+    } else if (strcmp(key, "vad") == 0 ||
+               strcmp(key, "mic-sensitivity") == 0) {
         char *end = NULL;
         unsigned long parsed = strtoul(value, &end, 10);
         if (end != value && *end == '\0' && parsed <= UINT16_MAX) {
             err = brain_config_set_vad_threshold(
                 &g_config, (uint16_t)parsed);
+        }
+    } else if (strcmp(key, "mic-gain") == 0) {
+        uint16_t gain_q8 = 0;
+        if (cli_parse_mic_gain(value, &gain_q8)) {
+            err = cli_save_mic_gain(gain_q8);
         }
     } else {
         printf("Unknown configuration key '%s'.\n", key);
@@ -2022,9 +2118,37 @@ static void cli_handle_test(char *command)
                    : "unchanged",
                esp_err_to_name(err));
     } else if (strcmp(command, "stream status") == 0) {
-        printf("Microphone WebSocket: %s, client: %s\n",
+        printf("Microphone WebSocket: %s, client: %s, gain: %.2fx, "
+               "sensitivity threshold: %u\n",
                mic_stream_enabled() ? "ENABLED" : "DISABLED",
-               mic_stream_active() ? "connected" : "none");
+               mic_stream_active() ? "connected" : "none",
+               g_config.mic_gain_q8 / 256.0, g_config.vad_threshold);
+    } else if (strncmp(command, "mic gain ", 9) == 0) {
+        uint16_t gain_q8 = 0;
+        esp_err_t err = cli_parse_mic_gain(cli_trim(command + 9), &gain_q8)
+                            ? cli_save_mic_gain(gain_q8)
+                            : ESP_ERR_INVALID_ARG;
+        printf("Microphone gain: %s", esp_err_to_name(err));
+        if (err == ESP_OK) printf(" (%.2fx)", gain_q8 / 256.0);
+        printf("\n");
+    } else if (strncmp(command, "mic sensitivity ", 16) == 0 ||
+               strncmp(command, "mic sensibility ", 15) == 0) {
+        bool conventional_spelling =
+            strncmp(command, "mic sensitivity ", 16) == 0;
+        char *value = cli_trim(command + (conventional_spelling ? 16 : 15));
+        char *end = NULL;
+        unsigned long parsed = strtoul(value, &end, 10);
+        esp_err_t err =
+            end != value && *end == '\0' && parsed > 0 &&
+                    parsed <= UINT16_MAX
+                ? brain_config_set_vad_threshold(
+                      &g_config, (uint16_t)parsed)
+                : ESP_ERR_INVALID_ARG;
+        printf("Microphone sensitivity: %s", esp_err_to_name(err));
+        if (err == ESP_OK) {
+            printf(" (threshold %lu; lower is more sensitive)", parsed);
+        }
+        printf("\n");
     }
     else if (strcmp(command, "p") == 0) {
         if (mic_stream_active()) {
@@ -2148,6 +2272,9 @@ static void cli_handle_config(char *command)
         if (err == ESP_OK) {
             err = brain_config_load(&g_config);
         }
+        if (err == ESP_OK) {
+            err = brain_audio_set_mic_gain_q8(g_config.mic_gain_q8);
+        }
         printf("Configuration reset: %s\n", esp_err_to_name(err));
     } else {
         printf("Unknown configuration command. Enter h for this page.\n");
@@ -2223,6 +2350,7 @@ void app_main(void)
         ESP_ERROR_CHECK(nvs_flash_init());
     }
     ESP_ERROR_CHECK(brain_config_load(&g_config));
+    ESP_ERROR_CHECK(brain_audio_set_mic_gain_q8(g_config.mic_gain_q8));
     g_face_queue = xQueueCreate(1, sizeof(face_request_t));
     g_face_mutex = xSemaphoreCreateMutex();
     g_display_mutex = xSemaphoreCreateMutex();

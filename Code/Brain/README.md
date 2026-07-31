@@ -136,6 +136,10 @@ set mic-gain 1.00
 apply-wifi
 ```
 
+`llm-url` normally contains the API base URL. For compatibility, the firmware
+also accepts a full URL ending in `/chat/completions` and will not append the
+path a second time.
+
 The specific LLM and Replicate tokens fall back to `ai-token` when blank.
 `show` and `view <key>` print actual values, including passwords, tokens, and
 voice IDs; avoid sharing or recording that serial output. Wi-Fi changes can be

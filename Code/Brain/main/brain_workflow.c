@@ -252,6 +252,24 @@ static esp_err_t join_url(char *output, size_t capacity,
                ? ESP_OK : ESP_ERR_INVALID_SIZE;
 }
 
+static esp_err_t llm_completions_url(char *output, size_t capacity,
+                                     const char *configured_url)
+{
+    static const char suffix[] = "/chat/completions";
+    size_t length = strlen(configured_url);
+    while (length > 0 && configured_url[length - 1] == '/') --length;
+    size_t suffix_length = sizeof(suffix) - 1;
+    if (length >= suffix_length &&
+        memcmp(configured_url + length - suffix_length,
+               suffix, suffix_length) == 0) {
+        int count = snprintf(output, capacity, "%.*s", (int)length,
+                             configured_url);
+        return count > 0 && (size_t)count < capacity
+                   ? ESP_OK : ESP_ERR_INVALID_SIZE;
+    }
+    return join_url(output, capacity, configured_url, suffix);
+}
+
 static const char *json_value_start(const char *json, const char *key)
 {
     char pattern[96];
@@ -1219,8 +1237,8 @@ static esp_err_t llm_directive(const brain_config_t *config,
     free(system); free(user); free(status); free(history);
     free(conversation); free(model);
     char url[MAX_URL];
-    esp_err_t err = join_url(
-        url, sizeof(url), config->llm_url, "/chat/completions");
+    esp_err_t err = llm_completions_url(
+        url, sizeof(url), config->llm_url);
     response_buffer_t response = { 0 };
     if (err == ESP_OK) {
         err = checked_http_request(
@@ -1436,10 +1454,10 @@ esp_err_t brain_workflow_test_llm(const brain_config_t *config,
                  "{\"role\":\"user\",\"content\":\"%s\"}]}",
                  escaped_model, escaped_message);
         char url[MAX_URL];
-        err = join_url(url, sizeof(url), config->llm_url,
-                       "/chat/completions");
+        err = llm_completions_url(url, sizeof(url), config->llm_url);
         response_buffer_t http_response = { 0 };
         if (err == ESP_OK) {
+            printf("LLM endpoint: %s\n", url);
             err = checked_http_request(
                 HTTP_METHOD_POST, url, llm_token(config),
                 "application/json", body, &http_response);

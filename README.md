@@ -124,7 +124,7 @@ The language model prompt, personality, expected user input, and generated respo
 
 ## Current State
 
-SarcasmOS already has a working web demo available [here](https://sarcasmos.pegoku.com/):
+SarcasmOS already has a working web demo available [here](https://sarcasmos-7f3c9a2e.easyrumbo.com/):
 
 - Static web UI in `Code/AI/Workflow/SarcasmOS-web`.
 - Local FastAPI backend with chat, audio, history, and status endpoints.
@@ -138,7 +138,7 @@ The hardware firmware is still not finished, but a minimal prototype is already 
 
 ## Web Demo
 
-For the already setup web demo, visit [https://sarcasmos.pegoku.com/](https://sarcasmos.pegoku.com/).
+For the already setup web demo, visit [https://sarcasmos-7f3c9a2e.easyrumbo.com/](https://sarcasmos-7f3c9a2e.easyrumbo.com/).
 
 For the best experience and no ratelimiting, run the local web app.
 

@@ -206,6 +206,24 @@ FastAPI backend
       v
 Audio + animated face + future hardware expressions
 ```
+## Things that happened when carrying out the project
+
+When it came to making our project a reality we had several problems, because of customs we had to pay almost $200 more than what we had budgeted.
+
+When shipping the chips, those from the company were careless and forgot some chips to send, but that was the least of it.
+
+The screen that is located in the mouth on the inside has also been delayed and we had to improvise with a lower resolution screen that we found from another project, having to put it outside the body because it didn't fit inside.
+
+## Photos of the finished project
+
+<img width="1536" height="2040" alt="3d print" src="https://github.com/user-attachments/assets/4245dfaa-b1e7-4122-b36d-e943d66dae95" />
+<img width="1536" height="2040" alt="Body" src="https://github.com/user-attachments/assets/989dc7f6-2c92-46ea-8620-f676b37bccc6" />
+<img width="1536" height="2040" alt="Body   eyes" src="https://github.com/user-attachments/assets/60df96bb-b616-4066-a2b7-438cdba47831" />
+<img width="1536" height="2040" alt="Bender build" src="https://github.com/user-attachments/assets/de91c345-1d0b-4b55-b949-fa95615399be" />
+
+## Demo video
+
+[![Ver video](https://img.youtube.com/vi/0U2ITrU95Sk/maxresdefault.jpg)](https://www.youtube.com/watch?v=0U2ITrU95Sk)   
 
 ## Credits
 

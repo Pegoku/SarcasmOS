@@ -211,7 +211,7 @@ self-test firmware.
 
 ## Web Demo
 
-For the already setup web demo, visit [https://sarcasmos.pegoku.com/](https://sarcasmos.pegoku.com/).
+For the already setup web demo, visit [https://sarcasmos-7f3c9a2e.easyrumbo.com/](https://sarcasmos-7f3c9a2e.easyrumbo.com/).
 
 For the best experience and no ratelimiting, run the local web app.
 

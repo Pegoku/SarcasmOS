@@ -1276,6 +1276,8 @@ def current_auth_user(authorization: str | None) -> dict:
     user = load_auth_users().get("users", {}).get(email)
     if not user:
         raise HTTPException(status_code=401, detail="User no longer exists.")
+    if email.endswith("@preview.sarcasmos"):
+        user = {**user, "developerMode": False}
     return user
 
 
@@ -1847,7 +1849,7 @@ async def preview_login() -> JSONResponse:
         data = load_auth_users()
         user = data["users"][email]
         user["authorized"] = True
-        user["developerMode"] = True
+        user["developerMode"] = False
         save_auth_users(data)
     token, expires_at = create_auth_session(email)
     return JSONResponse(

@@ -1831,7 +1831,27 @@ async def get_public_config() -> JSONResponse:
         content={
             "googleClientId": google_client_id,
             "googleLoginEnabled": bool(google_client_id),
+            "previewGuestAccess": env_flag("PREVIEW_GUEST_ACCESS"),
         }
+    )
+
+
+@app.post("/api/auth/preview")
+async def preview_login() -> JSONResponse:
+    if not env_flag("PREVIEW_GUEST_ACCESS"):
+        return error_response("Preview guest access is disabled.", status_code=404)
+
+    email = f"preview-{secrets.token_hex(8)}@preview.sarcasmos"
+    user = upsert_auth_user(email, "Preview guest", "")
+    with AUTH_USERS_LOCK:
+        data = load_auth_users()
+        user = data["users"][email]
+        user["authorized"] = True
+        user["developerMode"] = True
+        save_auth_users(data)
+    token, expires_at = create_auth_session(email)
+    return JSONResponse(
+        content={"token": token, "expiresAt": expires_at, "user": public_user(user), "quota": chat_quota_for_user(user)}
     )
 
 

@@ -2587,6 +2587,17 @@ async function loginWithGoogle(credential) {
   }
 }
 
+async function loginAsPreviewGuest() {
+  const response = await fetch(`${API_BASE}/api/auth/preview`, { method: "POST" });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "Preview access failed.");
+  }
+  saveUserSession({ ...data.user, token: data.token, sessionExpiresAt: data.expiresAt || "" });
+  currentQuota = data.quota || null;
+  renderCreditMeter();
+}
+
 function renderGoogleButton() {
   if (!googleLoginButton) {
     return;
@@ -3097,8 +3108,9 @@ function initHomeBenderLook() {
 
 async function initAuth() {
   currentUser = loadUserSession();
+  let publicConfig;
   try {
-    await loadPublicConfig();
+    publicConfig = await loadPublicConfig();
   } catch (error) {
     showLoginError(error.message || "Could not load login configuration.");
     renderAuthState();
@@ -3119,6 +3131,13 @@ async function initAuth() {
       currentUser = null;
       localStorage.removeItem(AUTH_STORAGE_KEY);
       showLoginError(tr("sessionExpired"));
+    }
+  }
+  if (!currentUser?.token && publicConfig.previewGuestAccess) {
+    try {
+      await loginAsPreviewGuest();
+    } catch (error) {
+      showLoginError(error.message || "Preview access failed.");
     }
   }
   renderAuthState();

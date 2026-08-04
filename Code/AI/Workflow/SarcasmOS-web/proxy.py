@@ -41,6 +41,10 @@ def should_route_to_backend(path: str) -> bool:
     )
 
 
+def is_public_web_path(path: str) -> bool:
+    return path in {"/", "/index.html", "/style.css", "/app.js", "/robots.txt"} or path.startswith("/assets/")
+
+
 class SarcasmOSProxyHandler(BaseHTTPRequestHandler):
     backend_host: str = "127.0.0.1"
     backend_port: int = 8001
@@ -77,6 +81,11 @@ class SarcasmOSProxyHandler(BaseHTTPRequestHandler):
         self.proxy_request()
 
     def proxy_request(self) -> None:
+        path = urlsplit(self.path).path
+        if not should_route_to_backend(path) and not is_public_web_path(path):
+            self.send_error(404)
+            return
+
         if self.is_websocket_request():
             self.proxy_websocket()
             return
@@ -100,6 +109,7 @@ class SarcasmOSProxyHandler(BaseHTTPRequestHandler):
         for key, value in response.getheaders():
             if key.lower() not in HOP_BY_HOP_HEADERS:
                 self.send_header(key, value)
+        self.send_header("X-Robots-Tag", "noindex, nofollow, noarchive")
         self.send_header("Content-Length", str(len(response_body)))
         self.end_headers()
         if self.command != "HEAD":

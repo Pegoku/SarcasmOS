@@ -6,6 +6,23 @@ The core idea is simple: take a smart assistant like Alexa or Google Home, then 
 This project focusses on the software and AI side of the assistant, but it also includes various hardware elements, like multiple PCBs, sensors, motors, and quite a bit of 3D printing.
 The goal is to have a memorable, sarcastic, and show-like assistant that can be used both for fun and real tasks like controlling smart home devices, playing music reviewing your agenda, or answering questions.
 
+## Finished Project
+
+<img width="1536" height="2040" alt="Finished SarcasmOS with its animated eyes turned on" src="https://github.com/user-attachments/assets/60df96bb-b616-4066-a2b7-438cdba47831" />
+<img width="1536" height="2040" alt="Finished SarcasmOS body" src="https://github.com/user-attachments/assets/989dc7f6-2c92-46ea-8620-f676b37bccc6" />
+<img width="1536" height="2040" alt="SarcasmOS during the final 3D-printed assembly" src="https://github.com/user-attachments/assets/4245dfaa-b1e7-4122-b36d-e943d66dae95" />
+
+### Demo Video
+
+[![Watch the SarcasmOS demo](https://img.youtube.com/vi/0U2ITrU95Sk/maxresdefault.jpg)](https://www.youtube.com/watch?v=0U2ITrU95Sk)
+
+<details>
+  <summary>Cool SarcasmOS picture — click to reveal</summary>
+
+<img width="1536" height="2040" alt="SarcasmOS striking a funny Bender pose" src="https://github.com/user-attachments/assets/de91c345-1d0b-4b55-b949-fa95615399be" />
+
+</details>
+
 ## Why did we Build This?
 
 Futurama is a classic tv show we love (and you should too). Bender is the most memorable character, and his sarcastic personality is a perfect fit for a voice assistant.
@@ -124,17 +141,82 @@ The language model prompt, personality, expected user input, and generated respo
 
 ## Current State
 
-SarcasmOS already has a working web demo available [here](https://sarcasmos.pegoku.com/):
+SarcasmOS is complete, including its Brain, Eye, and Mouth firmware. The
+finished hardware can listen for its wake phrase, understand a spoken request,
+use tools, answer in a Spanish Bender-style voice, and coordinate the animated
+face while it works and speaks.
 
-- Static web UI in `Code/AI/Workflow/SarcasmOS-web`.
-- Local FastAPI backend with chat, audio, history, and status endpoints.
-- STT, LLM, and TTS pipeline using configurable external services.
-- Console view, full face view, and voice chat view.
-- CAD files for the head/body.
-- KiCad designs for the eye and mouth boards.
-- Voice synthesis/cloning experiments and clip preparation tools.
+| Component | Capabilities |
+| --- | --- |
+| [Brain firmware](Code/Brain) | Runs the complete voice-assistant workflow on the ESP32-S3: microphone capture, wake-phrase detection, STT, multi-round LLM calls, TTS, speaker playback, conversation memory, a USB console, and a local HTTP API. Its native tools provide weather, local time, Google Calendar search, and live robot status. It also coordinates synchronized face transitions. |
+| [Eye firmware](Code/Eye) | Drives the two 240x240 GC9A01A displays from RP2040 boards, with 31 animated expression and weather states, independent left/right artwork, brightness control, and synchronized transitions over I2C. |
+| [Mouth firmware](Code/Mouth-NeonPCB) | Drives the 64x32 HUB75 RGB matrix from an ESP32-S3, with the matching 31 states, blended transitions, speaking intensity, live weather temperatures, brightness control, and acknowledged ESP-NOW communication. |
+| [Web app](Code/AI/Workflow/SarcasmOS-web) | Provides an optional browser interface with chat, voice, history, configuration, and a full-face view. A hosted demo is available at [sarcasmos.pegoku.com](https://sarcasmos.pegoku.com/). |
+| Hardware | Includes the finished 3D-printed enclosure, Brain/Eye/Mouth PCBs, microphone, speakers, sensors, motors, and display hardware. |
 
-The hardware firmware is still not finished, but a minimal prototype is already available at [Code/(Brain, Eye, Mouth)](Code) respectively for each PCB.
+The Brain is the runtime controller: it talks to the two Eyes over I2C and to
+the Mouth over acknowledged ESP-NOW. STT, LLM, and TTS remain cloud services,
+but the physical assistant does not require the Python web backend to run.
+
+## Build and Run the Firmware
+
+Bring the boards up in this order so the Brain can be configured with the
+Mouth's MAC address and matching 2.4 GHz Wi-Fi/ESP-NOW channel.
+
+### 1. Mouth
+
+Install [PlatformIO](https://platformio.org/), connect the Mouth ESP32-S3, and
+run:
+
+```bash
+cd Code/Mouth-NeonPCB
+pio run -e custom_esp32s3_mini_n8 --target upload
+pio device monitor -e custom_esp32s3_mini_n8
+```
+
+At boot, note the station MAC address and ESP-NOW channel printed in the serial
+monitor. The Mouth uses channel 1 by default; its onboard button can select
+channels 1 through 13. It must match the Brain's Wi-Fi channel. See the
+[Mouth firmware guide](Code/Mouth-NeonPCB/README.md) for local animation tests,
+panel wiring, channel controls, and display emulation.
+
+### 2. Eyes
+
+Install the [Raspberry Pi Pico SDK](https://github.com/raspberrypi/pico-sdk),
+connect each RP2040 Eye through SWD, and flash the regular I2C firmware:
+
+```bash
+cd Code/Eye
+./flash.sh --left --regular --build --upload --swd-monitor
+./flash.sh --right --regular --build --upload --swd-monitor
+```
+
+The left and right Eyes use I2C addresses `0x30` and `0x31`, respectively.
+The helper also provides self-test and standalone animation-demo firmware. See
+the [Eye firmware guide](Code/Eye/README.md) for OpenOCD setup, manual builds,
+UART monitoring, alternate animation packs, and the desktop editor.
+
+### 3. Brain
+
+Install [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/get-started/index.html),
+connect the Brain ESP32-S3, and run:
+
+```bash
+cd Code/Brain
+idf.py set-target esp32s3
+idf.py menuconfig
+idf.py build
+idf.py flash monitor
+```
+
+Under **SarcasmOS Brain** in `menuconfig`, set the Wi-Fi credentials, provider
+tokens, TTS voice ID, timezone, and the Mouth station MAC recorded above. You
+can also configure the wake phrase, audio sensitivity, Eye transition timing,
+and ESP-NOW channel. After flashing, the USB console can test every subsystem,
+send typed or spoken requests, and update persistent configuration stored in
+NVS. See the [Brain firmware guide](Code/Brain/README.md) for all settings,
+console commands, API endpoints, native tools, and the independent PCB
+self-test firmware.
 
 ## Web Demo
 
@@ -190,22 +272,21 @@ More technical detail:
 ## Architecture
 
 ```text
-Microphone / text
-      |
-      v
-Web frontend
-      |
-      v
-FastAPI backend
-      |
-      +--> STT: speech to text
-      +--> LLM: Spanish personality response + tools (e.g. google calendar)
-      +--> TTS: spoken answer
-      +--> Local JSON history
-      |
-      v
-Audio + animated face + future hardware expressions
+Microphone / wake phrase / text request
+                  |
+                  v
+          ESP32-S3 Brain
+           |      |      \
+           |      |       +--> Cloud STT, LLM/tools, and TTS
+           |      |
+           |      +----------> Mouth over ESP-NOW
+           |
+           +-----------------> Left + right Eyes over I2C
+                  |
+                  v
+       Speaker audio + synchronized animated face
 ```
+
 ## Things that happened when carrying out the project
 
 When it came to making our project a reality we had several problems, because of customs we had to pay almost $200 more than what we had budgeted.
@@ -213,17 +294,6 @@ When it came to making our project a reality we had several problems, because of
 When shipping the chips, those from the company were careless and forgot some chips to send, but that was the least of it.
 
 The screen that is located in the mouth on the inside has also been delayed and we had to improvise with a lower resolution screen that we found from another project, having to put it outside the body because it didn't fit inside.
-
-## Photos of the finished project
-
-<img width="1536" height="2040" alt="3d print" src="https://github.com/user-attachments/assets/4245dfaa-b1e7-4122-b36d-e943d66dae95" />
-<img width="1536" height="2040" alt="Body" src="https://github.com/user-attachments/assets/989dc7f6-2c92-46ea-8620-f676b37bccc6" />
-<img width="1536" height="2040" alt="Body   eyes" src="https://github.com/user-attachments/assets/60df96bb-b616-4066-a2b7-438cdba47831" />
-<img width="1536" height="2040" alt="Bender build" src="https://github.com/user-attachments/assets/de91c345-1d0b-4b55-b949-fa95615399be" />
-
-## Demo video
-
-[![Ver video](https://img.youtube.com/vi/0U2ITrU95Sk/maxresdefault.jpg)](https://www.youtube.com/watch?v=0U2ITrU95Sk)   
 
 ## Credits
 
